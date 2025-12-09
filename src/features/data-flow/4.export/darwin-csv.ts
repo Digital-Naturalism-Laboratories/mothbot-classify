@@ -255,6 +255,23 @@ function formatTodayYyyyMm_Dd(): string {
   return res
 }
 
+function parseNightIdParts(params: { nightId: string }): { project: string; deployment: string; night: string } | null {
+  const { nightId } = params
+  if (!nightId) return null
+
+  const parts = nightId.split('/').filter(Boolean)
+  // nightId format: project/site/deployment/night
+  if (parts.length < 4) return null
+
+  const project = parts[0] || ''
+  const deployment = parts[2] || ''
+  const night = parts[3] || ''
+
+  if (!project || !deployment || !night) return null
+
+  return { project, deployment, night }
+}
+
 export function buildDarwinShapeFromDetection(params: {
   detection: DetectionEntity
   patch?: PatchEntity
@@ -298,12 +315,13 @@ export function buildDarwinShapeFromDetection(params: {
       })
   const name = isError ? 'ERROR' : deriveTaxonNameFromDetection({ detection })
 
-  const datasetID = nightId.replaceAll('/', '_')
-  const parentEventID = datasetID
+  const nightParts = parseNightIdParts({ nightId })
+  const datasetID = nightParts ? `${nightParts.project}_${nightParts.deployment}_${nightParts.night}` : nightId.replaceAll('/', '_')
+  const parentEventID = nightParts ? `${nightParts.project}_${nightParts.deployment}` : datasetID
   const eventID = photo?.id || ''
   const occurrenceID = patch?.id || ''
 
-  // Deployment is parentEventID without the trailing night date segment
+  // Deployment is datasetID without the trailing night date segment
   const deployment = extractDeploymentFromDatasetID({ datasetID })
   const mothbox = extractMothboxFromNightDiskPath({ nightDiskPath })
   const detectionBy = extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
