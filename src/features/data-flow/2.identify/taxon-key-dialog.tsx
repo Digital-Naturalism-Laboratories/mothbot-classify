@@ -7,7 +7,7 @@ import type { TaxonRecord } from './species-list.store'
 
 export type TaxonKeyDialogProps = {
   taxon: TaxonRecord
-  onConfirm: (taxonID: string | number) => void
+  onConfirm: (taxonID: string | number | undefined) => void
 }
 
 export function TaxonKeyDialogContent(props: TaxonKeyDialogProps) {
@@ -25,6 +25,11 @@ export function TaxonKeyDialogContent(props: TaxonKeyDialogProps) {
 
   function handleCancel() {
     closeGlobalDialog()
+  }
+
+  function handleSkip() {
+    closeGlobalDialog()
+    onConfirm(undefined)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -69,6 +74,9 @@ export function TaxonKeyDialogContent(props: TaxonKeyDialogProps) {
       <DialogFooter className='mt-20'>
         <Button size='xsm' variant='ghost' onClick={handleCancel}>
           Cancel
+        </Button>
+        <Button size='xsm' variant='ghost' onClick={handleSkip}>
+          Skip
         </Button>
         <Button size='xsm' variant='primary' onClick={handleSubmit} disabled={!taxonID.trim()}>
           Submit

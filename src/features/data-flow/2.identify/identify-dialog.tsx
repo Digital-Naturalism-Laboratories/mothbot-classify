@@ -149,10 +149,10 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     onOpenChange(false)
   }
 
-  function finalizeTaxonIdentification(partialTaxon: TaxonRecord, taxonID: string | number) {
+  function finalizeTaxonIdentification(partialTaxon: TaxonRecord, taxonID: string | number | undefined) {
     const completeTaxon: TaxonRecord = {
       ...partialTaxon,
-      taxonID,
+      ...(taxonID !== undefined && { taxonID }),
     }
     handleSelectTaxon(completeTaxon)
   }
