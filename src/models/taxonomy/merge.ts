@@ -133,8 +133,9 @@ export function mergeTaxonRanks(params: MergeTaxonRanksParams): TaxonRecord {
   const existingRankValue = getExistingRankValue(existing, newRank)
   const newRankValue = getNewRankValue(newTaxon, newRank)
   const isRankChanged = existingRankValue !== undefined && newRankValue !== undefined && existingRankValue !== newRankValue
+  const isNewRank = existingRankValue === undefined && newRankValue !== undefined
 
-  const shouldResetLowerRanks = isRankChanged
+  const shouldResetLowerRanks = isRankChanged || isNewRank
 
   const merged: Partial<TaxonRecord> = { ...existing }
 
@@ -177,10 +178,11 @@ export function mergeTaxonRanks(params: MergeTaxonRanksParams): TaxonRecord {
   } else if (newRank === 'class' && newTaxon?.class) {
     merged.class = newTaxon.class
     if (shouldResetLowerRanks) {
-      merged.order = newTaxon.order
-      merged.family = newTaxon.family
-      merged.genus = newTaxon.genus
-      merged.species = newTaxon.species
+      // Explicitly clear lower ranks (set to undefined, not just assign from newTaxon which might be undefined)
+      merged.order = newTaxon.order ?? undefined
+      merged.family = newTaxon.family ?? undefined
+      merged.genus = newTaxon.genus ?? undefined
+      merged.species = newTaxon.species ?? undefined
     } else {
       merged.order = newTaxon.order ?? existing?.order
       merged.family = newTaxon.family ?? existing?.family
@@ -247,10 +249,16 @@ export function mergeTaxonRanks(params: MergeTaxonRanksParams): TaxonRecord {
   }
 
   // Preserve existing higher ranks if not being replaced
+  // But don't preserve ranks that should be cleared (lower ranks when resetting)
   if (!merged.kingdom && existing?.kingdom) merged.kingdom = existing.kingdom
   if (!merged.phylum && existing?.phylum) merged.phylum = existing.phylum
   if (!merged.class && existing?.class) merged.class = existing.class
-  if (!merged.order && existing?.order) merged.order = existing.order
+
+  // Only preserve order if we're NOT resetting lower ranks
+  // When resetting, order is a lower rank that should be cleared
+  if (!shouldResetLowerRanks && !merged.order && existing?.order) {
+    merged.order = existing.order
+  }
 
   if (!shouldResetLowerRanks) {
     if (!merged.family && existing?.family) merged.family = existing.family
@@ -294,6 +302,3 @@ export function hasHigherTaxonomyContext(taxon: Partial<TaxonRecord> | undefined
   if (!taxon) return false
   return !!taxon.order || !!taxon.family || !!taxon.genus
 }
-
-
-
