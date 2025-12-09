@@ -37,7 +37,6 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const { setConfirmDialog } = useConfirmDialog()
 
-
   useEffect(() => {
     if (open) setQuery('')
   }, [open])
@@ -99,6 +98,17 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     onOpenChange(false)
   }
 
+  function handleSelectRecentTaxon(t: TaxonRecord) {
+    if (!t) return
+    const preferred = (t?.scientificName ?? '').trim()
+    const label = preferred || getDisplayLabelForTaxon(t)
+    if (!label) return
+
+    logIdentificationResult({ detectionIds, label, taxon: t })
+    onSubmit(label, t)
+    onOpenChange(false)
+  }
+
   function handleSelectTaxon(t: TaxonRecord) {
     if (!t) return
     const preferred = (t?.scientificName ?? '').trim()
@@ -107,19 +117,20 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
 
     const missingRanks = detectMissingRanks(t)
     if (missingRanks.length > 0) {
+      const existingTaxon = getExistingTaxonFromDetections({ detectionIds, detections })
+      onOpenChange(false)
       openTaxonomyGapFillDialog({
         taxon: t,
         missingRanks,
+        existingTaxon,
         onSubmit: (filledTaxon) => {
           const filledLabel = (filledTaxon?.scientificName ?? '').trim() || getDisplayLabelForTaxon(filledTaxon)
           logIdentificationResult({ detectionIds, label: filledLabel, taxon: filledTaxon })
           onSubmit(filledLabel, filledTaxon)
-          onOpenChange(false)
         },
         onSkip: () => {
           logIdentificationResult({ detectionIds, label, taxon: t })
           onSubmit(label, t)
-          onOpenChange(false)
         },
       })
       return
@@ -157,7 +168,12 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     const value = (query ?? '').trim()
     if (!value) return
     const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'order', order: value }
-    openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
+    openTaxonKeyDialog({
+      partialTaxon,
+      onConfirm: (taxonID) => {
+        finalizeTaxonIdentification(partialTaxon, taxonID)
+      },
+    })
   }
 
   function handleSubmitGenus() {
@@ -257,130 +273,130 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
             }}
           ></CommandInput>
           <CommandList ref={listRef}>
-          <CommandEmpty>No matches. Press Enter to use your text.</CommandEmpty>
+            <CommandEmpty>No matches. Press Enter to use your text.</CommandEmpty>
 
-          {query.trim().toUpperCase() === 'ERROR' ? (
-            <CommandGroup heading='Actions'>
-              <CommandItem onSelect={() => handleSelect('ERROR')}>
-                <div className='flex items-center justify-between w-full'>
-                  <span className='text-13 text-red-700'>ERROR</span>
-                  <span className='text-11 text-neutral-500'>Mark as error</span>
-                </div>
-              </CommandItem>
-            </CommandGroup>
-          ) : null}
+            {query.trim().toUpperCase() === 'ERROR' ? (
+              <CommandGroup heading='Actions'>
+                <CommandItem onSelect={() => handleSelect('ERROR')}>
+                  <div className='flex items-center justify-between w-full'>
+                    <span className='text-13 text-red-700'>ERROR</span>
+                    <span className='text-11 text-neutral-500'>Mark as error</span>
+                  </div>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
 
-          {(!query.trim() && recentOptions.length > 0) || (query.trim() && filteredRecentOptions.length > 0) ? (
-            <CommandGroup heading='Recent'>
-              {(query.trim() ? filteredRecentOptions : recentOptions).map((r) => (
-                <SpeciesOptionRow
-                  key={r.label}
-                  label={r.label}
-                  taxon={r.taxon}
-                  isMorphospecies={r.isMorphospecies}
-                  onSelect={() => (r.taxon ? handleSelectTaxon(r.taxon) : handleSelect(r.label))}
-                  subtitleClassName='text-11 text-neutral-500 flex items-center gap-4'
-                />
-              ))}
-            </CommandGroup>
-          ) : null}
+            {(!query.trim() && recentOptions.length > 0) || (query.trim() && filteredRecentOptions.length > 0) ? (
+              <CommandGroup heading='Recent'>
+                {(query.trim() ? filteredRecentOptions : recentOptions).map((r) => (
+                  <SpeciesOptionRow
+                    key={r.label}
+                    label={r.label}
+                    taxon={r.taxon}
+                    isMorphospecies={r.isMorphospecies}
+                    onSelect={() => (r.taxon ? handleSelectRecentTaxon(r.taxon) : handleSelect(r.label))}
+                    subtitleClassName='text-11 text-neutral-500 flex items-center gap-4'
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
 
-          {morphoOptionsLimited?.length ? (
-            <CommandGroup heading='Morphospecies'>
-              {morphoOptionsLimited.map((r) => (
-                <SpeciesOptionRow
-                  key={'morpho:' + r.label}
-                  label={r.label}
-                  taxon={r.taxon}
-                  onSelect={() => handleSelect(r.label)}
-                  itemClassName='row gap-x-8 !py-8'
-                />
-              ))}
-            </CommandGroup>
-          ) : null}
+            {morphoOptionsLimited?.length ? (
+              <CommandGroup heading='Morphospecies'>
+                {morphoOptionsLimited.map((r) => (
+                  <SpeciesOptionRow
+                    key={'morpho:' + r.label}
+                    label={r.label}
+                    taxon={r.taxon}
+                    onSelect={() => handleSelect(r.label)}
+                    itemClassName='row gap-x-8 !py-8'
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
 
-          {speciesOptionsLimited?.length ? (
-            <CommandGroup heading='Species'>
-              {speciesOptionsLimited.map((t) => (
-                <SpeciesOptionRow
-                  key={(t.taxonID as any) ?? t.scientificName}
-                  label={getDisplayLabelForTaxon(t)}
-                  taxon={t}
-                  onSelect={() => handleSelectTaxon(t)}
-                  itemClassName='row gap-x-8 !py-8'
-                />
-              ))}
-            </CommandGroup>
-          ) : null}
+            {speciesOptionsLimited?.length ? (
+              <CommandGroup heading='Species'>
+                {speciesOptionsLimited.map((t) => (
+                  <SpeciesOptionRow
+                    key={(t.taxonID as any) ?? t.scientificName}
+                    label={getDisplayLabelForTaxon(t)}
+                    taxon={t}
+                    onSelect={() => handleSelectTaxon(t)}
+                    itemClassName='row gap-x-8 !py-8'
+                  />
+                ))}
+              </CommandGroup>
+            ) : null}
 
-          {query && (
-            <CommandGroup>
-              <CommandItem key='morphospecies' onSelect={() => handleSubmitFreeText()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('morphospecies')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='morphospecies' size='xsm' />
-                  Add morpho species: "{query}"
-                </span>
-              </CommandItem>
+            {query && (
+              <CommandGroup>
+                <CommandItem key='morphospecies' onSelect={() => handleSubmitFreeText()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('morphospecies')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='morphospecies' size='xsm' />
+                    Add morpho species: "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='species' onSelect={() => handleSubmitSpecies()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('species')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='species' size='xsm' />
-                  Add Species "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='species' onSelect={() => handleSubmitSpecies()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('species')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='species' size='xsm' />
+                    Add Species "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='genus' onSelect={() => handleSubmitGenus()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('genus')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='genus' size='xsm' />
-                  Add Genus "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='genus' onSelect={() => handleSubmitGenus()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('genus')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='genus' size='xsm' />
+                    Add Genus "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='tribe' onSelect={() => handleSubmitTribe()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('tribe')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='tribe' size='xsm' />
-                  Add Tribe "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='tribe' onSelect={() => handleSubmitTribe()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('tribe')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='tribe' size='xsm' />
+                    Add Tribe "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='subfamily' onSelect={() => handleSubmitSubfamily()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('subfamily')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='subfamily' size='xsm' />
-                  Add Subfamily "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='subfamily' onSelect={() => handleSubmitSubfamily()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('subfamily')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='subfamily' size='xsm' />
+                    Add Subfamily "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='family' onSelect={() => handleSubmitFamily()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('family')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='family' size='xsm' />
-                  Add Family "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='family' onSelect={() => handleSubmitFamily()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('family')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='family' size='xsm' />
+                    Add Family "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='order' onSelect={() => handleSubmitOrder()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('order')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='order' size='xsm' />
-                  Add Order "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='order' onSelect={() => handleSubmitOrder()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('order')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='order' size='xsm' />
+                    Add Order "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='class' onSelect={() => handleSubmitClass()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('class')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='class' size='xsm' />
-                  Add Class "{query}"
-                </span>
-              </CommandItem>
+                <CommandItem key='suborder' onSelect={() => handleSubmitSuborder()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('suborder')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='suborder' size='xsm' />
+                    Add Suborder "{query}"
+                  </span>
+                </CommandItem>
 
-              <CommandItem key='suborder' onSelect={() => handleSubmitSuborder()} className='aria-selected:bg-brand/20 '>
-                <span className={`${rankToTextClass('suborder')} font-medium flex items-center gap-8`}>
-                  <TaxonRankLetterBadge rank='suborder' size='xsm' />
-                  Add Suborder "{query}"
-                </span>
-              </CommandItem>
-            </CommandGroup>
-          )}
+                <CommandItem key='class' onSelect={() => handleSubmitClass()} className='aria-selected:bg-brand/20 '>
+                  <span className={`${rankToTextClass('class')} font-medium flex items-center gap-8`}>
+                    <TaxonRankLetterBadge rank='class' size='xsm' />
+                    Add Class "{query}"
+                  </span>
+                </CommandItem>
+              </CommandGroup>
+            )}
 
-          {/* No legacy suggestions rendered */}
+            {/* No legacy suggestions rendered */}
           </CommandList>
         </Command>
       )}
@@ -481,22 +497,43 @@ function openTaxonKeyDialog(params: OpenTaxonKeyDialogParams) {
 type OpenTaxonomyGapFillDialogParams = {
   taxon: TaxonRecord
   missingRanks: Array<{ rank: string; missingName: boolean; missingId: boolean }>
+  existingTaxon?: TaxonRecord
   onSubmit: (filledTaxon: TaxonRecord) => void
   onSkip: () => void
 }
 
 function openTaxonomyGapFillDialog(params: OpenTaxonomyGapFillDialogParams) {
-  const { taxon, missingRanks, onSubmit, onSkip } = params
+  const { taxon, missingRanks, existingTaxon, onSubmit, onSkip } = params
   openGlobalDialog({
     component: TaxonomyGapFillDialogContent as any,
     props: {
       taxon,
       missingRanks,
+      existingTaxon,
       onSubmit,
       onSkip,
     },
     align: 'center',
   })
+}
+
+type GetExistingTaxonFromDetectionsParams = {
+  detectionIds?: string[]
+  detections?: Record<string, DetectionEntity>
+}
+
+function getExistingTaxonFromDetections(params: GetExistingTaxonFromDetectionsParams): TaxonRecord | undefined {
+  const { detectionIds, detections } = params
+  if (!detectionIds || detectionIds.length === 0) return undefined
+  if (!detections) return undefined
+
+  for (const id of detectionIds) {
+    const detection = detections[id]
+    if (!detection?.taxon) continue
+    return detection.taxon
+  }
+
+  return undefined
 }
 
 type ShowParentRankMissingDialogParams = {
@@ -717,4 +754,3 @@ function getMorphoOptions(params: GetMorphoOptionsParams) {
     .sort((a, b) => b.last - a.last || b.count - a.count || a.label.localeCompare(b.label))
     .map((it) => ({ label: it.label, taxon: it.taxon }))
 }
-

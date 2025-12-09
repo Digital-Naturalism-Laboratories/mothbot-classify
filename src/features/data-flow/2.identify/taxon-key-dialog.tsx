@@ -19,8 +19,8 @@ export function TaxonKeyDialogContent(props: TaxonKeyDialogProps) {
     if (!trimmed) return
 
     const id = isNaN(Number(trimmed)) ? trimmed : Number(trimmed)
-    onConfirm(id)
     closeGlobalDialog()
+    onConfirm(id)
   }
 
   function handleCancel() {
@@ -77,4 +77,3 @@ export function TaxonKeyDialogContent(props: TaxonKeyDialogProps) {
     </div>
   )
 }
-

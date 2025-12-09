@@ -22,17 +22,20 @@ import { getRankValue, setRankValue } from '~/models/taxonomy/rank'
 export type TaxonomyGapFillDialogProps = {
   taxon: TaxonRecord
   missingRanks: MissingRank[]
+  existingTaxon?: TaxonRecord
   onSubmit: (filledTaxon: TaxonRecord) => void
   onSkip: () => void
 }
 
 export function TaxonomyGapFillDialogContent(props: TaxonomyGapFillDialogProps) {
-  const { taxon, missingRanks, onSubmit, onSkip } = props
+  const { taxon, missingRanks, existingTaxon, onSubmit, onSkip } = props
 
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
     for (const { rank } of missingRanks) {
-      initial[rank] = getRankValue(taxon, rank) || ''
+      const newTaxonValue = getRankValue(taxon, rank)
+      const existingTaxonValue = existingTaxon ? getRankValue(existingTaxon, rank) : undefined
+      initial[rank] = newTaxonValue || existingTaxonValue || ''
     }
     return initial
   })
