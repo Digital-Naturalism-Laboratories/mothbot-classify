@@ -148,7 +148,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
             ) : (
               <ul className='grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-12'>
                 {filtered.map((it) => (
-                  <MorphoCard key={it.key} morphoKey={it.key} count={it.count} />
+                  <MorphoCard key={it.key} morphoKey={it.key} count={it.count} onClose={() => onOpenChange(false)} />
                 ))}
               </ul>
             )}
@@ -249,11 +249,10 @@ function CountPill(props: { value: number }) {
   )
 }
 
-type MorphoCardProps = { morphoKey: string; count: number }
+type MorphoCardProps = { morphoKey: string; count: number; onClose?: () => void }
 
 function MorphoCard(props: MorphoCardProps) {
-  const { morphoKey, count } = props
-  console.log('morphoKey: ', morphoKey)
+  const { morphoKey, count, onClose } = props
   const previewUrl = useMorphoPreviewUrl({ morphoKey })
   const links = useStore(morphoLinksStore)
   const link = links?.[normalizeMorphoKey(morphoKey)]
@@ -284,7 +283,7 @@ function MorphoCard(props: MorphoCardProps) {
           <Button size='xsm'>View usage</Button>
         </MorphoSpeciesDetailsDialog>
 
-        <MorphoCardActions morphoKey={morphoKey} />
+        <MorphoCardActions morphoKey={morphoKey} onClose={onClose} />
       </Row>
     </li>
   )
@@ -295,8 +294,169 @@ function displayFromKey(key: string) {
   return res
 }
 
-function MorphoCardActions(props: { morphoKey: string }) {
-  const { morphoKey } = props
+function handleLoadInNight(params: {
+  router: ReturnType<typeof useRouter>
+  routePathname: string | undefined
+  summaries: ReturnType<typeof useStore<typeof nightSummariesStore>>
+  detections: ReturnType<typeof useStore<typeof detectionsStore>>
+  morphoKey: string
+  onClose?: () => void
+}) {
+  const { router, routePathname, summaries, detections, morphoKey, onClose } = params
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'morpho-catalog-dialog.tsx:305',
+      message: 'handleLoadInNight entry',
+      data: {
+        morphoKey,
+        routePathname,
+        summariesCount: Object.keys(summaries || {}).length,
+        detectionsCount: Object.keys(detections || {}).length,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'E',
+    }),
+  }).catch(() => {})
+  // #endregion
+
+  const label = getLabelForMorphoKey({ detections, morphoKey })
+  const search = { bucket: 'user' as const, rank: 'species' as const, name: label }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'morpho-catalog-dialog.tsx:310',
+      message: 'Label computed',
+      data: { label, morphoKey, normalizedMorphoKey: normalizeMorphoKey(morphoKey), search },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'C',
+    }),
+  }).catch(() => {})
+  // #endregion
+
+  // Always find a night that actually contains this morphospecies
+  // Don't assume the current night has it - the morphospecies catalog shows all morphospecies across all nights
+  const firstNightId = findFirstNightForMorphoKey({ summaries, morphoKey })
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'morpho-catalog-dialog.tsx:330',
+      message: 'First night lookup result',
+      data: {
+        firstNightId,
+        morphoKey,
+        normalizedMorphoKey: normalizeMorphoKey(morphoKey),
+        summariesKeys: Object.keys(summaries || {}).slice(0, 5),
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'A',
+    }),
+  }).catch(() => {})
+  // #endregion
+
+  if (!firstNightId) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'morpho-catalog-dialog.tsx:333',
+        message: 'No nights found - showing warning',
+        data: { morphoKey },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'run1',
+        hypothesisId: 'A',
+      }),
+    }).catch(() => {})
+    // #endregion
+    toast.warning('No nights contain this morphospecies')
+    return
+  }
+  const parts = firstNightId.split('/')
+  const p = parts?.[0]
+  const s = parts?.[1]
+  const d = parts?.[2]
+  const n = parts?.[3]
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'morpho-catalog-dialog.tsx:340',
+      message: 'Parsed nightId parts',
+      data: { firstNightId, parts, projectId: p, siteId: s, deploymentId: d, nightId: n, hasAllParts: !!(p && s && d && n) },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'F',
+    }),
+  }).catch(() => {})
+  // #endregion
+
+  if (!p || !s || !d || !n) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'morpho-catalog-dialog.tsx:343',
+        message: 'Invalid nightId format - showing warning',
+        data: { firstNightId, parts },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'run1',
+        hypothesisId: 'F',
+      }),
+    }).catch(() => {})
+    // #endregion
+    toast.warning('Could not navigate to night')
+    return
+  }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'morpho-catalog-dialog.tsx:350',
+      message: 'Navigating to first night',
+      data: { projectId: p, siteId: s, deploymentId: d, nightId: n, search },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'D',
+    }),
+  }).catch(() => {})
+  // #endregion
+
+  router.navigate({
+    to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
+    params: { projectId: p, siteId: s, deploymentId: d, nightId: n },
+    search,
+  })
+
+  onClose?.()
+}
+
+function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
+  const { morphoKey, onClose } = props
   const router = useRouter()
   const route = useRouterState({ select: (s) => s.location })
   const summaries = useStore(nightSummariesStore)
@@ -327,38 +487,28 @@ function MorphoCardActions(props: { morphoKey: string }) {
           className='text-13'
           onSelect={(e) => e.preventDefault()}
           onClick={() => {
-            const label = getLabelForMorphoKey({ detections, morphoKey })
-            const search = { bucket: 'user' as const, rank: 'species' as const, name: label }
-
-            const { projectId, siteId, deploymentId, nightId } = extractRouteIds(route?.pathname || '')
-
-            if (projectId && siteId && deploymentId && nightId) {
-              router.navigate({
-                to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
-                params: { projectId, siteId, deploymentId, nightId },
-                search,
-              })
-              return
-            }
-
-            const firstNightId = findFirstNightForMorphoKey({ summaries, morphoKey })
-            if (!firstNightId) {
-              toast.warning('No nights contain this morphospecies')
-              return
-            }
-            const parts = firstNightId.split('/')
-            const p = parts?.[0]
-            const s = parts?.[1]
-            const d = parts?.[2]
-            const n = parts?.[3]
-            if (!p || !s || !d || !n) {
-              toast.warning('Could not navigate to night')
-              return
-            }
-            router.navigate({
-              to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
-              params: { projectId: p, siteId: s, deploymentId: d, nightId: n },
-              search,
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'morpho-catalog-dialog.tsx:373',
+                message: 'Load in night clicked',
+                data: { morphoKey, routePathname: route?.pathname },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run1',
+                hypothesisId: 'B',
+              }),
+            }).catch(() => {})
+            // #endregion
+            handleLoadInNight({
+              router,
+              routePathname: route?.pathname,
+              summaries,
+              detections,
+              morphoKey,
+              onClose,
             })
           }}
         >
