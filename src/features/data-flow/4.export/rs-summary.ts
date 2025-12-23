@@ -26,7 +26,7 @@ export async function exportNightSummaryRS(params: { nightId: string }) {
 
   const csvGenerated = await generateNightDarwinCSVString({ nightId })
   if (!csvGenerated) return
-  const { csv, nightDiskPath } = csvGenerated
+  const { csv } = csvGenerated
 
   const zipEntries: ZipInput = {}
   zipEntries['darwin_export.csv'] = strToU8(csv)
@@ -55,9 +55,48 @@ export async function exportNightSummaryRS(params: { nightId: string }) {
   }
 
   const zipped = zipSync(zipEntries, { level: 6 })
-  const pathParts = [...nightDiskPath.split('/').filter(Boolean), 'rs_summary.zip']
+  const projectExportPath = getProjectExportPath({ nightId })
+  const zipFileName = buildRSSummaryFileName({ nightId })
+  const pathParts = [...projectExportPath.split('/').filter(Boolean), zipFileName]
   await fsaaWriteBytes(root, pathParts, zipped)
   console.log('✅ exportNightSummaryRS: written file', { path: pathParts.join('/') })
+}
+
+function getProjectExportPath(params: { nightId: string }): string {
+  const { nightId } = params
+  const parts = nightId.split('/').filter(Boolean)
+  const project = parts[0] || ''
+  if (!project) return 'exports'
+  return `${project}/exports`
+}
+
+function buildRSSummaryFileName(params: { nightId: string }): string {
+  const { nightId } = params
+  const parts = (nightId || '').split('/').filter(Boolean)
+  // Expected: [project, site, deployment, night]
+  const project = parts[0] || 'dataset'
+  const site = parts.length >= 4 ? parts[1] : ''
+  const deployment = parts.length >= 4 ? parts[2] : parts[1] || 'deployment'
+  const night = parts[parts.length - 1] || 'night'
+
+  const datasetName = sanitizeForFileName(project)
+  const siteName = site ? sanitizeForFileName(site) : ''
+  const deploymentName = sanitizeForFileName(deployment)
+  const nightName = sanitizeForFileName(night)
+
+  const fileName = siteName
+    ? `${datasetName}_${siteName}_${deploymentName}_${nightName}_rs_summary.zip`
+    : `${datasetName}_${deploymentName}_${nightName}_rs_summary.zip`
+  return fileName
+}
+
+function sanitizeForFileName(input: string): string {
+  const trimmed = (input ?? '').trim()
+  if (!trimmed) return 'unnamed'
+  // Replace spaces with underscore and strip characters that are problematic in file names
+  const replaced = trimmed.replace(/\s+/g, '_')
+  const cleaned = replaced.replace(/[^a-zA-Z0-9._-]/g, '_')
+  return cleaned
 }
 
 function getSpeciesKey(d: DetectionEntity): string {

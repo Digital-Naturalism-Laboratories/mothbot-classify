@@ -77,10 +77,11 @@ export async function exportNightDarwinCSV(params: { nightId: string }): Promise
 
   const generated = await generateNightDarwinCSVString({ nightId })
   if (!generated) return false
-  const { csv, nightDiskPath } = generated
+  const { csv } = generated
 
   const fileName = buildNightExportFileName({ nightId })
-  const pathParts = [...nightDiskPath.split('/').filter(Boolean), fileName]
+  const projectExportPath = getProjectExportPath({ nightId })
+  const pathParts = [...projectExportPath.split('/').filter(Boolean), fileName]
   await fsaaWriteText(root, pathParts, csv)
   console.log('✅ exportNightDarwinCSV: written file', { path: pathParts.join('/') })
   return true
@@ -148,15 +149,9 @@ export async function copyNightExportFilePathToClipboard(params: { nightId: stri
   const { nightId } = params
   if (!nightId) return false
 
-  const allPhotos = photosStore.get() || {}
-  const photos = Object.values(allPhotos).filter((p) => p.nightId === nightId)
-  if (!photos.length) return false
-
-  const nightDiskPath = getNightDiskPathFromPhotos({ photos })
-  if (!nightDiskPath) return false
-
   const fileName = buildNightExportFileName({ nightId })
-  const fullPath = [...nightDiskPath.split('/').filter(Boolean), fileName].join('/')
+  const projectExportPath = getProjectExportPath({ nightId })
+  const fullPath = [...projectExportPath.split('/').filter(Boolean), fileName].join('/')
 
   const ok = await writeTextToClipboard(fullPath)
   console.log(ok ? '📋 Copied export file path' : '🚨 Failed to copy export file path', { fullPath })
@@ -222,17 +217,21 @@ export async function generateNightDarwinCSVString(params: { nightId: string }):
 function buildNightExportFileName(params: { nightId: string }): string {
   const { nightId } = params
   const parts = (nightId || '').split('/').filter(Boolean)
-  // Expected: [project, site?, deployment, night]
+  // Expected: [project, site, deployment, night]
   const project = parts[0] || 'dataset'
+  const site = parts.length >= 4 ? parts[1] : ''
   const deployment = parts.length >= 4 ? parts[2] : parts[1] || 'deployment'
   const night = parts[parts.length - 1] || 'night'
 
   const datasetName = sanitizeForFileName(project)
+  const siteName = site ? sanitizeForFileName(site) : ''
   const deploymentName = sanitizeForFileName(deployment)
   const nightName = sanitizeForFileName(night)
   const today = formatTodayYyyyMm_Dd()
 
-  const fileName = `${datasetName}_${deploymentName}_${nightName}_exported-${today}.csv`
+  const fileName = siteName
+    ? `${datasetName}_${siteName}_${deploymentName}_${nightName}_exported-${today}.csv`
+    : `${datasetName}_${deploymentName}_${nightName}_exported-${today}.csv`
   return fileName
 }
 
@@ -253,6 +252,14 @@ function formatTodayYyyyMm_Dd(): string {
   // Spec: YYYY-MM_DD
   const res = `${yyyy}-${MM}_${DD}`
   return res
+}
+
+function getProjectExportPath(params: { nightId: string }): string {
+  const { nightId } = params
+  const parts = nightId.split('/').filter(Boolean)
+  const project = parts[0] || ''
+  if (!project) return 'exports'
+  return `${project}/exports`
 }
 
 function parseNightIdParts(params: { nightId: string }): { project: string; deployment: string; night: string } | null {
