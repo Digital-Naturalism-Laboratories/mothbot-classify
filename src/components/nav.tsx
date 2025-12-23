@@ -9,7 +9,8 @@ import { Loader } from '~/components/atomic/Loader'
 import { Button } from '~/components/ui/button'
 import { clearSelections } from '~/features/data-flow/1.ingest/files.service'
 import { useMemo, useState } from 'react'
-import { MorphoCatalogDialog } from '~/features/morphospecies/morpho-catalog-dialog'
+import { MorphoCatalogDialog } from '~/features/catalogues/morphospecies/morpho-catalog-dialog'
+import { SpeciesCatalogDialog } from '~/features/catalogues/species/species-catalog-dialog'
 import { speciesListsStore, speciesListsLoadingStore } from '~/features/data-flow/2.identify/species-list.store'
 import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
 import { SpeciesPicker } from '~/features/data-flow/2.identify/species-picker'
@@ -33,6 +34,7 @@ export function Nav() {
   const session = useStore(userSessionStore)
   const appReady = useAppReady()
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
+  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const activeProjectId = useMemo(() => (pathname.startsWith('/projects/') ? pathname.split('/')[2] : ''), [pathname])
   const activeSpeciesName = useMemo(() => {
     const listId = selection?.[activeProjectId]
@@ -82,7 +84,15 @@ export function Nav() {
         ) : null}
         <SpeciesPicker />
 
-        <div className='ml-12'>
+        <div className='ml-12 flex gap-8'>
+          <Button
+            variant='outline'
+            onClick={() => {
+              setIsSpeciesOpen(true)
+            }}
+          >
+            Species
+          </Button>
           <Button
             variant='outline'
             onClick={() => {
@@ -91,6 +101,7 @@ export function Nav() {
           >
             Morphospecies
           </Button>
+          <SpeciesCatalogDialog open={isSpeciesOpen} onOpenChange={setIsSpeciesOpen} />
           <MorphoCatalogDialog open={isMorphoOpen} onOpenChange={setIsMorphoOpen} />
         </div>
 

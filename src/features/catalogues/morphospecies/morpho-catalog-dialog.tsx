@@ -1,30 +1,30 @@
-import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@nanostores/react'
-import { Button } from '~/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
-import { EllipsisVertical } from 'lucide-react'
-import { openGlobalDialog, closeGlobalDialog } from '~/components/dialogs/global-dialog'
-import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
-import { INaturalistLogo } from '~/assets/iNaturalist-logo'
-import { Dialog, DialogContent, DialogTitle } from '~/components/ui/dialog'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
-import { nightsStore } from '~/stores/entities/4.nights'
-import { patchesStore } from '~/stores/entities/5.patches'
-import { detectionsStore } from '~/stores/entities/detections'
-import { useObjectUrl } from '~/utils/use-object-url'
-import { patchFileMapByNightStore, type IndexedFile } from '~/features/data-flow/1.ingest/files.state'
-import { MorphoSpeciesDetailsDialog } from './morpho-details-dialog'
-import { cn } from '~/utils/cn'
 import { useRouter, useRouterState } from '@tanstack/react-router'
+import { EllipsisVertical } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
-import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
-import { setMorphoLink } from '~/features/data-flow/3.persist/links'
-import { Column, Row } from '~/styles'
+import { INaturalistLogo } from '~/assets/iNaturalist-logo'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
-import { TaxonomySection } from '~/features/left-panel/taxonomy-section'
-import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
+import { closeGlobalDialog, openGlobalDialog } from '~/components/dialogs/global-dialog'
+import { Button } from '~/components/ui/button'
+import { Dialog, DialogContent } from '~/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
+import { computeAllowedNightIds, extractRouteIds } from '~/features/catalogues/shared/catalog-utils'
+import { getLabelForMorphoKey } from '~/features/catalogues/shared/details-common'
+import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope-filters'
+import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
+import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
+import { morphoLinksStore, setMorphoLink } from '~/features/data-flow/3.persist/links'
 import { CountsRow } from '~/features/left-panel/counts-row'
+import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
+import { TaxonomySection } from '~/features/left-panel/taxonomy-section'
+import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
+import { nightsStore } from '~/stores/entities/4.nights'
+import { detectionsStore } from '~/stores/entities/detections'
+import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { Column, Row } from '~/styles'
+import { useObjectUrl } from '~/utils/use-object-url'
+import { MorphoSpeciesDetailsDialog } from './morpho-details-dialog'
 
 export type MorphoCatalogDialogProps = {
   open: boolean
@@ -36,12 +36,12 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
 
   const route = useRouterState({ select: (s) => s.location })
   const { projectId, siteId, deploymentId, nightId } = useMemo(() => extractRouteIds(route?.pathname || ''), [route?.pathname])
-  const [usageScope, setUsageScope] = useState<'all' | 'project' | 'site' | 'deployment' | 'night'>('all')
+  const [usageScope, setUsageScope] = useState<ScopeType>('all')
 
   const summaries = useStore(nightSummariesStore)
 
   const scopeCounts = useMemo(() => {
-    const counts: Record<'all' | 'project' | 'site' | 'deployment' | 'night', number> = {
+    const counts: Record<ScopeType, number> = {
       all: 0,
       project: 0,
       site: 0,
@@ -59,30 +59,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
   }, [summaries, projectId, siteId, deploymentId, nightId])
 
   const allowedNightIds = useMemo(() => {
-    if (usageScope === 'all') return undefined
-    const ids = new Set<string>()
-    for (const nid of Object.keys(summaries || {})) {
-      if (usageScope === 'project') {
-        if (projectId && nid.startsWith(projectId + '/')) ids.add(nid)
-        continue
-      }
-      if (usageScope === 'site') {
-        if (projectId && siteId && nid.startsWith(`${projectId}/${siteId}/`)) ids.add(nid)
-        continue
-      }
-      if (usageScope === 'deployment') {
-        if (projectId && siteId && deploymentId && nid.startsWith(`${projectId}/${siteId}/${deploymentId}/`)) ids.add(nid)
-        continue
-      }
-      if (usageScope === 'night') {
-        if (projectId && siteId && deploymentId && nightId) {
-          const exact = `${projectId}/${siteId}/${deploymentId}/${nightId}`
-          if (nid === exact) ids.add(nid)
-        }
-        continue
-      }
-    }
-    return ids
+    return computeAllowedNightIds({ usageScope, summaries, projectId, siteId, deploymentId, nightId })
   }, [usageScope, summaries, projectId, siteId, deploymentId, nightId])
 
   const list = useMorphoIndexWithContext({ allowedNightIds })
@@ -158,6 +135,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
     </Dialog>
   )
 }
+
 function INatLinkDialogContent(props: { morphoKey: string }) {
   const { morphoKey } = props
   const links = useStore(morphoLinksStore)
@@ -193,61 +171,6 @@ function INatLinkDialogContent(props: { morphoKey: string }) {
     </div>
   )
 }
-function ScopeFilters(props: {
-  scope: 'all' | 'project' | 'site' | 'deployment' | 'night'
-  onScopeChange: (s: 'all' | 'project' | 'site' | 'deployment' | 'night') => void
-  hasProject: boolean
-  hasSite: boolean
-  hasDeployment: boolean
-  hasNight: boolean
-  counts?: Record<'all' | 'project' | 'site' | 'deployment' | 'night', number>
-}) {
-  const { scope, onScopeChange, hasProject, hasSite, hasDeployment, hasNight, counts } = props
-  const items: Array<{ key: 'all' | 'project' | 'site' | 'deployment' | 'night'; label: string; disabled?: boolean; count?: number }> = [
-    { key: 'all', label: 'All Datasets', count: counts?.all },
-    { key: 'project', label: 'This Dataset', disabled: !hasProject, count: counts?.project },
-    { key: 'site', label: 'This Site', disabled: !hasSite, count: counts?.site },
-    { key: 'deployment', label: 'This Deployment', disabled: !hasDeployment, count: counts?.deployment },
-    { key: 'night', label: 'This Night', disabled: !hasNight, count: counts?.night },
-  ]
-  return (
-    <div className='flex items-center gap-6'>
-      {items.map((it) => (
-        <button
-          key={it.key}
-          className={cn(
-            '!text-14 text-ink-primary/80 font-normal px-8 py-4 rounded ring-1 ring-inset ring-black/10 inline-flex items-center gap-6',
-            scope === it.key && 'ring-black/50 text-ink-primary',
-
-            it.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-neutral-50',
-          )}
-          disabled={it.disabled}
-          onClick={() => {
-            if (it.disabled) return
-            onScopeChange(it.key)
-          }}
-        >
-          {it.label}
-          {typeof it.count === 'number' ? <CountPill value={it.count} /> : null}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function CountPill(props: { value: number }) {
-  const { value } = props
-  return (
-    <span
-      className={cn(
-        '!text-11 rounded-[2px] !min-w-16 bg-neutral-50 px-2 !py-1 text-neutral-700 ring-1 ring-inset ring-neutral-100',
-        value > 0 && 'bg-neutral-100 ring-neutral-200',
-      )}
-    >
-      {value}
-    </span>
-  )
-}
 
 type MorphoCardProps = { morphoKey: string; count: number; onClose?: () => void }
 
@@ -256,6 +179,7 @@ function MorphoCard(props: MorphoCardProps) {
   const previewUrl = useMorphoPreviewUrl({ morphoKey })
   const links = useStore(morphoLinksStore)
   const link = links?.[normalizeMorphoKey(morphoKey)]
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
 
   return (
     <li className='rounded-md border bg-white p-12'>
@@ -268,7 +192,7 @@ function MorphoCard(props: MorphoCardProps) {
         />
       </div>
       <div className='flex items-center gap-8'>
-        <span className='font-medium text-ink-primary truncate'>{displayFromKey(morphoKey)}</span>
+        <span className='font-medium text-ink-primary truncate'>{morphoKey}</span>
         <span className='ml-auto text-12 text-neutral-600'>{count}</span>
       </div>
 
@@ -279,7 +203,15 @@ function MorphoCard(props: MorphoCardProps) {
           </Button>
         )}
 
-        <MorphoSpeciesDetailsDialog morphoKey={morphoKey}>
+        <MorphoSpeciesDetailsDialog
+          morphoKey={morphoKey}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+          onNavigate={() => {
+            setDetailsDialogOpen(false)
+            onClose?.()
+          }}
+        >
           <Button size='xsm'>View usage</Button>
         </MorphoSpeciesDetailsDialog>
 
@@ -287,11 +219,6 @@ function MorphoCard(props: MorphoCardProps) {
       </Row>
     </li>
   )
-}
-
-function displayFromKey(key: string) {
-  const res = key
-  return res
 }
 
 function handleLoadInNight(params: {
@@ -344,8 +271,6 @@ function handleLoadInNight(params: {
   }).catch(() => {})
   // #endregion
 
-  // Always find a night that actually contains this morphospecies
-  // Don't assume the current night has it - the morphospecies catalog shows all morphospecies across all nights
   const firstNightId = findFirstNightForMorphoKey({ summaries, morphoKey })
 
   // #region agent log
@@ -518,8 +443,6 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
     </DropdownMenu>
   )
 }
-
-// Data hooks and helpers
 
 function useMorphoIndexWithContext(params?: { allowedNightIds?: Set<string> | undefined }) {
   const { allowedNightIds } = params || {}
@@ -702,21 +625,6 @@ function filterMorphospeciesByTaxon(params: {
   return result
 }
 
-function getLabelForMorphoKey(params: { detections?: Record<string, any>; morphoKey: string }) {
-  const { detections, morphoKey } = params
-  const key = normalizeMorphoKey(morphoKey)
-  for (const d of Object.values(detections ?? {})) {
-    const det = d as any
-    if (det?.detectedBy !== 'user') continue
-    const raw = typeof det?.morphospecies === 'string' ? (det?.morphospecies as string) : ''
-    if (!raw) continue
-    if (normalizeMorphoKey(raw) !== key) continue
-    const label = (det?.taxon?.species as string) || raw
-    if (label) return label
-  }
-  return morphoKey
-}
-
 function findFirstNightForMorphoKey(params: { summaries?: Record<string, any>; morphoKey: string }) {
   const { summaries, morphoKey } = params
   const out: string[] = []
@@ -726,17 +634,6 @@ function findFirstNightForMorphoKey(params: { summaries?: Record<string, any>; m
   }
   out.sort()
   return out[0]
-}
-
-function extractRouteIds(pathname: string) {
-  const parts = (pathname || '').replace(/^\/+/, '').split('/').filter(Boolean)
-  // Expect routes like /projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId
-  const isProjects = parts[0] === 'projects'
-  const projectId = isProjects ? parts[1] : undefined
-  const siteId = isProjects && parts[2] === 'sites' ? parts[3] : undefined
-  const deploymentId = isProjects && parts[4] === 'deployments' ? parts[5] : undefined
-  const nightId = isProjects && parts[6] === 'nights' ? parts[7] : undefined
-  return { projectId, siteId, deploymentId, nightId }
 }
 
 function countMorphoKeysForNightIds(params: { summaries?: Record<string, any>; startsWith?: string; equals?: string }) {
@@ -756,8 +653,6 @@ function useMorphoPreviewUrl(params: { morphoKey: string }) {
   const { morphoKey } = params
   const summaries = useStore(nightSummariesStore)
   const nights = useStore(nightsStore)
-  const patches = useStore(patchesStore)
-  const patchMapByNight = useStore(patchFileMapByNightStore)
   const covers = useStore(morphoCoversStore)
 
   const previewPairs = useMemo(() => {
@@ -776,53 +671,7 @@ function useMorphoPreviewUrl(params: { morphoKey: string }) {
     return pairs
   }, [summaries, nights, morphoKey, covers])
 
-  const [previewFile, setPreviewFile] = useState<File | undefined>(undefined)
-
-  useEffect(() => {
-    let cancelled = false
-    async function pickPreviewFile() {
-      for (const pair of previewPairs) {
-        const f = (patches?.[pair.patchId] as any)?.imageFile?.file as File | undefined
-        if (f) {
-          if (!cancelled) setPreviewFile(f)
-          return
-        }
-      }
-      for (const pair of previewPairs) {
-        const mapForNight = patchMapByNight?.[pair.nightId]
-        const indexed: IndexedFile | undefined = mapForNight?.[pair.patchId.toLowerCase()]
-        if (!indexed) continue
-        const file = await ensureFileFromIndexed(indexed)
-        if (file) {
-          if (!cancelled) setPreviewFile(file)
-          return
-        }
-      }
-      if (!cancelled) setPreviewFile(undefined)
-    }
-    void pickPreviewFile()
-    return () => {
-      cancelled = true
-    }
-  }, [previewPairs, patches, patchMapByNight])
-
+  const previewFile = usePreviewFile({ previewPairs })
   const previewUrl = useObjectUrl(previewFile)
   return previewUrl
 }
-
-async function ensureFileFromIndexed(indexed: IndexedFile): Promise<File | undefined> {
-  const existing = (indexed as any)?.file as File | undefined
-  if (existing) return existing
-  const handle = (indexed as any)?.handle as { getFile?: () => Promise<File> } | undefined
-  if (handle && typeof handle.getFile === 'function') {
-    try {
-      const file = await handle.getFile()
-      return file
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
-}
-
-export {}

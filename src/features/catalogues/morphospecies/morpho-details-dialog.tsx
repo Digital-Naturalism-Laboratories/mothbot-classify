@@ -1,35 +1,33 @@
-import { PropsWithChildren, ReactNode, useEffect, useMemo, useState } from 'react'
+import { PropsWithChildren, ReactNode, useMemo, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { nightsStore } from '~/stores/entities/4.nights'
-import { patchesStore } from '~/stores/entities/5.patches'
 import { detectionsStore, findDetectionsByMorphoKey, bulkIdentifyMorphospecies } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
-import { patchFileMapByNightStore, type IndexedFile } from '~/features/data-flow/1.ingest/files.state'
 import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { Button } from '~/components/ui/button'
 import { aggregateTaxonomyFromDetections } from '~/models/taxonomy/extract'
-import { getTaxonomyFieldLabel } from '~/models/taxonomy/rank'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
 import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
 import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { toast } from 'sonner'
 import type { TaxonRecord } from '~/models/taxonomy/types'
+import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
+import { TaxonomyDisplay, UsageStatsDisplay, ProjectsListDisplay, NightsListDisplay } from '~/features/catalogues/shared/details-common'
 
 export type MorphoSpeciesDetailsDialogProps = PropsWithChildren<{
   morphoKey: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  onNavigate?: () => void
 }> & { trigger?: ReactNode }
 
 export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProps) {
-  const { morphoKey, children, open, onOpenChange } = props
+  const { morphoKey, children, open, onOpenChange, onNavigate } = props
   const summaries = useStore(nightSummariesStore)
   const nights = useStore(nightsStore)
-  const patches = useStore(patchesStore)
-  const patchMapByNight = useStore(patchFileMapByNightStore)
   const covers = useStore(morphoCoversStore)
   const allDetections = useStore(detectionsStore)
 
@@ -69,37 +67,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     return aggregatedTaxonomy
   }, [allDetections, morphoKey])
 
-  const [previewFile, setPreviewFile] = useState<File | undefined>(undefined)
-
-  useEffect(() => {
-    let cancelled = false
-    async function pickPreviewFile() {
-      for (const pair of usage.previewPairs) {
-        const f = (patches?.[pair.patchId] as any)?.imageFile?.file as File | undefined
-        if (f) {
-          if (!cancelled) setPreviewFile(f)
-          return
-        }
-      }
-
-      for (const pair of usage.previewPairs) {
-        const mapForNight = patchMapByNight?.[pair.nightId]
-        const indexed: IndexedFile | undefined = mapForNight?.[pair.patchId.toLowerCase()]
-        if (!indexed) continue
-        const file = await ensureFileFromIndexed(indexed)
-        if (file) {
-          if (!cancelled) setPreviewFile(file)
-          return
-        }
-      }
-      if (!cancelled) setPreviewFile(undefined)
-    }
-    void pickPreviewFile()
-    return () => {
-      cancelled = true
-    }
-  }, [usage.previewPairs, patches, patchMapByNight])
-
+  const previewFile = usePreviewFile({ previewPairs: usage.previewPairs })
   const previewUrl = useObjectUrl(previewFile)
 
   const matchingInfo = useMemo(() => {
@@ -144,7 +112,11 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     const result = bulkIdentifyMorphospecies({ morphoKey, taxon })
 
     if (result.updatedCount > 0) {
-      toast.success(`✅ Updated ${result.updatedCount} instance${result.updatedCount !== 1 ? 's' : ''} across ${result.nightCount} night${result.nightCount !== 1 ? 's' : ''}`)
+      toast.success(
+        `✅ Updated ${result.updatedCount} instance${result.updatedCount !== 1 ? 's' : ''} across ${result.nightCount} night${
+          result.nightCount !== 1 ? 's' : ''
+        }`,
+      )
       onOpenChange?.(false)
     } else {
       toast.warning('No instances were updated')
@@ -156,7 +128,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent align='max'>
+      <DialogContent align='max' className='w-[fit-content] max-w-4xl'>
         <DialogTitle>Morphospecies: {morphoKey}</DialogTitle>
 
         <div className='mt-8'>
@@ -169,71 +141,24 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
           </Button>
         </div>
 
-        <div className='mt-12 text-13 text-neutral-700'>
-          <span className='mr-12'>Projects: {usage.projectIds.length}</span>
-          <span className='mr-12'>Nights: {usage.nightIds.length}</span>
-          <span>Instances: {matchingInfo.detectionIds.length}</span>
-        </div>
+        <UsageStatsDisplay
+          projectCount={usage.projectIds.length}
+          nightCount={usage.nightIds.length}
+          instanceCount={matchingInfo.detectionIds.length}
+        />
 
-        {taxonomy ? (
-          <section className='mt-12'>
-            <h3 className='mb-6 text-14 font-semibold'>Taxonomy</h3>
-            <div className='space-y-2 text-13'>
-              {Object.entries(taxonomy)
-                .filter(([, value]) => value != null)
-                .map(([key, value]) => (
-                  <div key={key}>
-                    <span className='font-medium'>{getTaxonomyFieldLabel(key)}:</span> {value}
-                  </div>
-                ))}
-            </div>
-          </section>
-        ) : null}
+        {taxonomy ? <TaxonomyDisplay taxonomy={taxonomy} /> : null}
 
-        {usage.projectIds.length ? (
-          <section className='mt-12'>
-            <h3 className='mb-6 text-14 font-semibold'>Projects</h3>
-            <ul className='list-disc pl-16 text-13'>
-              {usage.projectIds.map((p) => (
-                <li key={p}>{p}</li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        <ProjectsListDisplay projectIds={usage.projectIds} />
 
-        {usage.nightIds.length ? (
-          <section className='mt-12'>
-            <h3 className='mb-6 text-14 font-semibold'>Nights</h3>
-            <ul className='space-y-6 text-13'>
-              {usage.nightIds.map((n) => {
-                const parts = (n || '').split('/')
-                const projectId = parts?.[0]
-                const siteId = parts?.[1]
-                const deploymentId = parts?.[2]
-                const nightId = parts?.[3]
-
-                const hasAll = !!(projectId && siteId && deploymentId && nightId)
-
-                const href = hasAll
-                  ? `/projects/${encodeURIComponent(projectId)}/sites/${encodeURIComponent(siteId)}/deployments/${encodeURIComponent(
-                      deploymentId,
-                    )}/nights/${encodeURIComponent(nightId)}`
-                  : undefined
-
-                return (
-                  <li key={n} className='flex items-center gap-8'>
-                    <span className='truncate'>{n}</span>
-                    {hasAll ? (
-                      <Button size='xsm' to={href}>
-                        View
-                      </Button>
-                    ) : null}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        ) : null}
+        <NightsListDisplay
+          nightIds={usage.nightIds}
+          morphoKey={morphoKey}
+          onNavigate={() => {
+            onOpenChange?.(false)
+            onNavigate?.()
+          }}
+        />
 
         <IdentifyDialog
           open={identifyDialogOpen}
@@ -245,20 +170,3 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     </Dialog>
   )
 }
-
-async function ensureFileFromIndexed(indexed: IndexedFile): Promise<File | undefined> {
-  const existing = (indexed as any)?.file as File | undefined
-  if (existing) return existing
-  const handle = (indexed as any)?.handle as { getFile?: () => Promise<File> } | undefined
-  if (handle && typeof handle.getFile === 'function') {
-    try {
-      const file = await handle.getFile()
-      return file
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
-}
-
-export {}
