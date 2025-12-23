@@ -60,112 +60,27 @@ export function NightView(props: { nightId: string }) {
   }
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'night-view.tsx:61',
-        message: 'Sync search params useEffect',
-        data: { search, selectedBucket, nightId, detectionsCount: Object.keys(detections || {}).length },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'D',
-      }),
-    }).catch(() => {})
-    // #endregion
-
-    const nextBucket = search?.bucket === 'user' || search?.bucket === 'auto' ? search.bucket : undefined
+    const nextBucket = parseBucketFromSearch({ search })
     if (nextBucket && nextBucket !== selectedBucket) setSelectedBucket(nextBucket)
 
-    const r = search?.rank
-    const n = (search?.name ?? '').trim()
-    const validRank = r === 'class' || r === 'order' || r === 'family' || r === 'genus' || r === 'species' ? r : undefined
+    const { validRank, name } = parseTaxonFromSearch({ search })
 
-    // #region agent log
-    if (validRank === 'species' && n) {
-      const allDetectionsInNight = Object.values(detections || {}).filter((d: any) => d?.nightId === nightId)
-      const userDetectionsInNight = allDetectionsInNight.filter((d: any) => d?.detectedBy === 'user')
-      const matchingDetections = userDetectionsInNight.filter((d: any) => {
-        const morphospecies = d?.morphospecies
-        const taxonSpecies = d?.taxon?.species
-        // Use same logic as filter: check taxon.species first, then normalized morphospecies
-        if (taxonSpecies && taxonSpecies === n) return true
-        if (morphospecies && normalizeMorphoKey(morphospecies) === normalizeMorphoKey(n)) return true
-        return false
-      })
-      fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'night-view.tsx:69',
-          message: 'Setting selectedTaxon from search - checking matching detections',
-          data: {
-            validRank,
-            name: n,
-            willSet: !!(validRank && n),
-            nightId,
-            allDetectionsInNightCount: allDetectionsInNight.length,
-            userDetectionsInNightCount: userDetectionsInNight.length,
-            matchingDetectionsCount: matchingDetections.length,
-            sampleMatchingDetections: matchingDetections.slice(0, 3).map((d: any) => ({
-              patchId: d?.patchId,
-              morphospecies: d?.morphospecies,
-              taxonSpecies: d?.taxon?.species,
-            })),
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run1',
-          hypothesisId: 'D',
-        }),
-      }).catch(() => {})
-    }
-    // #endregion
+    if (validRank && name) setSelectedTaxon({ rank: validRank, name })
+    else setSelectedTaxon(undefined)
 
-    if (validRank && n) setSelectedTaxon({ rank: validRank, name: n })
-    else if (!validRank || !n) setSelectedTaxon(undefined)
-
-    // Expand left panel taxonomy path so the selected item is visible
-    if (nextBucket && validRank && n) {
+    if (nextBucket && validRank && name) {
       expandLeftPanelPathForSelection({
         selectedBucket: nextBucket,
-        selectedTaxon: { rank: validRank as any, name: n },
+        selectedTaxon: { rank: validRank, name },
         nightId,
         detections,
       })
     }
-  }, [search?.bucket, search?.rank, search?.name, nightId, detections, selectedBucket])
+  }, [search, nightId, detections, selectedBucket])
 
   const list = useMemo(() => {
-    const filtered = Object.values(patches).filter((patch) => patch.nightId === nightId)
-    // #region agent log
-    if (selectedTaxon?.rank === 'species' && selectedBucket === 'user') {
-      fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'night-view.tsx:83',
-          message: 'Filtering patches by nightId',
-          data: {
-            nightId,
-            totalPatches: Object.values(patches).length,
-            filteredPatches: filtered.length,
-            samplePatchNightIds: Object.values(patches)
-              .slice(0, 3)
-              .map((p: any) => ({ id: p.id, nightId: p.nightId })),
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run1',
-          hypothesisId: 'D',
-        }),
-      }).catch(() => {})
-    }
-    // #endregion
-    return filtered
-  }, [patches, nightId, selectedTaxon?.rank, selectedBucket])
+    return Object.values(patches).filter((patch) => patch.nightId === nightId)
+  }, [patches, nightId])
   const taxonomyAuto = useMemo(() => buildTaxonomyTreeForNight({ detections, nightId, bucket: 'auto' }), [detections, nightId])
   const taxonomyUser = useMemo(() => buildTaxonomyTreeForNight({ detections, nightId, bucket: 'user' }), [detections, nightId])
   const totalDetections = useMemo(() => Object.values(detections ?? {}).filter((d) => d.nightId === nightId).length, [detections, nightId])
@@ -182,24 +97,10 @@ export function NightView(props: { nightId: string }) {
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
   const selectedDetectionIds = useMemo(() => Array.from(selected ?? []), [selected])
 
-  const nightWarnings = useMemo(() => {
-    let jsonWithoutPhotoCount = 0
-    let missingPatchImageCount = 0
-    for (const p of Object.values(photos ?? {})) {
-      if ((p as any)?.nightId !== nightId) continue
-      const hasJson = !!(p as any)?.botDetectionFile
-      const hasImage = !!(p as any)?.imageFile
-      if (hasJson && !hasImage) jsonWithoutPhotoCount++
-    }
-    for (const d of Object.values(detections ?? {})) {
-      if ((d as any)?.nightId !== nightId) continue
-      const patchId = (d as any)?.patchId
-      const patch = (patches as any)?.[patchId]
-      const hasPatchImage = !!patch?.imageFile
-      if (!hasPatchImage) missingPatchImageCount++
-    }
-    return { jsonWithoutPhotoCount, missingPatchImageCount }
-  }, [photos, detections, patches, nightId])
+  const nightWarnings = useMemo(
+    () => computeNightWarnings({ photos, detections, patches, nightId }),
+    [photos, detections, patches, nightId],
+  )
 
   function onIdentify() {
     if (selectedCount === 0) return
@@ -273,26 +174,7 @@ export function NightView(props: { nightId: string }) {
         onSelectTaxon={({ taxon, bucket }) => {
           setSelectedTaxon(taxon as any)
           setSelectedBucket(bucket)
-
-          const search: { bucket?: 'auto' | 'user'; rank?: 'class' | 'order' | 'family' | 'genus' | 'species'; name?: string } = {
-            bucket,
-          }
-
-          if (taxon) {
-            search.rank = taxon.rank
-            search.name = taxon.name
-          }
-
-          router.navigate({
-            to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
-            params: {
-              projectId: params.projectId,
-              siteId: params.siteId,
-              deploymentId: params.deploymentId,
-              nightId: params.nightId,
-            },
-            search,
-          })
+          navigateToTaxonSelection({ router, params, taxon, bucket })
         }}
         className='w-[300px] overflow-y-auto'
       />
@@ -441,45 +323,7 @@ function filterPatchesByTaxon(params: {
     else if (selectedTaxon?.rank === 'family') matches = tax?.family === selectedTaxon?.name
     else if (selectedTaxon?.rank === 'genus') matches = tax?.genus === selectedTaxon?.name
     else if (selectedTaxon?.rank === 'species') {
-      // Match detections where:
-      // 1. taxon.species equals the search name (if taxon.species exists)
-      // 2. OR normalized morphospecies equals normalized search name
-      // This handles both cases: search name could be taxon.species or morphospecies (from getLabelForMorphoKey)
-      const searchName = selectedTaxon?.name
-      if (tax?.species && tax.species === searchName) {
-        matches = true
-      } else if (morphospecies && normalizeMorphoKey(morphospecies) === normalizeMorphoKey(searchName)) {
-        matches = true
-      } else {
-        matches = false
-      }
-      // #region agent log
-      if (selectedTaxon?.rank === 'species' && selectedBucket === 'user') {
-        fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'night-view.tsx:357',
-            message: 'Species comparison',
-            data: {
-              patchId: p.id,
-              speciesName: speciesName ?? null,
-              selectedTaxonName: selectedTaxon?.name,
-              matches,
-              morphospecies: morphospecies ?? null,
-              taxonSpecies: tax?.species ?? null,
-              detectedBy: det?.detectedBy ?? null,
-              selectedBucket,
-              willPassBucketCheck: !selectedBucket || (det?.detectedBy === 'user' ? 'user' : 'auto') === selectedBucket,
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'D',
-          }),
-        }).catch(() => {})
-      }
-      // #endregion
+      matches = matchesSpeciesName({ taxon: tax, morphospecies, searchName: selectedTaxon.name })
     }
     if (!matches) return false
     if (!selectedBucket) return true
@@ -613,4 +457,88 @@ function computeDetectionArea(params: { detection?: DetectionEntity }) {
   const height = Math.max(0, maxY - minY)
   const area = width * height
   return area
+}
+
+function parseBucketFromSearch(params: {
+  search?: { bucket?: 'auto' | 'user'; rank?: string; name?: string }
+}): 'auto' | 'user' | undefined {
+  const { search } = params
+  return search?.bucket === 'user' || search?.bucket === 'auto' ? search.bucket : undefined
+}
+
+function parseTaxonFromSearch(params: { search?: { bucket?: 'auto' | 'user'; rank?: string; name?: string } }): {
+  validRank: 'class' | 'order' | 'family' | 'genus' | 'species' | undefined
+  name: string
+} {
+  const { search } = params
+  const rank = search?.rank
+  const name = (search?.name ?? '').trim()
+  const validRank =
+    rank === 'class' || rank === 'order' || rank === 'family' || rank === 'genus' || rank === 'species'
+      ? (rank as 'class' | 'order' | 'family' | 'genus' | 'species')
+      : undefined
+  return { validRank, name }
+}
+
+function navigateToTaxonSelection(params: {
+  router: ReturnType<typeof useRouter>
+  params: { projectId: string; siteId: string; deploymentId: string; nightId: string }
+  taxon?: TaxonSelection
+  bucket: 'auto' | 'user'
+}) {
+  const { router, params: routeParams, taxon, bucket } = params
+  const search: { bucket?: 'auto' | 'user'; rank?: 'class' | 'order' | 'family' | 'genus' | 'species'; name?: string } = {
+    bucket,
+  }
+
+  if (taxon) {
+    search.rank = taxon.rank
+    search.name = taxon.name
+  }
+
+  router.navigate({
+    to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
+    params: {
+      projectId: routeParams.projectId,
+      siteId: routeParams.siteId,
+      deploymentId: routeParams.deploymentId,
+      nightId: routeParams.nightId,
+    },
+    search,
+  })
+}
+
+function computeNightWarnings(params: {
+  photos: Record<string, any>
+  detections: Record<string, DetectionEntity>
+  patches: Record<string, PatchEntity>
+  nightId: string
+}) {
+  const { photos, detections, patches, nightId } = params
+  let jsonWithoutPhotoCount = 0
+  let missingPatchImageCount = 0
+
+  for (const photo of Object.values(photos ?? {})) {
+    if ((photo as any)?.nightId !== nightId) continue
+    const hasJson = !!(photo as any)?.botDetectionFile
+    const hasImage = !!(photo as any)?.imageFile
+    if (hasJson && !hasImage) jsonWithoutPhotoCount++
+  }
+
+  for (const detection of Object.values(detections ?? {})) {
+    if ((detection as any)?.nightId !== nightId) continue
+    const patchId = (detection as any)?.patchId
+    const patch = patches?.[patchId]
+    const hasPatchImage = !!patch?.imageFile
+    if (!hasPatchImage) missingPatchImageCount++
+  }
+
+  return { jsonWithoutPhotoCount, missingPatchImageCount }
+}
+
+function matchesSpeciesName(params: { taxon?: { species?: string }; morphospecies?: string; searchName: string }) {
+  const { taxon, morphospecies, searchName } = params
+  if (taxon?.species && taxon.species === searchName) return true
+  if (morphospecies && normalizeMorphoKey(morphospecies) === normalizeMorphoKey(searchName)) return true
+  return false
 }
