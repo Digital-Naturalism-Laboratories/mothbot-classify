@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { nightsStore } from '~/stores/entities/4.nights'
 import { patchesStore } from '~/stores/entities/5.patches'
-import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
+import { detectionsStore, findDetectionsByMorphoKey, bulkIdentifyMorphospecies } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { patchFileMapByNightStore, type IndexedFile } from '~/features/data-flow/1.ingest/files.state'
 import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
@@ -13,6 +13,10 @@ import { Button } from '~/components/ui/button'
 import { aggregateTaxonomyFromDetections } from '~/models/taxonomy/extract'
 import { getTaxonomyFieldLabel } from '~/models/taxonomy/rank'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
+import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
+import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
+import { toast } from 'sonner'
+import type { TaxonRecord } from '~/models/taxonomy/types'
 
 export type MorphoSpeciesDetailsDialogProps = PropsWithChildren<{
   morphoKey: string
@@ -28,6 +32,10 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
   const patchMapByNight = useStore(patchFileMapByNightStore)
   const covers = useStore(morphoCoversStore)
   const allDetections = useStore(detectionsStore)
+
+  const [identifyDialogOpen, setIdentifyDialogOpen] = useState(false)
+  const [pendingTaxon, setPendingTaxon] = useState<{ label: string; taxon?: TaxonRecord } | null>(null)
+  const { setConfirmDialog } = useConfirmDialog()
 
   const usage = useMemo(() => {
     const nightIds: string[] = []
@@ -94,6 +102,57 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
 
   const previewUrl = useObjectUrl(previewFile)
 
+  const matchingInfo = useMemo(() => {
+    const result = findDetectionsByMorphoKey({ morphoKey })
+    return result
+  }, [morphoKey, allDetections])
+
+  const primaryProjectId = useMemo(() => {
+    return usage.projectIds?.[0]
+  }, [usage.projectIds])
+
+  function handleIdentifyDialogSubmit(label: string, taxon?: TaxonRecord) {
+    if (!taxon) {
+      toast.error('Please select a species or higher taxon to identify this morphospecies')
+      return
+    }
+
+    setPendingTaxon({ label, taxon })
+
+    const { detectionIds, nightIds } = matchingInfo
+    const count = detectionIds.length
+    const nightCount = nightIds.size
+
+    if (count === 0) {
+      toast.warning('No instances of this morphospecies found')
+      return
+    }
+
+    setConfirmDialog({
+      content: `Update ${count} instance${count !== 1 ? 's' : ''} across ${nightCount} night${nightCount !== 1 ? 's' : ''}?`,
+      confirmText: 'Update All',
+      onConfirm: () => {
+        executeBulkIdentification({ taxon })
+      },
+      closeAfterConfirm: true,
+    })
+  }
+
+  function executeBulkIdentification(params: { taxon: TaxonRecord }) {
+    const { taxon } = params
+
+    const result = bulkIdentifyMorphospecies({ morphoKey, taxon })
+
+    if (result.updatedCount > 0) {
+      toast.success(`✅ Updated ${result.updatedCount} instance${result.updatedCount !== 1 ? 's' : ''} across ${result.nightCount} night${result.nightCount !== 1 ? 's' : ''}`)
+      onOpenChange?.(false)
+    } else {
+      toast.warning('No instances were updated')
+    }
+
+    setPendingTaxon(null)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -104,9 +163,16 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
           <ImageWithDownloadName src={previewUrl} alt={morphoKey} downloadName={morphoKey} className='max-h-[240px] rounded border' />
         </div>
 
+        <div className='mt-12'>
+          <Button variant='primary' size='sm' onClick={() => setIdentifyDialogOpen(true)}>
+            Identify as Species
+          </Button>
+        </div>
+
         <div className='mt-12 text-13 text-neutral-700'>
           <span className='mr-12'>Projects: {usage.projectIds.length}</span>
-          <span>Nights: {usage.nightIds.length}</span>
+          <span className='mr-12'>Nights: {usage.nightIds.length}</span>
+          <span>Instances: {matchingInfo.detectionIds.length}</span>
         </div>
 
         {taxonomy ? (
@@ -168,6 +234,13 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
             </ul>
           </section>
         ) : null}
+
+        <IdentifyDialog
+          open={identifyDialogOpen}
+          onOpenChange={setIdentifyDialogOpen}
+          onSubmit={handleIdentifyDialogSubmit}
+          projectId={primaryProjectId}
+        />
       </DialogContent>
     </Dialog>
   )
