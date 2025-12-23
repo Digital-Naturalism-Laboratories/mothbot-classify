@@ -18,7 +18,6 @@ import { hasTaxonFields } from '~/models/taxonomy/validate'
 import { getProjectIdFromNightId } from '~/utils/paths'
 import { validateAndGroupDetectionsForAccept, resolveOrderTaxonFromSpeciesList } from '~/features/data-flow/2.identify/accept'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
-import { identifyDetection } from '~/features/data-flow/2.identify/identify'
 
 // Re-export DetectionEntity from its canonical location
 export type { DetectionEntity } from '~/models/detection.types'
@@ -226,108 +225,6 @@ export async function resetDetections(params: { detectionIds: string[] }) {
   updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
 }
 
-export type BulkIdentifyMorphospeciesResult = {
-  updatedCount: number
-  nightCount: number
-}
-
-/**
- * Finds all detections matching a morphospecies key.
- * Used to count instances before bulk identification.
- */
-export function findDetectionsByMorphoKey(params: { morphoKey: string }): {
-  detectionIds: string[]
-  nightIds: Set<string>
-} {
-  const { morphoKey } = params
-  const targetKey = normalizeMorphoKey(morphoKey)
-
-  if (!targetKey) return { detectionIds: [], nightIds: new Set() }
-
-  const allDetections = detectionsStore.get() || {}
-  const detectionIds: string[] = []
-  const nightIds = new Set<string>()
-
-  for (const [id, detection] of Object.entries(allDetections)) {
-    if (detection.detectedBy !== 'user') continue
-    if (!detection.morphospecies) continue
-
-    const detectionKey = normalizeMorphoKey(detection.morphospecies)
-    if (detectionKey !== targetKey) continue
-
-    detectionIds.push(id)
-    if (detection.nightId) nightIds.add(detection.nightId)
-  }
-
-  return { detectionIds, nightIds }
-}
-
-/**
- * Bulk identifies all instances of a morphospecies as a specific taxon.
- * Updates all matching detections across all nights and persists changes.
- */
-export function bulkIdentifyMorphospecies(params: {
-  morphoKey: string
-  taxon: TaxonRecord
-}): BulkIdentifyMorphospeciesResult {
-  const { morphoKey, taxon } = params
-  const targetKey = normalizeMorphoKey(morphoKey)
-
-  if (!targetKey) return { updatedCount: 0, nightCount: 0 }
-
-  const current = detectionsStore.get() || {}
-  const selectionByProject = projectSpeciesSelectionStore.get() || {}
-  const speciesLists = speciesListsStore.get() || {}
-  const updated: Record<string, DetectionEntity> = { ...current }
-
-  const matchingIds: string[] = []
-  const touchedNightIds = new Set<string>()
-
-  for (const [id, detection] of Object.entries(current)) {
-    if (detection.detectedBy !== 'user') continue
-    if (!detection.morphospecies) continue
-
-    const detectionKey = normalizeMorphoKey(detection.morphospecies)
-    if (detectionKey !== targetKey) continue
-
-    matchingIds.push(id)
-
-    const projectId = getProjectIdFromNightId(detection.nightId)
-    const speciesListId = projectId ? selectionByProject?.[projectId] : undefined
-    const speciesListDOI = speciesListId ? (speciesLists?.[speciesListId]?.doi as string | undefined) : undefined
-
-    const result = identifyDetection({
-      detection,
-      input: { type: 'taxon', taxon },
-      context: { speciesListId, speciesListDOI },
-    })
-
-    if (result.changed) {
-      updated[id] = result.detection
-      if (detection.nightId) touchedNightIds.add(detection.nightId)
-    }
-  }
-
-  if (matchingIds.length === 0) return { updatedCount: 0, nightCount: 0 }
-
-  console.log('🔄 bulk identify morphospecies', {
-    morphoKey,
-    targetKey,
-    matchingCount: matchingIds.length,
-    nightCount: touchedNightIds.size,
-    taxon: taxon?.scientificName,
-  })
-
-  detectionsStore.set(updated)
-  updateNightSummariesInMemory({ nightIds: touchedNightIds, detections: updated })
-
-  for (const nightId of touchedNightIds) {
-    scheduleSaveForNight(nightId)
-  }
-
-  return { updatedCount: matchingIds.length, nightCount: touchedNightIds.size }
-}
-
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -367,4 +264,59 @@ function updateNightSummariesInMemory(params: { nightIds: Set<string>; detection
     const currentSummaries = nightSummariesStore.get() || {}
     nightSummariesStore.set({ ...currentSummaries, [nightId]: summary })
   }
+}
+
+export function findDetectionsByMorphoKey(params: { morphoKey: string }) {
+  const { morphoKey } = params
+  const allDetections = detectionsStore.get() || {}
+  const detectionIds: string[] = []
+  const nightIds = new Set<string>()
+
+  const normalizedKey = normalizeMorphoKey(morphoKey)
+
+  for (const [id, detection] of Object.entries(allDetections)) {
+    const morpho = typeof detection?.morphospecies === 'string' ? detection.morphospecies : ''
+    const normalizedMorpho = normalizeMorphoKey(morpho)
+    if (normalizedMorpho === normalizedKey && detection?.detectedBy === 'user') {
+      detectionIds.push(id)
+      if (detection?.nightId) nightIds.add(detection.nightId)
+    }
+  }
+
+  return { detectionIds, nightIds }
+}
+
+export function bulkIdentifyMorphospecies(params: { morphoKey: string; taxon: TaxonRecord }) {
+  const { morphoKey, taxon } = params
+  const { detectionIds } = findDetectionsByMorphoKey({ morphoKey })
+
+  if (detectionIds.length === 0) {
+    return { updatedCount: 0, nightCount: 0 }
+  }
+
+  const current = detectionsStore.get() || {}
+  const selectionByProject = projectSpeciesSelectionStore.get() || {}
+  const speciesLists = speciesListsStore.get() || {}
+  const updated: Record<string, DetectionEntity> = { ...current }
+  const touchedNightIds = new Set<string>()
+
+  for (const id of detectionIds) {
+    const existing = current?.[id]
+    if (!existing) continue
+
+    const projectId = getProjectIdFromNightId(existing?.nightId)
+    const speciesListId = projectId ? selectionByProject?.[projectId] : undefined
+    const speciesListDOI = speciesListId ? (speciesLists?.[speciesListId]?.doi as string | undefined) : undefined
+
+    const context = { speciesListId, speciesListDOI }
+
+    updated[id] = updateDetectionWithTaxon({ existing, taxon, ...context })
+
+    if (existing?.nightId) touchedNightIds.add(existing.nightId)
+  }
+
+  detectionsStore.set(updated)
+  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+
+  return { updatedCount: detectionIds.length, nightCount: touchedNightIds.size }
 }
