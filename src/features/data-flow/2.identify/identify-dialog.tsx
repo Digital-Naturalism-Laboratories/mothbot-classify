@@ -70,7 +70,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     const list = speciesOptions || []
     const limited = limitOptions(list)
     return limited
-  }, [speciesOptions, query])
+  }, [speciesOptions])
 
   const recentOptions = useMemo(() => {
     return getRecentOptions({ detections })
@@ -100,8 +100,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
 
   function handleSelectRecentTaxon(t: TaxonRecord) {
     if (!t) return
-    const preferred = (t?.scientificName ?? '').trim()
-    const label = preferred || getDisplayLabelForTaxon(t)
+    const label = deriveLabelFromTaxon(t)
     if (!label) return
 
     logIdentificationResult({ detectionIds, label, taxon: t })
@@ -111,8 +110,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
 
   function handleSelectTaxon(t: TaxonRecord) {
     if (!t) return
-    const preferred = (t?.scientificName ?? '').trim()
-    const label = preferred || getDisplayLabelForTaxon(t)
+    const label = deriveLabelFromTaxon(t)
     if (!label) return
 
     const missingRanks = detectMissingRanks(t)
@@ -124,7 +122,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
         missingRanks,
         existingTaxon,
         onSubmit: (filledTaxon) => {
-          const filledLabel = (filledTaxon?.scientificName ?? '').trim() || getDisplayLabelForTaxon(filledTaxon)
+          const filledLabel = deriveLabelFromTaxon(filledTaxon)
           logIdentificationResult({ detectionIds, label: filledLabel, taxon: filledTaxon })
           onSubmit(filledLabel, filledTaxon)
         },
@@ -157,37 +155,38 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     handleSelectTaxon(completeTaxon)
   }
 
-  function handleSubmitClass() {
+  function handleSubmitRank(params: { rank: 'class' | 'order' | 'genus' | 'family' | 'species' }) {
+    const { rank } = params
     const value = (query ?? '').trim()
     if (!value) return
-    const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'class', class: value }
+
+    const partialTaxon: TaxonRecord = {
+      scientificName: value,
+      taxonRank: rank,
+      ...(rank === 'class' && { class: value }),
+      ...(rank === 'order' && { order: value }),
+      ...(rank === 'genus' && { genus: value }),
+      ...(rank === 'family' && { family: value }),
+      ...(rank === 'species' && { species: value }),
+    }
+
     openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
+  }
+
+  function handleSubmitClass() {
+    handleSubmitRank({ rank: 'class' })
   }
 
   function handleSubmitOrder() {
-    const value = (query ?? '').trim()
-    if (!value) return
-    const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'order', order: value }
-    openTaxonKeyDialog({
-      partialTaxon,
-      onConfirm: (taxonID) => {
-        finalizeTaxonIdentification(partialTaxon, taxonID)
-      },
-    })
+    handleSubmitRank({ rank: 'order' })
   }
 
   function handleSubmitGenus() {
-    const value = (query ?? '').trim()
-    if (!value) return
-    const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'genus', genus: value }
-    openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
+    handleSubmitRank({ rank: 'genus' })
   }
 
   function handleSubmitFamily() {
-    const value = (query ?? '').trim()
-    if (!value) return
-    const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'family', family: value }
-    openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
+    handleSubmitRank({ rank: 'family' })
   }
 
   function submitRankWithParentValidation(params: {
@@ -244,10 +243,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }
 
   function handleSubmitSpecies() {
-    const value = (query ?? '').trim()
-    if (!value) return
-    const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'species', species: value }
-    openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
+    handleSubmitRank({ rank: 'species' })
   }
 
   return (
@@ -294,7 +290,15 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
                     label={r.label}
                     taxon={r.taxon}
                     isMorphospecies={r.isMorphospecies}
-                    onSelect={() => (r.taxon ? handleSelectRecentTaxon(r.taxon) : handleSelect(r.label))}
+                    onSelect={() => {
+                      if (r.isMorphospecies) {
+                        handleSelect(r.label)
+                      } else if (r.taxon) {
+                        handleSelectRecentTaxon(r.taxon)
+                      } else {
+                        handleSelect(r.label)
+                      }
+                    }}
                     subtitleClassName='text-11 text-neutral-500 flex items-center gap-4'
                   />
                 ))}
@@ -552,58 +556,6 @@ function showParentRankMissingDialog(params: ShowParentRankMissingDialogParams) 
   })
 }
 
-function buildStableKeyForTaxon(taxon: TaxonRecord): string {
-  const parts: string[] = []
-  const kingdom = String(taxon?.kingdom ?? '')
-    .trim()
-    .toLowerCase()
-  if (!kingdom) return ''
-  parts.push(kingdom)
-
-  const rank = String(taxon?.taxonRank ?? '')
-    .trim()
-    .toLowerCase()
-  if (rank === 'kingdom') return parts.join(':')
-
-  const phylum = String(taxon?.phylum ?? '')
-    .trim()
-    .toLowerCase()
-  if (phylum) parts.push(phylum)
-  if (rank === 'phylum') return parts.join(':')
-
-  const className = String(taxon?.class ?? '')
-    .trim()
-    .toLowerCase()
-  if (className) parts.push(className)
-  if (rank === 'class') return parts.join(':')
-
-  const order = String(taxon?.order ?? '')
-    .trim()
-    .toLowerCase()
-  if (order) parts.push(order)
-  if (rank === 'order') return parts.join(':')
-
-  const family = String(taxon?.family ?? '')
-    .trim()
-    .toLowerCase()
-  if (family) parts.push(family)
-  if (rank === 'family') return parts.join(':')
-
-  const genus = String(taxon?.genus ?? '')
-    .trim()
-    .toLowerCase()
-  if (genus) parts.push(genus)
-  if (rank === 'genus') return parts.join(':')
-
-  const species = String(taxon?.species ?? '')
-    .trim()
-    .toLowerCase()
-  if (species) parts.push(species)
-  if (rank === 'species') return parts.join(':')
-
-  return parts.join(':')
-}
-
 type CheckParentRankExistsParams = {
   detectionIds?: string[]
   detections?: Record<string, DetectionEntity>
@@ -753,4 +705,9 @@ function getMorphoOptions(params: GetMorphoOptionsParams) {
   return Array.from(map.values())
     .sort((a, b) => b.last - a.last || b.count - a.count || a.label.localeCompare(b.label))
     .map((it) => ({ label: it.label, taxon: it.taxon }))
+}
+
+function deriveLabelFromTaxon(t: TaxonRecord): string {
+  const preferred = (t?.scientificName ?? '').trim()
+  return preferred || getDisplayLabelForTaxon(t)
 }
