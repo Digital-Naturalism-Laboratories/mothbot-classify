@@ -88,6 +88,27 @@ export async function ingestFilesToStores(params: {
   }
 
   if (parseDetectionsForNightId !== null) {
+    // When parsing for a specific night, merge existing photos from store into local photos object
+    // so parseNightBotDetections can see photos that already have botDetectionFile set
+    if (typeof parseDetectionsForNightId === 'string') {
+      const currentPhotos = photosStore.get() || {}
+      // Merge existing photos into local photos, with local photos taking precedence
+      for (const [photoId, existingPhoto] of Object.entries(currentPhotos)) {
+        if (existingPhoto.nightId === parseDetectionsForNightId) {
+          if (!photos[photoId]) {
+            photos[photoId] = existingPhoto
+          } else {
+            // Merge: keep existing photo but add botDetectionFile/userDetectionFile if missing
+            photos[photoId] = {
+              ...existingPhoto,
+              ...photos[photoId],
+              botDetectionFile: photos[photoId].botDetectionFile || existingPhoto.botDetectionFile,
+              userDetectionFile: photos[photoId].userDetectionFile || existingPhoto.userDetectionFile,
+            }
+          }
+        }
+      }
+    }
     await parseNightBotDetections({ photos, files, patchMap, parseDetectionsForNightId, patches, detections })
     await overlayNightUserDetections({ photos, parseDetectionsForNightId, detections })
   }

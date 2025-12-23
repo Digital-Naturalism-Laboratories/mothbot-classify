@@ -1,18 +1,19 @@
-import { detectionsStore, getDetectionsForNight, type DetectionEntity } from '~/stores/entities/detections'
-import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
-import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
-import { userSessionStore } from '~/stores/ui'
-import { idbGet } from '~/utils/index-db'
-import { objectsToCSV } from '~/utils/csv'
-import { fsaaWriteText, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
 import {
   deriveTaxonNameFromDetection,
-  extractTaxonomyFieldsFromDetection,
   extractTaxonMetadataFromDetection,
+  extractTaxonomyFieldsFromDetection,
 } from '~/models/taxonomy/extract'
 import { getValidScientificNameForExport } from '~/models/taxonomy/morphospecies'
-import { getPhotoBaseFromPhotoId, getNightDiskPathFromPhotos } from '~/utils/paths'
+import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
+import { getDetectionsForNight, type DetectionEntity } from '~/stores/entities/detections'
+import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
+import { userSessionStore } from '~/stores/ui'
+import { objectsToCSV } from '~/utils/csv'
+import { fsaaWriteText, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
+import { idbGet } from '~/utils/index-db'
+import { getNightDiskPathFromPhotos, getPhotoBaseFromPhotoId } from '~/utils/paths'
+import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getProjectExportPath } from './export-utils'
 
 const DARWIN_COLUMNS = [
   // Taxonomy columns
@@ -82,8 +83,10 @@ export async function exportNightDarwinCSV(params: { nightId: string }): Promise
   const fileName = buildNightExportFileName({ nightId })
   const projectExportPath = getProjectExportPath({ nightId })
   const pathParts = [...projectExportPath.split('/').filter(Boolean), fileName]
+
   await fsaaWriteText(root, pathParts, csv)
   console.log('✅ exportNightDarwinCSV: written file', { path: pathParts.join('/') })
+
   return true
 }
 
@@ -210,56 +213,26 @@ export async function generateNightDarwinCSVString(params: { nightId: string }):
 
   console.log('📤 Export: output rows', { nightId, count: rowObjs.length, rows: rowObjs })
 
+  // Handle empty detections case: return CSV with headers only
+  if (rowObjs.length === 0) {
+    const headersLine = DARWIN_COLUMNS.join(',')
+    const csv = headersLine
+    return { csv, nightDiskPath }
+  }
+
   const csv = objectsToCSV({ objects: rowObjs as any[], headers: [...(DARWIN_COLUMNS as readonly string[])] as string[] })
   return { csv, nightDiskPath }
 }
 
 function buildNightExportFileName(params: { nightId: string }): string {
   const { nightId } = params
-  const parts = (nightId || '').split('/').filter(Boolean)
-  // Expected: [project, site, deployment, night]
-  const project = parts[0] || 'dataset'
-  const site = parts.length >= 4 ? parts[1] : ''
-  const deployment = parts.length >= 4 ? parts[2] : parts[1] || 'deployment'
-  const night = parts[parts.length - 1] || 'night'
-
-  const datasetName = sanitizeForFileName(project)
-  const siteName = site ? sanitizeForFileName(site) : ''
-  const deploymentName = sanitizeForFileName(deployment)
-  const nightName = sanitizeForFileName(night)
+  const { datasetName, siteName, deploymentName, nightName } = buildExportFileNameParts({ nightId })
   const today = formatTodayYyyyMm_Dd()
 
   const fileName = siteName
     ? `${datasetName}_${siteName}_${deploymentName}_${nightName}_exported-${today}.csv`
     : `${datasetName}_${deploymentName}_${nightName}_exported-${today}.csv`
   return fileName
-}
-
-function sanitizeForFileName(input: string): string {
-  const trimmed = (input ?? '').trim()
-  if (!trimmed) return 'unnamed'
-  // Replace spaces with underscore and strip characters that are problematic in file names
-  const replaced = trimmed.replace(/\s+/g, '_')
-  const cleaned = replaced.replace(/[^a-zA-Z0-9._-]/g, '_')
-  return cleaned
-}
-
-function formatTodayYyyyMm_Dd(): string {
-  const d = new Date()
-  const yyyy = String(d.getFullYear())
-  const MM = String(d.getMonth() + 1).padStart(2, '0')
-  const DD = String(d.getDate()).padStart(2, '0')
-  // Spec: YYYY-MM_DD
-  const res = `${yyyy}-${MM}_${DD}`
-  return res
-}
-
-function getProjectExportPath(params: { nightId: string }): string {
-  const { nightId } = params
-  const parts = nightId.split('/').filter(Boolean)
-  const project = parts[0] || ''
-  if (!project) return 'exports'
-  return `${project}/exports`
 }
 
 function parseNightIdParts(params: { nightId: string }): { project: string; deployment: string; night: string } | null {

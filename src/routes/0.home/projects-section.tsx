@@ -1,17 +1,19 @@
-import { useMemo } from 'react'
+import { useStore } from '@nanostores/react'
 import { Link } from '@tanstack/react-router'
+import { useMemo } from 'react'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
-import { InlineProgress } from './inline-progress'
-import { ItemActions } from './item-actions'
-import classed from '~/styles/classed'
+import { Loader } from '~/components/atomic/Loader'
+import { exportingNightIdsStore } from '~/features/data-flow/4.export/export.state'
 import type { ProjectEntity } from '~/stores/entities/1.projects'
 import type { SiteEntity } from '~/stores/entities/2.sites'
 import type { DeploymentEntity } from '~/stores/entities/3.deployments'
 import type { NightEntity } from '~/stores/entities/4.nights'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
-import { cn } from '~/utils/cn'
 import { Column } from '~/styles'
+import classed from '~/styles/classed'
+import { InlineProgress } from './inline-progress'
+import { ItemActions } from './item-actions'
 
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
@@ -209,12 +211,14 @@ type NightsListProps = Pick<HierarchyStores, 'nights'> & {
 function NightsList(props: NightsListProps) {
   const { projectId, siteId, deploymentId, nights, progressIndex } = props
   const list = getNightsForDeployment({ nights, deploymentId })
+  const exportingNightIds = useStore(exportingNightIdsStore)
   if (!list.length) return null
 
   return (
     <Ul>
       {list.map((night) => {
         const prog = progressIndex.byNight[night.id] ?? { total: 0, identified: 0 }
+        const isExporting = exportingNightIds.has(night.id)
         return (
           <Li key={night.id} className='group/night bg-stone-50 px-0 '>
             <div className='flex items-center gap-12 '>
@@ -229,6 +233,12 @@ function NightsList(props: NightsListProps) {
                 className='flex h-32 items-center gap-12 flex-1 px-6 hover:bg-blue-100 rounded-l-md cursor-pointer'
               >
                 <span className='text-sm text-blue-700'>{night.name}</span>
+                {isExporting && (
+                  <div className='flex items-center gap-4 text-sm text-neutral-500'>
+                    <Loader size={14} />
+                    <span>exporting</span>
+                  </div>
+                )}
                 <div className='ml-auto'>
                   <InlineProgress total={prog.total} identified={prog.identified} />
                 </div>

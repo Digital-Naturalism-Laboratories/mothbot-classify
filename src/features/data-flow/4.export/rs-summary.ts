@@ -6,12 +6,13 @@ import { fsaaWriteBytes, type FileSystemDirectoryHandleLike } from '~/utils/fsaa
 import { ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
 import { generateNightDarwinCSVString } from '~/features/data-flow/4.export/darwin-csv'
 import { zipSync, strToU8, type Zippable } from 'fflate'
+import { getProjectExportPath, sanitizeForFileName, buildExportFileNameParts } from './export-utils'
 
 type ZipInput = Zippable
 
-export async function exportNightSummaryRS(params: { nightId: string }) {
+export async function exportNightSummaryRS(params: { nightId: string }): Promise<boolean> {
   const { nightId } = params
-  if (!nightId) return
+  if (!nightId) return false
   console.log('🏁 exportNightSummaryRS: start', { nightId })
 
   const root = (await idbGet(
@@ -19,13 +20,13 @@ export async function exportNightSummaryRS(params: { nightId: string }) {
     persistenceConstants.IDB_STORE,
     'projectsRoot',
   )) as FileSystemDirectoryHandleLike | null
-  if (!root) return
+  if (!root) return false
 
   const granted = await ensureReadWritePermission(root as any)
-  if (!granted) return
+  if (!granted) return false
 
   const csvGenerated = await generateNightDarwinCSVString({ nightId })
-  if (!csvGenerated) return
+  if (!csvGenerated) return false
   const { csv } = csvGenerated
 
   const zipEntries: ZipInput = {}
@@ -60,43 +61,18 @@ export async function exportNightSummaryRS(params: { nightId: string }) {
   const pathParts = [...projectExportPath.split('/').filter(Boolean), zipFileName]
   await fsaaWriteBytes(root, pathParts, zipped)
   console.log('✅ exportNightSummaryRS: written file', { path: pathParts.join('/') })
-}
 
-function getProjectExportPath(params: { nightId: string }): string {
-  const { nightId } = params
-  const parts = nightId.split('/').filter(Boolean)
-  const project = parts[0] || ''
-  if (!project) return 'exports'
-  return `${project}/exports`
+  return true
 }
 
 function buildRSSummaryFileName(params: { nightId: string }): string {
   const { nightId } = params
-  const parts = (nightId || '').split('/').filter(Boolean)
-  // Expected: [project, site, deployment, night]
-  const project = parts[0] || 'dataset'
-  const site = parts.length >= 4 ? parts[1] : ''
-  const deployment = parts.length >= 4 ? parts[2] : parts[1] || 'deployment'
-  const night = parts[parts.length - 1] || 'night'
-
-  const datasetName = sanitizeForFileName(project)
-  const siteName = site ? sanitizeForFileName(site) : ''
-  const deploymentName = sanitizeForFileName(deployment)
-  const nightName = sanitizeForFileName(night)
+  const { datasetName, siteName, deploymentName, nightName } = buildExportFileNameParts({ nightId })
 
   const fileName = siteName
     ? `${datasetName}_${siteName}_${deploymentName}_${nightName}_rs_summary.zip`
     : `${datasetName}_${deploymentName}_${nightName}_rs_summary.zip`
   return fileName
-}
-
-function sanitizeForFileName(input: string): string {
-  const trimmed = (input ?? '').trim()
-  if (!trimmed) return 'unnamed'
-  // Replace spaces with underscore and strip characters that are problematic in file names
-  const replaced = trimmed.replace(/\s+/g, '_')
-  const cleaned = replaced.replace(/[^a-zA-Z0-9._-]/g, '_')
-  return cleaned
 }
 
 function getSpeciesKey(d: DetectionEntity): string {
