@@ -79,13 +79,15 @@ async function processNightsForExport(params: {
       await ensureDetectionsLoadedForNight({ nightId })
       const exportResult = await exportFn({ nightId })
 
-      if (!exportResult) {
-        console.error(`🚨 exportScope${label}: export returned false`, { nightId })
-      }
-
       clearDetectionsForNight({ nightId })
       clearNightExporting(nightId)
-      processedCount++
+
+      if (!exportResult) {
+        failedCount++
+        console.error(`🚨 exportScope${label}: export returned false`, { nightId })
+      } else {
+        processedCount++
+      }
     } catch (error) {
       failedCount++
       clearNightExporting(nightId)
