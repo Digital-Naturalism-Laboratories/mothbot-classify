@@ -1,0 +1,1 @@
+Review all the cahnges, what would a council of engineers consider reagrding the edits. Are there duplications. Does the code flow make sense. Are there changes that are symptomatic as opposed to systemic? What could be better about this implementation?
