@@ -160,18 +160,14 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   function handleSubmitClass() {
     const value = (query ?? '').trim()
     if (!value) return
-
     const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'class', class: value }
-    onOpenChange(false)
     openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
   }
 
   function handleSubmitOrder() {
     const value = (query ?? '').trim()
     if (!value) return
-
     const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'order', order: value }
-    onOpenChange(false)
     openTaxonKeyDialog({
       partialTaxon,
       onConfirm: (taxonID) => {
@@ -183,18 +179,14 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   function handleSubmitGenus() {
     const value = (query ?? '').trim()
     if (!value) return
-
     const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'genus', genus: value }
-    onOpenChange(false)
     openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
   }
 
   function handleSubmitFamily() {
     const value = (query ?? '').trim()
     if (!value) return
-
     const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'family', family: value }
-    onOpenChange(false)
     openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
   }
 
@@ -254,9 +246,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   function handleSubmitSpecies() {
     const value = (query ?? '').trim()
     if (!value) return
-
     const partialTaxon: TaxonRecord = { scientificName: value, taxonRank: 'species', species: value }
-    onOpenChange(false)
     openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
   }
 
