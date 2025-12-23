@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { INaturalistLogo } from '~/assets/iNaturalist-logo'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
 import { closeGlobalDialog, openGlobalDialog } from '~/components/dialogs/global-dialog'
+import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
@@ -15,12 +16,14 @@ import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
 import { morphoLinksStore, setMorphoLink } from '~/features/data-flow/3.persist/links'
+import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
 import { CountsRow } from '~/features/left-panel/counts-row'
 import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
 import { TaxonomySection } from '~/features/left-panel/taxonomy-section'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
+import type { TaxonRecord } from '~/models/taxonomy/types'
 import { nightsStore } from '~/stores/entities/4.nights'
-import { detectionsStore } from '~/stores/entities/detections'
+import { detectionsStore, findDetectionsByMorphoKey, bulkIdentifyMorphospecies } from '~/stores/entities/detections'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { Column, Row } from '~/styles'
 import { useObjectUrl } from '~/utils/use-object-url'
@@ -221,6 +224,118 @@ function MorphoCard(props: MorphoCardProps) {
   )
 }
 
+function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
+  const { morphoKey, onClose } = props
+  const router = useRouter()
+  const route = useRouterState({ select: (s) => s.location })
+  const summaries = useStore(nightSummariesStore)
+  const detections = useStore(detectionsStore)
+  const nights = useStore(nightsStore)
+  const [identifyDialogOpen, setIdentifyDialogOpen] = useState(false)
+  const { setConfirmDialog } = useConfirmDialog()
+
+  const primaryProjectId = useMemo(() => {
+    return computePrimaryProjectIdForMorphoKey({ summaries, nights, morphoKey })
+  }, [summaries, nights, morphoKey])
+
+  function handleIdentifyDialogSubmit(label: string, taxon?: TaxonRecord) {
+    if (!taxon) {
+      toast.error('Please select a species or higher taxon to identify this morphospecies')
+      return
+    }
+
+    const matchingInfo = findDetectionsByMorphoKey({ morphoKey })
+    const count = matchingInfo.detectionIds.length
+    const nightCount = matchingInfo.nightIds.size
+
+    if (count === 0) {
+      toast.warning('No instances of this morphospecies found')
+      return
+    }
+
+    setConfirmDialog({
+      content: `Update ${count} instance${count !== 1 ? 's' : ''} across ${nightCount} night${nightCount !== 1 ? 's' : ''}?`,
+      confirmText: 'Update All',
+      onConfirm: () => {
+        executeBulkIdentification({ taxon })
+      },
+      closeAfterConfirm: true,
+    })
+  }
+
+  function executeBulkIdentification(params: { taxon: TaxonRecord }) {
+    const { taxon } = params
+
+    const result = bulkIdentifyMorphospecies({ morphoKey, taxon })
+
+    if (result.updatedCount > 0) {
+      toast.success(
+        `✅ Updated ${result.updatedCount} instance${result.updatedCount !== 1 ? 's' : ''} across ${result.nightCount} night${
+          result.nightCount !== 1 ? 's' : ''
+        }`,
+      )
+      setIdentifyDialogOpen(false)
+    } else {
+      toast.warning('No instances were updated')
+    }
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size='icon-sm' className='-mr-4' aria-label='More actions'>
+            <EllipsisVertical size={16} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side='bottom' align='end' className='min-w-[220px] p-4'>
+          <DropdownMenuItem
+            className='text-13'
+            onSelect={(e) => e.preventDefault()}
+            onClick={() =>
+              openGlobalDialog({
+                component: INatLinkDialogContent as any,
+                props: { morphoKey },
+                align: 'center',
+              })
+            }
+          >
+            Add iNaturalist link
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            className='text-13'
+            onSelect={(e) => e.preventDefault()}
+            onClick={() => {
+              handleLoadInNight({
+                router,
+                routePathname: route?.pathname,
+                summaries,
+                detections,
+                morphoKey,
+                onClose,
+              })
+            }}
+          >
+            Load in night
+          </DropdownMenuItem>
+
+          <DropdownMenuItem className='text-13' onSelect={(e) => e.preventDefault()} onClick={() => setIdentifyDialogOpen(true)}>
+            Identify as Species
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <IdentifyDialog
+        open={identifyDialogOpen}
+        onOpenChange={setIdentifyDialogOpen}
+        onSubmit={handleIdentifyDialogSubmit}
+        projectId={primaryProjectId}
+      />
+    </>
+  )
+}
+
 function handleLoadInNight(params: {
   router: ReturnType<typeof useRouter>
   routePathname: string | undefined
@@ -229,219 +344,31 @@ function handleLoadInNight(params: {
   morphoKey: string
   onClose?: () => void
 }) {
-  const { router, routePathname, summaries, detections, morphoKey, onClose } = params
-
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'morpho-catalog-dialog.tsx:305',
-      message: 'handleLoadInNight entry',
-      data: {
-        morphoKey,
-        routePathname,
-        summariesCount: Object.keys(summaries || {}).length,
-        detectionsCount: Object.keys(detections || {}).length,
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'E',
-    }),
-  }).catch(() => {})
-  // #endregion
+  const { router, summaries, detections, morphoKey, onClose } = params
 
   const label = getLabelForMorphoKey({ detections, morphoKey })
   const search = { bucket: 'user' as const, rank: 'species' as const, name: label }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'morpho-catalog-dialog.tsx:310',
-      message: 'Label computed',
-      data: { label, morphoKey, normalizedMorphoKey: normalizeMorphoKey(morphoKey), search },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'C',
-    }),
-  }).catch(() => {})
-  // #endregion
-
   const firstNightId = findFirstNightForMorphoKey({ summaries, morphoKey })
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'morpho-catalog-dialog.tsx:330',
-      message: 'First night lookup result',
-      data: {
-        firstNightId,
-        morphoKey,
-        normalizedMorphoKey: normalizeMorphoKey(morphoKey),
-        summariesKeys: Object.keys(summaries || {}).slice(0, 5),
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'A',
-    }),
-  }).catch(() => {})
-  // #endregion
-
   if (!firstNightId) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'morpho-catalog-dialog.tsx:333',
-        message: 'No nights found - showing warning',
-        data: { morphoKey },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'A',
-      }),
-    }).catch(() => {})
-    // #endregion
     toast.warning('No nights contain this morphospecies')
     return
   }
-  const parts = firstNightId.split('/')
-  const p = parts?.[0]
-  const s = parts?.[1]
-  const d = parts?.[2]
-  const n = parts?.[3]
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'morpho-catalog-dialog.tsx:340',
-      message: 'Parsed nightId parts',
-      data: { firstNightId, parts, projectId: p, siteId: s, deploymentId: d, nightId: n, hasAllParts: !!(p && s && d && n) },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'F',
-    }),
-  }).catch(() => {})
-  // #endregion
-
-  if (!p || !s || !d || !n) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'morpho-catalog-dialog.tsx:343',
-        message: 'Invalid nightId format - showing warning',
-        data: { firstNightId, parts },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'F',
-      }),
-    }).catch(() => {})
-    // #endregion
+  const parsed = parseNightIdParts({ nightId: firstNightId })
+  if (!parsed) {
     toast.warning('Could not navigate to night')
     return
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'morpho-catalog-dialog.tsx:350',
-      message: 'Navigating to first night',
-      data: { projectId: p, siteId: s, deploymentId: d, nightId: n, search },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'D',
-    }),
-  }).catch(() => {})
-  // #endregion
-
   router.navigate({
     to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
-    params: { projectId: p, siteId: s, deploymentId: d, nightId: n },
+    params: { projectId: parsed.projectId, siteId: parsed.siteId, deploymentId: parsed.deploymentId, nightId: parsed.nightId },
     search,
   })
 
   onClose?.()
-}
-
-function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
-  const { morphoKey, onClose } = props
-  const router = useRouter()
-  const route = useRouterState({ select: (s) => s.location })
-  const summaries = useStore(nightSummariesStore)
-  const detections = useStore(detectionsStore)
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size='icon-sm' className='-mr-4' aria-label='More actions'>
-          <EllipsisVertical size={16} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side='bottom' align='end' className='min-w-[220px] p-4'>
-        <DropdownMenuItem
-          className='text-13'
-          onSelect={(e) => e.preventDefault()}
-          onClick={() =>
-            openGlobalDialog({
-              component: INatLinkDialogContent as any,
-              props: { morphoKey },
-              align: 'center',
-            })
-          }
-        >
-          Add iNaturalist link
-        </DropdownMenuItem>
-
-        <DropdownMenuItem
-          className='text-13'
-          onSelect={(e) => e.preventDefault()}
-          onClick={() => {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/c0a2a6ae-86fa-4ed1-99f3-07b2d9004f41', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                location: 'morpho-catalog-dialog.tsx:373',
-                message: 'Load in night clicked',
-                data: { morphoKey, routePathname: route?.pathname },
-                timestamp: Date.now(),
-                sessionId: 'debug-session',
-                runId: 'run1',
-                hypothesisId: 'B',
-              }),
-            }).catch(() => {})
-            // #endregion
-            handleLoadInNight({
-              router,
-              routePathname: route?.pathname,
-              summaries,
-              detections,
-              morphoKey,
-              onClose,
-            })
-          }}
-        >
-          Load in night
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
 }
 
 function useMorphoIndexWithContext(params?: { allowedNightIds?: Set<string> | undefined }) {
@@ -471,26 +398,31 @@ function useMorphoIndexWithContext(params?: { allowedNightIds?: Set<string> | un
   return list as Array<{ key: string; count: number; hasOrder: boolean; hasFamily: boolean; hasGenus: boolean }>
 }
 
-function buildContextByMorphoKey(params: { detections?: Record<string, any>; allowedNightIds?: Set<string> | undefined }) {
-  const { detections, allowedNightIds } = params
-  const map = new Map<string, { hasOrder: boolean; hasFamily: boolean; hasGenus: boolean }>()
-  for (const d of Object.values(detections ?? {})) {
-    const det = d as any
-    if (det?.detectedBy !== 'user') continue
-    if (typeof det?.morphospecies !== 'string' || !det?.morphospecies) continue
-    if (allowedNightIds && det?.nightId && !allowedNightIds.has(det.nightId)) continue
-    const label = (det?.morphospecies ?? '').trim()
-    if (!label) continue
-    const key = normalizeMorphoKey(label)
-    const prev = map.get(key) || { hasOrder: false, hasFamily: false, hasGenus: false }
-    const next = {
-      hasOrder: prev.hasOrder || !!det?.taxon?.order,
-      hasFamily: prev.hasFamily || !!det?.taxon?.family,
-      hasGenus: prev.hasGenus || !!det?.taxon?.genus,
+function useMorphoPreviewUrl(params: { morphoKey: string }) {
+  const { morphoKey } = params
+  const summaries = useStore(nightSummariesStore)
+  const nights = useStore(nightsStore)
+  const covers = useStore(morphoCoversStore)
+
+  const previewPairs = useMemo(() => {
+    const pairs: Array<{ nightId: string; patchId: string }> = []
+
+    const override = covers?.[normalizeMorphoKey(morphoKey)]
+    if (override?.nightId && override?.patchId) pairs.push({ nightId: override.nightId, patchId: override.patchId })
+
+    for (const [nightId, s] of Object.entries(summaries ?? {})) {
+      const countForKey = (s as any)?.morphoCounts?.[morphoKey]
+      if (!countForKey) continue
+      if (!nights?.[nightId]) continue
+      const pid = (s as any)?.morphoPreviewPatchIds?.[morphoKey]
+      if (pid) pairs.push({ nightId, patchId: String(pid) })
     }
-    map.set(key, next)
-  }
-  return map
+    return pairs
+  }, [summaries, nights, morphoKey, covers])
+
+  const previewFile = usePreviewFile({ previewPairs })
+  const previewUrl = useObjectUrl(previewFile)
+  return previewUrl
 }
 
 function buildMorphoTaxonomyTree(params: {
@@ -625,6 +557,55 @@ function filterMorphospeciesByTaxon(params: {
   return result
 }
 
+function buildContextByMorphoKey(params: { detections?: Record<string, any>; allowedNightIds?: Set<string> | undefined }) {
+  const { detections, allowedNightIds } = params
+  const map = new Map<string, { hasOrder: boolean; hasFamily: boolean; hasGenus: boolean }>()
+  for (const d of Object.values(detections ?? {})) {
+    const det = d as any
+    if (det?.detectedBy !== 'user') continue
+    if (typeof det?.morphospecies !== 'string' || !det?.morphospecies) continue
+    if (allowedNightIds && det?.nightId && !allowedNightIds.has(det.nightId)) continue
+    const label = (det?.morphospecies ?? '').trim()
+    if (!label) continue
+    const key = normalizeMorphoKey(label)
+    const prev = map.get(key) || { hasOrder: false, hasFamily: false, hasGenus: false }
+    const next = {
+      hasOrder: prev.hasOrder || !!det?.taxon?.order,
+      hasFamily: prev.hasFamily || !!det?.taxon?.family,
+      hasGenus: prev.hasGenus || !!det?.taxon?.genus,
+    }
+    map.set(key, next)
+  }
+  return map
+}
+
+function parseNightIdParts(params: { nightId: string }) {
+  const { nightId } = params
+  const parts = nightId.split('/')
+  const projectId = parts?.[0]
+  const siteId = parts?.[1]
+  const deploymentId = parts?.[2]
+  const nightIdPart = parts?.[3]
+
+  if (!projectId || !siteId || !deploymentId || !nightIdPart) return null
+
+  return { projectId, siteId, deploymentId, nightId: nightIdPart }
+}
+
+function computePrimaryProjectIdForMorphoKey(params: { summaries?: Record<string, any>; nights?: Record<string, any>; morphoKey: string }) {
+  const { summaries, nights, morphoKey } = params
+  const projectIds = new Set<string>()
+
+  for (const [nightId, s] of Object.entries(summaries ?? {})) {
+    const count = (s as any)?.morphoCounts?.[morphoKey]
+    if (!count) continue
+    const projectId = (nights?.[nightId] as any)?.projectId
+    if (projectId) projectIds.add(projectId)
+  }
+
+  return Array.from(projectIds)?.[0]
+}
+
 function findFirstNightForMorphoKey(params: { summaries?: Record<string, any>; morphoKey: string }) {
   const { summaries, morphoKey } = params
   const out: string[] = []
@@ -647,31 +628,4 @@ function countMorphoKeysForNightIds(params: { summaries?: Record<string, any>; s
     for (const k of Object.keys(m)) keys.add(k)
   }
   return keys.size
-}
-
-function useMorphoPreviewUrl(params: { morphoKey: string }) {
-  const { morphoKey } = params
-  const summaries = useStore(nightSummariesStore)
-  const nights = useStore(nightsStore)
-  const covers = useStore(morphoCoversStore)
-
-  const previewPairs = useMemo(() => {
-    const pairs: Array<{ nightId: string; patchId: string }> = []
-
-    const override = covers?.[normalizeMorphoKey(morphoKey)]
-    if (override?.nightId && override?.patchId) pairs.push({ nightId: override.nightId, patchId: override.patchId })
-
-    for (const [nightId, s] of Object.entries(summaries ?? {})) {
-      const countForKey = (s as any)?.morphoCounts?.[morphoKey]
-      if (!countForKey) continue
-      if (!nights?.[nightId]) continue
-      const pid = (s as any)?.morphoPreviewPatchIds?.[morphoKey]
-      if (pid) pairs.push({ nightId, patchId: String(pid) })
-    }
-    return pairs
-  }, [summaries, nights, morphoKey, covers])
-
-  const previewFile = usePreviewFile({ previewPairs })
-  const previewUrl = useObjectUrl(previewFile)
-  return previewUrl
 }

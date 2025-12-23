@@ -41,4 +41,3 @@ export function usePreviewFile(params: { previewPairs: Array<{ nightId: string; 
 
   return previewFile
 }
-

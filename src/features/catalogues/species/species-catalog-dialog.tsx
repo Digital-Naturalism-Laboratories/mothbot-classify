@@ -3,7 +3,7 @@ import { useStore } from '@nanostores/react'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
-import { detectionsStore } from '~/stores/entities/detections'
+import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { SpeciesDetailsDialog } from './species-details-dialog'
 import { useRouterState } from '@tanstack/react-router'
@@ -164,8 +164,7 @@ function useSpeciesIndexWithContext(params?: { allowedNightIds?: Set<string> | u
     const counts: Record<string, number> = {}
     const previewPatchIds: Record<string, string> = {}
 
-    for (const d of Object.values(detections ?? {})) {
-      const det = d as any
+    for (const det of Object.values(detections ?? {})) {
       if (det?.detectedBy !== 'user') continue
       if (det?.morphospecies) continue
       if (!det?.taxon?.species) continue
@@ -196,7 +195,7 @@ function useSpeciesIndexWithContext(params?: { allowedNightIds?: Set<string> | u
 function buildSpeciesTaxonomyTree(params: {
   speciesList: Array<{ speciesName: string; count: number; previewPatchId?: string }>
   allowedNightIds?: Set<string> | undefined
-  detections?: Record<string, any>
+  detections?: Record<string, DetectionEntity>
 }): TaxonomyNode[] {
   const { speciesList, allowedNightIds, detections } = params
   const roots: TaxonomyNode[] = []
@@ -226,18 +225,18 @@ function buildSpeciesTaxonomyTree(params: {
       let genus: string | undefined
       let species: string | undefined
 
-      for (const d of Object.values(detections ?? {})) {
-        const det = d as any
+      for (const det of Object.values(detections ?? {})) {
         if (det?.detectedBy !== 'user') continue
         if (det?.morphospecies) continue
         if (allowedNightIds && det?.nightId && !allowedNightIds.has(det.nightId)) continue
-        const detSpecies = det?.taxon?.species as string | undefined
+
+        const detSpecies = det?.taxon?.species
         if (!detSpecies || String(detSpecies).trim() !== speciesName) continue
 
-        klass = klass || (det?.taxon?.class as string | undefined)
-        order = order || (det?.taxon?.order as string | undefined)
-        family = family || (det?.taxon?.family as string | undefined)
-        genus = genus || (det?.taxon?.genus as string | undefined)
+        klass = klass || det?.taxon?.class
+        order = order || det?.taxon?.order
+        family = family || det?.taxon?.family
+        genus = genus || det?.taxon?.genus
         species = species || detSpecies
 
         foundTaxonomy = true
@@ -285,19 +284,20 @@ function filterSpeciesByTaxon(params: {
   speciesList: Array<{ speciesName: string; count: number; previewPatchId?: string }>
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   allowedNightIds?: Set<string> | undefined
-  detections?: Record<string, any>
+  detections?: Record<string, DetectionEntity>
 }) {
   const { speciesList, selectedTaxon, allowedNightIds, detections } = params
   if (!selectedTaxon) return speciesList
 
   const result = speciesList.filter((speciesItem) => {
     const speciesName = speciesItem.speciesName
-    for (const d of Object.values(detections ?? {})) {
-      const det = d as any
+
+    for (const det of Object.values(detections ?? {})) {
       if (det?.detectedBy !== 'user') continue
       if (det?.morphospecies) continue
       if (allowedNightIds && det?.nightId && !allowedNightIds.has(det.nightId)) continue
-      const detSpecies = det?.taxon?.species as string | undefined
+
+      const detSpecies = det?.taxon?.species
       if (!detSpecies || String(detSpecies).trim() !== speciesName) continue
 
       const tax = det?.taxon
@@ -310,6 +310,7 @@ function filterSpeciesByTaxon(params: {
 
       if (matches) return true
     }
+
     return false
   })
 
@@ -323,17 +324,19 @@ function useSpeciesPreviewUrl(params: { speciesName: string }) {
   const previewPairs = useMemo(() => {
     const pairs: Array<{ nightId: string; patchId: string }> = []
 
-    for (const d of Object.values(detections ?? {})) {
-      const det = d as any
+    for (const det of Object.values(detections ?? {})) {
       if (det?.detectedBy !== 'user') continue
       if (det?.morphospecies) continue
-      const detSpecies = det?.taxon?.species as string | undefined
+
+      const detSpecies = det?.taxon?.species
       if (!detSpecies || String(detSpecies).trim() !== speciesName) continue
+
       if (det?.nightId && det?.patchId) {
         pairs.push({ nightId: det.nightId, patchId: String(det.patchId) })
         break
       }
     }
+
     return pairs
   }, [detections, speciesName])
 
@@ -342,20 +345,22 @@ function useSpeciesPreviewUrl(params: { speciesName: string }) {
   return previewUrl
 }
 
-function countSpeciesForNightIds(params: { detections?: Record<string, any>; startsWith?: string; equals?: string }) {
+function countSpeciesForNightIds(params: { detections?: Record<string, DetectionEntity>; startsWith?: string; equals?: string }) {
   const { detections, startsWith, equals } = params
   const speciesSet = new Set<string>()
-  for (const d of Object.values(detections || {})) {
-    const det = d as any
+
+  for (const det of Object.values(detections || {})) {
     if (det?.detectedBy !== 'user') continue
     if (det?.morphospecies) continue
-    const nightId = det?.nightId as string | undefined
+
+    const nightId = det?.nightId
     if (!nightId) continue
     if (equals && nightId !== equals) continue
     if (startsWith && !nightId.startsWith(startsWith)) continue
-    const species = det?.taxon?.species as string | undefined
+
+    const species = det?.taxon?.species
     if (species) speciesSet.add(String(species).trim())
   }
+
   return speciesSet.size
 }
-

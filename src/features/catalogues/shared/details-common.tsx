@@ -3,7 +3,7 @@ import { useStore } from '@nanostores/react'
 import { Button } from '~/components/ui/button'
 import { getTaxonomyFieldLabel } from '~/models/taxonomy/rank'
 import { buildNightUrl, parseNightIdParts } from './catalog-utils'
-import { detectionsStore } from '~/stores/entities/detections'
+import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 
 export function TaxonomyDisplay(props: { taxonomy: Record<string, string | null | undefined> }) {
@@ -132,17 +132,21 @@ function navigateToNight(params: {
   }
 }
 
-export function getLabelForMorphoKey(params: { detections?: Record<string, any>; morphoKey: string }) {
+export function getLabelForMorphoKey(params: { detections?: Record<string, DetectionEntity>; morphoKey: string }) {
   const { detections, morphoKey } = params
   const key = normalizeMorphoKey(morphoKey)
-  for (const d of Object.values(detections ?? {})) {
-    const det = d as any
+
+  for (const det of Object.values(detections ?? {})) {
     if (det?.detectedBy !== 'user') continue
-    const raw = typeof det?.morphospecies === 'string' ? (det?.morphospecies as string) : ''
+
+    const raw = typeof det?.morphospecies === 'string' ? det.morphospecies : ''
     if (!raw) continue
+
     if (normalizeMorphoKey(raw) !== key) continue
-    const label = (det?.taxon?.species as string) || raw
+
+    const label = det?.taxon?.species || raw
     if (label) return label
   }
+
   return morphoKey
 }
