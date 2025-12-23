@@ -160,7 +160,7 @@ function getBreadcrumbs(params: {
   const projectId = parts[1]
   if (!projectId) return items
   const projectName = projects?.[projectId]?.name ?? projectId
-  items.push({ label: projectName, entityName: 'Project', href: `/projects/${projectId}/sites` })
+  items.push({ label: projectName, entityName: 'Project' })
 
   if (parts.length <= 3) return items
   const siteId = parts[3]
@@ -168,7 +168,7 @@ function getBreadcrumbs(params: {
   if (!siteId) return items
   const siteKey = `${projectId}/${siteId}`
   const siteName = sites?.[siteKey]?.name ?? siteId
-  items.push({ label: siteName, entityName: 'Site', href: `/projects/${projectId}/sites` })
+  items.push({ label: siteName, entityName: 'Site' })
 
   if (parts.length <= 5) return items
   const deploymentId = parts[5]
@@ -176,7 +176,7 @@ function getBreadcrumbs(params: {
   if (!deploymentId) return items
   const depKey = `${projectId}/${siteId}/${deploymentId}`
   const deploymentName = deployments?.[depKey]?.name ?? deploymentId
-  items.push({ label: deploymentName, entityName: 'Deployment', href: `/projects/${projectId}/sites/${siteId}/deployments` })
+  items.push({ label: deploymentName, entityName: 'Deployment' })
 
   if (parts.length <= 7) return items
   const nightId = parts[7]
