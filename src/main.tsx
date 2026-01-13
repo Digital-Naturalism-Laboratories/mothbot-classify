@@ -5,8 +5,12 @@ import { RouterProvider } from '@tanstack/react-router'
 import { router } from './router.tsx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setMeta } from './utils/meta'
+import { registerSW } from 'virtual:pwa-register'
 // Initialize detection save scheduler early to ensure it's available when needed
 import '~/features/data-flow/3.persist/files.writer'
+
+// Register service worker for PWA offline support
+registerSW({ immediate: true })
 
 const rootElement = document.getElementById('root')!
 const queryClient = new QueryClient({

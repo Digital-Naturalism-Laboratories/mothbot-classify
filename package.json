@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:run": "vitest run --reporter=dot",
     "test:watch": "vitest",
-    "species:search": "bun run scripts/species-search.ts"
+    "species:search": "bun run scripts/species-search.ts",
+    "generate-pwa-assets": "pwa-assets-generator --preset minimal public/mothbot.svg"
   },
   "dependencies": {
     "@nanostores/react": "^1.0.0",
@@ -50,6 +51,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "3",
     "tailwindcss-animate": "^1.0.7",
+    "vite-plugin-pwa": "^1.2.0",
     "windy-radix-palette": "^2.0.0-beta.7"
   },
   "devDependencies": {
@@ -59,6 +61,7 @@
     "@testing-library/user-event": "^14.5.2",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
+    "@vite-pwa/assets-generator": "^1.0.2",
     "@vitejs/plugin-react": "^5.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.33.0",
@@ -66,6 +69,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "jsdom": "^25.0.0",
+    "sharp": "^0.34.5",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
