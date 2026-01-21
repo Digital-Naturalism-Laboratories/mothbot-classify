@@ -1,0 +1,38 @@
+---
+description: High-level engineering principles
+globs:
+alwaysApply: true
+---
+
+## Root Cause vs Symptom Fixes
+
+- Trace problems to origin, fix upstream
+- Consider ripple effects on consumers
+- Question if symptom reveals deeper design issue
+
+## Memory Management
+
+- No global caches without proper cleanup
+- WeakMap for object keys, Map for primitives (prefer local state)
+- Always clean up subscriptions, timers, event listeners
+- Consider bundle size cost of libraries
+
+## Architectural Decisions
+
+1. Identify the real problem
+2. List alternatives, don't settle for first solution
+3. Evaluate trade-offs: performance, maintainability, complexity
+4. Consider future implications and edge cases
+5. Choose simplest solution that works
+
+## Code Quality Gates
+
+- No performance hacks without measuring
+- No complex abstractions without documented benefits
+- No magic strings/numbers
+
+## Legacy Code
+
+- Understand before changing: map dependencies and data flow
+- Incremental improvements, maintain backward compatibility
+- Document decisions

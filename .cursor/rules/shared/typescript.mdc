@@ -1,0 +1,48 @@
+---
+description: TypeScript/JavaScript specific rules
+globs:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.js'
+  - '**/*.jsx'
+alwaysApply: false
+---
+
+## Syntax
+
+- Guard against undefined: use `?.` liberally.
+- `function` declarations, not arrow assignments.
+- Object params for 3+ args. Destructure on next line.
+- Assign before return: `const res = fn(); return res`
+
+## Logging
+
+- Format: `console.log('foo', foo)`
+- Emojis: ✅ final, 🌀 loading, 💾 save, ❌ delete, 🚨 error, 🏁 start
+- Use `console.table`, `console.group`, `console.count` when helpful.
+
+## File Organization
+
+- No barrel exports (`index.ts`). Direct imports only.
+
+## Example
+
+```ts
+// ❌ BAD: 50+ lines inline
+async function createEntity(params) {
+  for (const d of descriptors) {
+    /* complex logic */
+  }
+  return entity
+}
+
+// ✅ GOOD: Extracted
+async function createEntity(params) {
+  const result = await processAttachments({ entity, descriptors })
+  return result
+}
+
+async function processAttachments(params) {
+  /* ... */
+}
+```

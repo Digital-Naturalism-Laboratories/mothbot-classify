@@ -1,0 +1,60 @@
+---
+description: Language-agnostic coding standards
+globs:
+alwaysApply: true
+---
+
+## Approach
+
+- Think carefully on non-trivial tasks. Ask clarifying questions.
+- Don't remove existing functionality unless necessary.
+
+## Answer Style
+
+- Concise and to the point.
+- Prompt starts with "short" → code only, no prose.
+
+## Naming
+
+- Never abbreviate cryptically. `dataSource` not `ds`.
+
+## Function Structure
+
+- Small, single-purpose functions.
+- **High-level at top → helpers at bottom**. Called function below caller.
+
+## Function Extraction
+
+Extract when:
+- Block exceeds ~30-40 lines
+- I/O, transformations, side-effects, repeated patterns
+- 3+ nesting levels, multiple try-catch, complex loops
+
+Naming: descriptive verbs (`addBlobUrlsToEntity`, `createDescriptors`)
+
+## Style
+
+- Single-line if: `if (x) return`
+- Dash-case folders: `my-feature`
+
+## Comments
+
+- Only when code isn't self-explanatory. Never redundant with function name.
+
+## Logging
+
+- Contextualize: always label what you're logging.
+- Atomic fns: log details. Higher-level: log flow, don't repeat child logs.
+
+## Clean Code
+
+- Clear, readable, simple. Extract at ~30-40 lines.
+- Separate concerns: logic, UI, data.
+
+"Apply clean code" → activate planner mode.
+
+## Vertical Spacing
+
+- One blank line between logical blocks (imports, declarations, guards, I/O, return).
+- Blank line after early returns. No consecutive blanks.
+- No blank after `{` or before `}`.
