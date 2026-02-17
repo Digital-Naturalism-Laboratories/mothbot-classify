@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 
+const HOTKEY_DEBUG = true
+
 /**
  * Layout-aware hotkey hook that uses `event.key` (the produced character)
  * instead of `event.code` (the physical key position).
@@ -24,16 +26,35 @@ export function useHotkey(hotkey: string, callback: (event: KeyboardEvent) => vo
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (isEditableTarget(event.target)) return
-      if (event.key == null || event.key === '') return
-
       const spec = parsed.current
-      const key = event.key === ' ' ? 'space' : event.key.toLowerCase()
+      const isEditable = isEditableTarget(event.target)
+      const isMissingKey = event.key == null || event.key === ''
+      const key = event.key === ' ' ? 'space' : event.key?.toLowerCase()
+      const matchesKey = key === spec.key
+      const matchesShift = spec.shift === event.shiftKey
+      const matchesCtrl = spec.ctrl === (event.ctrlKey || event.metaKey)
+      const matchesAlt = spec.alt === event.altKey
 
-      if (key !== spec.key) return
-      if (spec.shift !== event.shiftKey) return
-      if (spec.ctrl !== (event.ctrlKey || event.metaKey)) return
-      if (spec.alt !== event.altKey) return
+      logHotkeyDebug({
+        hotkey,
+        event,
+        spec,
+        key,
+        isEditable,
+        isMissingKey,
+        matchesKey,
+        matchesShift,
+        matchesCtrl,
+        matchesAlt,
+      })
+
+      if (isEditable) return
+      if (isMissingKey) return
+
+      if (!matchesKey) return
+      if (!matchesShift) return
+      if (!matchesCtrl) return
+      if (!matchesAlt) return
 
       event.preventDefault()
       callbackRef.current(event)
@@ -46,6 +67,19 @@ export function useHotkey(hotkey: string, callback: (event: KeyboardEvent) => vo
 }
 
 type ParsedHotkey = { key: string; shift: boolean; ctrl: boolean; alt: boolean }
+
+type HotkeyDebugParams = {
+  hotkey: string
+  event: KeyboardEvent
+  spec: ParsedHotkey
+  key?: string
+  isEditable: boolean
+  isMissingKey: boolean
+  matchesKey: boolean
+  matchesShift: boolean
+  matchesCtrl: boolean
+  matchesAlt: boolean
+}
 
 function parseHotkey(hotkey: string): ParsedHotkey {
   const parts = hotkey.toLowerCase().split('+').map((p) => p.trim())
@@ -64,4 +98,42 @@ function isEditableTarget(target: EventTarget | null) {
 
   const tag = target.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
+
+function logHotkeyDebug(params: HotkeyDebugParams) {
+  if (!HOTKEY_DEBUG) return
+
+  const {
+    hotkey,
+    event,
+    spec,
+    key,
+    isEditable,
+    isMissingKey,
+    matchesKey,
+    matchesShift,
+    matchesCtrl,
+    matchesAlt,
+  } = params
+
+  const target = event.target instanceof HTMLElement ? event.target.tagName : 'UNKNOWN'
+
+  console.log('🧪 hotkey debug', {
+    hotkey,
+    eventKey: event.key,
+    normalizedKey: key,
+    code: event.code,
+    shift: event.shiftKey,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    alt: event.altKey,
+    target,
+    isEditable,
+    isMissingKey,
+    spec,
+    matchesKey,
+    matchesShift,
+    matchesCtrl,
+    matchesAlt,
+  })
 }
