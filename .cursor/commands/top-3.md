@@ -1,4 +1,0 @@
-- Review all the files in the current work dir
-- Analyze all the code to decide the top 1-3 improvements for the code to be clearar to read in the future.
-- make sure there are not obvious duplicative code, but also don't overly abstract stuff.
-- don't suggest anything that might break behavior
