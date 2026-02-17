@@ -34,6 +34,7 @@ export function NightView(props: { nightId: string }) {
   const [selectedTaxon, setSelectedTaxon] = useState<TaxonSelection>(undefined)
   const [identifyOpen, setIdentifyOpen] = useState(false)
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
+  const [sortByClusters, setSortByClusters] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
   const selected = useStore(selectedPatchIdsStore)
@@ -92,7 +93,6 @@ export function NightView(props: { nightId: string }) {
     () => filterPatchesByTaxon({ patches: list, detections, selectedTaxon, selectedBucket }),
     [list, detections, selectedTaxon, selectedBucket],
   )
-  const sorted = useMemo(() => sortPatchesByClusterThenArea({ patches: filtered, detections }), [filtered, detections])
   const totalPatches = list.length
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
   const selectedDetectionIds = useMemo(() => Array.from(selected ?? []), [selected])
@@ -169,6 +169,8 @@ export function NightView(props: { nightId: string }) {
         totalDetections={totalDetections}
         totalIdentified={totalIdentified}
         warnings={nightWarnings}
+        sortByClusters={sortByClusters}
+        onSortByClustersChange={setSortByClusters}
         selectedTaxon={selectedTaxon as any}
         selectedBucket={selectedBucket}
         onSelectTaxon={({ taxon, bucket }) => {
@@ -180,12 +182,13 @@ export function NightView(props: { nightId: string }) {
       />
       <div className='relative flex-1 min-h-0 overflow-hidden'>
         <PatchGrid
-          patches={sorted}
+          patches={filtered}
           nightId={nightId}
           className='h-full'
           onOpenPatchDetail={onOpenPatchDetail}
           selectedTaxon={selectedTaxon as any}
           selectedBucket={selectedBucket}
+          sortByClusters={sortByClusters}
         />
         <SelectionBar
           selectedCount={selectedCount}
@@ -333,46 +336,6 @@ function filterPatchesByTaxon(params: {
   return result
 }
 
-function sortPatchesByClusterThenArea(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity> }) {
-  const { patches, detections } = params
-  if (!Array.isArray(patches) || patches.length === 0) return patches
-  const withKeys = patches.map((p) => {
-    const det = detections?.[p.id]
-    const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any)?.clusterId : undefined
-    const area = computeDetectionArea({ detection: det })
-    return { patch: p, clusterId, area }
-  })
-  withKeys.sort((a, b) => {
-    const aClusterId = a.clusterId
-    const bClusterId = b.clusterId
-    const aIsValid = typeof aClusterId === 'number' && aClusterId >= 0
-    const bIsValid = typeof bClusterId === 'number' && bClusterId >= 0
-    const aIsUnclustered = aClusterId === -1
-    const bIsUnclustered = bClusterId === -1
-
-    if (aIsValid && bIsValid) return aClusterId - bClusterId
-    if (aIsValid && bIsUnclustered) return -1
-    if (aIsValid && bClusterId === undefined) return -1
-    if (aIsUnclustered && bIsValid) return 1
-    if (aIsUnclustered && bIsUnclustered) {
-      if (b.area !== a.area) return b.area - a.area
-      const byName = (a.patch?.name || '').localeCompare(b.patch?.name || '')
-      return byName
-    }
-    if (aIsUnclustered && bClusterId === undefined) return -1
-    if (aClusterId === undefined && bIsValid) return 1
-    if (aClusterId === undefined && bIsUnclustered) return 1
-    if (aClusterId === undefined && bClusterId === undefined) {
-      if (b.area !== a.area) return b.area - a.area
-      const byName = (a.patch?.name || '').localeCompare(b.patch?.name || '')
-      return byName
-    }
-    return 0
-  })
-  const result = withKeys.map((x) => x.patch)
-  return result
-}
-
 function expandLeftPanelPathForSelection(params: {
   selectedBucket?: 'auto' | 'user'
   selectedTaxon?: TaxonSelection
@@ -434,29 +397,6 @@ function expandLeftPanelPathForSelection(params: {
   }
 
   if (keys.length) expandMany(keys)
-}
-
-function computeDetectionArea(params: { detection?: DetectionEntity }) {
-  const { detection } = params
-  const points = detection?.points
-  if (!Array.isArray(points) || points.length === 0) return 0
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-  for (const pt of points) {
-    const x = typeof pt?.[0] === 'number' ? pt[0] : null
-    const y = typeof pt?.[1] === 'number' ? pt[1] : null
-    if (x == null || y == null) continue
-    if (x < minX) minX = x
-    if (y < minY) minY = y
-    if (x > maxX) maxX = x
-    if (y > maxY) maxY = y
-  }
-  const width = Math.max(0, maxX - minX)
-  const height = Math.max(0, maxY - minY)
-  const area = width * height
-  return area
 }
 
 function parseBucketFromSearch(params: {

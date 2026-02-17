@@ -2,7 +2,13 @@ import React from 'react'
 import { useStore } from '@nanostores/react'
 import { EllipsisIcon } from 'lucide-react'
 import { Button } from '~/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu'
 import { clearPatchSelection } from '~/stores/ui'
 import { LeftPanelHeading } from '~/styles'
 import { collapsedKeysStore, collapseMany, expandMany, makeKey, toggleKey } from './collapse.store'
@@ -15,6 +21,8 @@ export type TaxonomySectionProps = {
   title: string
   nodes?: TaxonomyNode[]
   bucket: 'auto' | 'user'
+  sortByClusters?: boolean
+  onSortByClustersChange?: (enabled: boolean) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
@@ -27,7 +35,19 @@ export type TaxonomySectionProps = {
 }
 
 export function TaxonomySection(props: TaxonomySectionProps) {
-  const { title, nodes, bucket, selectedTaxon, selectedBucket, onSelectTaxon, emptyText, className, errorsCount = 0 } = props
+  const {
+    title,
+    nodes,
+    bucket,
+    sortByClusters = false,
+    onSortByClustersChange,
+    selectedTaxon,
+    selectedBucket,
+    onSelectTaxon,
+    emptyText,
+    className,
+    errorsCount = 0,
+  } = props
 
   const hasNodes = Array.isArray(nodes) && nodes.length > 0
   const hasErrors = bucket === 'user' && (errorsCount || 0) > 0
@@ -46,7 +66,13 @@ export function TaxonomySection(props: TaxonomySectionProps) {
 
   return (
     <div className={className}>
-      <SectionHeader title={title} bucket={bucket} nodes={nodes} />
+      <SectionHeader
+        title={title}
+        bucket={bucket}
+        nodes={nodes}
+        sortByClusters={sortByClusters}
+        onSortByClustersChange={onSortByClustersChange}
+      />
 
       <div>
         {bucket === 'auto' ? (
@@ -99,19 +125,35 @@ export function TaxonomySection(props: TaxonomySectionProps) {
   )
 }
 
-function SectionHeader(props: { title: string; bucket: 'auto' | 'user'; nodes?: TaxonomyNode[] }) {
-  const { title, bucket, nodes } = props
+function SectionHeader(props: {
+  title: string
+  bucket: 'auto' | 'user'
+  nodes?: TaxonomyNode[]
+  sortByClusters?: boolean
+  onSortByClustersChange?: (enabled: boolean) => void
+}) {
+  const { title, bucket, nodes, sortByClusters = false, onSortByClustersChange } = props
   return (
     <div className='mb-6 flex items-center justify-between'>
       <h4 className='text-14 font-semibold'>{title}</h4>
 
-      <SectionMoreMenu bucket={bucket} nodes={nodes} />
+      <SectionMoreMenu
+        bucket={bucket}
+        nodes={nodes}
+        sortByClusters={sortByClusters}
+        onSortByClustersChange={onSortByClustersChange}
+      />
     </div>
   )
 }
 
-function SectionMoreMenu(props: { bucket: 'auto' | 'user'; nodes?: TaxonomyNode[] }) {
-  const { bucket, nodes } = props
+function SectionMoreMenu(props: {
+  bucket: 'auto' | 'user'
+  nodes?: TaxonomyNode[]
+  sortByClusters?: boolean
+  onSortByClustersChange?: (enabled: boolean) => void
+}) {
+  const { bucket, nodes, sortByClusters = false, onSortByClustersChange } = props
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -119,6 +161,15 @@ function SectionMoreMenu(props: { bucket: 'auto' | 'user'; nodes?: TaxonomyNode[
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align='end' sideOffset={4}>
+        {bucket === 'auto' ? (
+          <DropdownMenuCheckboxItem
+            checked={sortByClusters}
+            onCheckedChange={(checked) => onSortByClustersChange?.(checked === true)}
+          >
+            Sort by clusters
+          </DropdownMenuCheckboxItem>
+        ) : null}
+
         <DropdownMenuItem onSelect={() => expandMany(allKeysFor(nodes || [], bucket))}>Expand all</DropdownMenuItem>
 
         <DropdownMenuItem onSelect={() => collapseMany(allKeysFor(nodes || [], bucket))}>Collapse all</DropdownMenuItem>

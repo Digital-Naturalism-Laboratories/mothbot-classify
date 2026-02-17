@@ -17,6 +17,8 @@ export type NightLeftPanelProps = {
   totalPatches: number
   totalDetections: number
   totalIdentified?: number
+  sortByClusters: boolean
+  onSortByClustersChange: (enabled: boolean) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {

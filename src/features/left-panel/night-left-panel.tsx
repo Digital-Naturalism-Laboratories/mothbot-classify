@@ -7,7 +7,6 @@ import { useStore } from '@nanostores/react'
 import { detectionsStore } from '~/stores/entities/detections'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
-import { exportNightSummaryRS } from '~/features/data-flow/4.export/rs-summary'
 import { PatchSizeControl } from '~/components/atomic/patch-size-control'
 import type { NightLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
@@ -20,6 +19,8 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     totalPatches,
     totalDetections,
     totalIdentified = 0,
+    sortByClusters,
+    onSortByClustersChange,
     selectedTaxon,
     selectedBucket,
     onSelectTaxon,
@@ -30,10 +31,6 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
   const params = useParams({ from: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId' })
   const nightId = `${params.projectId}/${params.siteId}/${params.deploymentId}/${params.nightId}`
   const detections = useStore(detectionsStore)
-  const totalForNight = Object.values(detections ?? {}).filter((d) => (d as any)?.nightId === nightId).length
-  const totalIdentifiedForNight = Object.values(detections ?? {}).filter(
-    (d) => (d as any)?.nightId === nightId && (d as any)?.detectedBy === 'user',
-  ).length
   const errorCountForNight = Object.values(detections ?? {}).filter(
     (d) => (d as any)?.nightId === nightId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
   ).length
@@ -68,6 +65,8 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
         title='Machine identified'
         nodes={taxonomyAuto}
         bucket='auto'
+        sortByClusters={sortByClusters}
+        onSortByClustersChange={onSortByClustersChange}
         selectedTaxon={selectedTaxon}
         selectedBucket={selectedBucket}
         onSelectTaxon={onSelectTaxon}

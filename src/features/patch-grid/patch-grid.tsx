@@ -13,7 +13,6 @@ import { PatchItem } from './patch-item'
 import { selectedPatchIdsStore, selectionNightIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
 import {
   addRowBlocks,
-  chunkIds,
   computeDetectionArea,
   getRankValue,
   isMorphospeciesDetection,
@@ -60,10 +59,11 @@ export type PatchGridProps = {
   onImageProgress?: (loaded: number, total: number) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
+  sortByClusters?: boolean
 }
 
 export function PatchGrid(props: PatchGridProps) {
-  const { patches, nightId, className, onOpenPatchDetail, loading, onImageProgress, selectedTaxon, selectedBucket } = props
+  const { patches, nightId, className, onOpenPatchDetail, loading, onImageProgress, selectedTaxon, selectedBucket, sortByClusters = false } = props
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const desiredColumns = useStore(patchColumnsStore)
@@ -78,8 +78,6 @@ export function PatchGrid(props: PatchGridProps) {
 
   const detections = useStore(detectionsStore)
   const orderedIds = useMemo(() => orderPatchIds({ patches, detections }), [patches, detections])
-
-  const prevCountRef = useRef<number>(0)
 
   const containerWidth = useContainerWidth(containerRef)
 
@@ -108,16 +106,9 @@ export function PatchGrid(props: PatchGridProps) {
     return height
   }, [itemWidth, gapPx])
 
-  // Group blocks (headers + rows) mirroring left panel taxonomy
-  const itemIndexById = useMemo(() => {
-    const map = new Map<string, number>()
-    for (let i = 0; i < orderedIds.length; i++) map.set(orderedIds[i]!, i)
-    return map
-  }, [orderedIds])
-
   const blocks = useMemo(() => {
-    return buildGridBlocks({ orderedIds, detections, columns, selectedTaxon, selectedBucket })
-  }, [orderedIds, detections, columns, selectedTaxon, selectedBucket])
+    return buildGridBlocks({ orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters })
+  }, [orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters])
 
   const visualOrderIds = useMemo(() => {
     return flattenBlocksToVisualOrder({ blocks })
@@ -126,20 +117,6 @@ export function PatchGrid(props: PatchGridProps) {
   const visualIndexById = useMemo(() => {
     return buildVisualIndexMap({ visualOrderIds })
   }, [visualOrderIds])
-
-  const itemIndexToBlockIndex = useMemo(() => {
-    const map: number[] = []
-    if (!blocks.length) return map
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i]
-      if (b.kind !== 'row') continue
-      for (const id of b.itemIds) {
-        const idx = itemIndexById.get(id)
-        if (typeof idx === 'number') map[idx] = i
-      }
-    }
-    return map
-  }, [blocks, itemIndexById])
 
   const rowVirtualizer = useVirtualizer({
     count: blocks.length,
@@ -169,15 +146,16 @@ export function PatchGrid(props: PatchGridProps) {
 
   // Preserve scroll position on minor list changes (e.g., identifying items)
   // Only reset scroll when the viewing context changes (night, bucket, or selected taxon)
-  const lastContextRef = useRef<string>(`${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}`)
+  const lastContextRef = useRef<string>(
+    `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`,
+  )
   useEffect(() => {
-    const currentContext = `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}`
+    const currentContext = `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`
     const contextChanged = currentContext !== lastContextRef.current
     lastContextRef.current = currentContext
 
     if (!contextChanged) return
 
-    const count = orderedIds.length
     setIsDragging(false)
     setDragToggled(new Set())
     setAnchorIndex(null)
@@ -187,17 +165,13 @@ export function PatchGrid(props: PatchGridProps) {
     if (el) el.scrollTo({ top: 0 })
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-    const totalSize = rowVirtualizer.getTotalSize()
-
-    prevCountRef.current = count
-  }, [orderedIds.length, rowVirtualizer, columns, rowHeight, nightId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name])
+  }, [orderedIds.length, rowVirtualizer, columns, rowHeight, nightId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
 
   useEffect(() => {
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-    const totalSize = rowVirtualizer.getTotalSize()
   }, [desiredColumns, rowVirtualizer, columns, rowHeight])
 
   useEffect(() => {
@@ -293,7 +267,7 @@ export function PatchGrid(props: PatchGridProps) {
     }
   }
 
-  function onMouseLeaveContainer(e: React.MouseEvent) {
+  function onMouseLeaveContainer() {
     if (hoverIndex != null) setHoverIndex(null)
   }
 
@@ -350,8 +324,8 @@ export function PatchGrid(props: PatchGridProps) {
                   itemWidth={itemWidth}
                   itemIndexById={visualIndexById}
                   onOpenPatchDetail={onOpenPatchDetail}
-                  onImageLoad={(id) => setLoadedCount((c) => c + 1)}
-                  onImageError={(id) => setLoadedCount((c) => c + 1)}
+                  onImageLoad={() => setLoadedCount((c) => c + 1)}
+                  onImageError={() => setLoadedCount((c) => c + 1)}
                 />
               ) : null}
             </div>
@@ -395,11 +369,19 @@ function buildGridBlocks(params: {
   columns: number
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
+  sortByClusters?: boolean
 }) {
-  const { orderedIds, detections, columns, selectedTaxon, selectedBucket } = params
+  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters = false } = params
   const UNASSIGNED_LABEL = 'Unassigned'
   const out: GridBlock[] = []
   if (!orderedIds.length) return out
+
+  if (sortByClusters) {
+    const header = getFlatHeaderForClusterSort({ selectedTaxon, selectedBucket, count: orderedIds.length })
+    out.push(header)
+    addRowBlocks({ itemIds: orderedIds, columns, keyPrefix: `row:cluster:${header.title}`, out })
+    return out
+  }
 
   if (selectedBucket === 'user' && selectedTaxon?.name === 'ERROR') {
     out.push({ kind: 'header', key: 'hdr:errors', title: 'Errors', rank: 'species', count: orderedIds.length })
@@ -498,6 +480,38 @@ function buildGridBlocks(params: {
     processAnchorGroup({ anchorName, idsOfAnchor, anchorRank, out, detections, columns })
   }
   return out
+}
+
+function getFlatHeaderForClusterSort(params: {
+  selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
+  selectedBucket?: 'auto' | 'user'
+  count: number
+}): GridBlockHeader {
+  const { selectedTaxon, selectedBucket, count } = params
+
+  if (selectedBucket === 'user' && selectedTaxon?.name === 'ERROR') {
+    return { kind: 'header', key: 'hdr:cluster:errors', title: 'Errors', rank: 'species', count }
+  }
+
+  if (selectedTaxon?.name) {
+    return {
+      kind: 'header',
+      key: `hdr:cluster:${selectedTaxon.rank}:${selectedTaxon.name}`,
+      title: selectedTaxon.name,
+      rank: selectedTaxon.rank,
+      count,
+    }
+  }
+
+  if (selectedBucket === 'auto') {
+    return { kind: 'header', key: 'hdr:cluster:all-unapproved', title: 'All unapproved', count }
+  }
+
+  if (selectedBucket === 'user') {
+    return { kind: 'header', key: 'hdr:cluster:human-reviewed', title: 'Human reviewed', count }
+  }
+
+  return { kind: 'header', key: 'hdr:cluster:all', title: 'All detections', count }
 }
 
 function processAnchorGroup(params: {
