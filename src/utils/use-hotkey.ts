@@ -31,7 +31,8 @@ export function useHotkey(hotkey: string, callback: (event: KeyboardEvent) => vo
       const isMissingKey = event.key == null || event.key === ''
       const key = event.key === ' ' ? 'space' : event.key?.toLowerCase()
       const matchesKey = key === spec.key
-      const matchesShift = spec.shift === event.shiftKey
+      const effectiveShift = deriveShiftState(event)
+      const matchesShift = spec.shift === effectiveShift
       const matchesCtrl = spec.ctrl === (event.ctrlKey || event.metaKey)
       const matchesAlt = spec.alt === event.altKey
 
@@ -46,6 +47,7 @@ export function useHotkey(hotkey: string, callback: (event: KeyboardEvent) => vo
         matchesShift,
         matchesCtrl,
         matchesAlt,
+        effectiveShift,
       })
 
       if (isEditable) return
@@ -79,6 +81,7 @@ type HotkeyDebugParams = {
   matchesShift: boolean
   matchesCtrl: boolean
   matchesAlt: boolean
+  effectiveShift: boolean
 }
 
 function parseHotkey(hotkey: string): ParsedHotkey {
@@ -100,6 +103,14 @@ function isEditableTarget(target: EventTarget | null) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 }
 
+function deriveShiftState(event: KeyboardEvent) {
+  const eventKey = event.key ?? ''
+  const isSingleLetter = /^[a-zA-Z]$/.test(eventKey)
+
+  if (isSingleLetter) return eventKey !== eventKey.toLowerCase()
+  return event.shiftKey
+}
+
 function logHotkeyDebug(params: HotkeyDebugParams) {
   if (!HOTKEY_DEBUG) return
 
@@ -114,6 +125,7 @@ function logHotkeyDebug(params: HotkeyDebugParams) {
     matchesShift,
     matchesCtrl,
     matchesAlt,
+    effectiveShift,
   } = params
 
   const target = event.target instanceof HTMLElement ? event.target.tagName : 'UNKNOWN'
@@ -124,6 +136,7 @@ function logHotkeyDebug(params: HotkeyDebugParams) {
     normalizedKey: key,
     code: event.code,
     shift: event.shiftKey,
+    effectiveShift,
     ctrl: event.ctrlKey,
     meta: event.metaKey,
     alt: event.altKey,
