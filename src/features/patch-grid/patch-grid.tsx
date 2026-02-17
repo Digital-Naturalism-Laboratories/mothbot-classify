@@ -238,7 +238,7 @@ export function PatchGrid(props: PatchGridProps) {
       e.preventDefault()
       onOpenPatchDetail(hoveredId)
     },
-    {},
+    { useKey: true, preventDefault: true },
     [hoveredId, onOpenPatchDetail],
   )
 

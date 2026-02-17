@@ -27,7 +27,7 @@ export function SelectionBar(props: SelectionBarProps) {
       e.preventDefault()
       if (hasSelection) onIdentify()
     },
-    {},
+    { useKey: true, preventDefault: true },
     [hasSelection, onIdentify],
   )
 
@@ -37,7 +37,7 @@ export function SelectionBar(props: SelectionBarProps) {
       e.preventDefault()
       if (hasSelection) onAccept()
     },
-    {},
+    { useKey: true, preventDefault: true },
     [hasSelection, onAccept],
   )
 
@@ -47,7 +47,7 @@ export function SelectionBar(props: SelectionBarProps) {
       e.preventDefault()
       if (hasSelection) onUnselect()
     },
-    {},
+    { useKey: true, preventDefault: true },
     [hasSelection, onUnselect],
   )
 
@@ -57,7 +57,7 @@ export function SelectionBar(props: SelectionBarProps) {
       e.preventDefault()
       onSelectAll()
     },
-    {},
+    { useKey: true, preventDefault: true },
     [onSelectAll],
   )
 
