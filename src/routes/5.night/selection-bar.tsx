@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { KeyShortcuts } from '~/components/atomic/Kbd'
 import { Tooltip } from '~/components/ui-custom/tooltip'
 import { Button } from '~/components/ui/button'
+import { useHotkey } from '~/utils/use-hotkey'
 import { cn } from '~/utils/cn'
 
 export type SelectionBarProps = {
@@ -21,45 +21,10 @@ export function SelectionBar(props: SelectionBarProps) {
   const hasSelection = selectedCount > 0
   const label = useMemo(() => `${selectedCount} selected`, [selectedCount])
 
-  useHotkeys(
-    'd',
-    (e) => {
-      e.preventDefault()
-      if (hasSelection) onIdentify()
-    },
-    { useKey: true, preventDefault: true },
-    [hasSelection, onIdentify],
-  )
-
-  useHotkeys(
-    'a',
-    (e) => {
-      e.preventDefault()
-      if (hasSelection) onAccept()
-    },
-    { useKey: true, preventDefault: true },
-    [hasSelection, onAccept],
-  )
-
-  useHotkeys(
-    'u',
-    (e) => {
-      e.preventDefault()
-      if (hasSelection) onUnselect()
-    },
-    { useKey: true, preventDefault: true },
-    [hasSelection, onUnselect],
-  )
-
-  useHotkeys(
-    'shift+a',
-    (e) => {
-      e.preventDefault()
-      onSelectAll()
-    },
-    { useKey: true, preventDefault: true },
-    [onSelectAll],
-  )
+  useHotkey('d', () => { if (hasSelection) onIdentify() }, [hasSelection, onIdentify])
+  useHotkey('a', () => { if (hasSelection) onAccept() }, [hasSelection, onAccept])
+  useHotkey('u', () => { if (hasSelection) onUnselect() }, [hasSelection, onUnselect])
+  useHotkey('shift+a', () => { onSelectAll() }, [onSelectAll])
 
   if (!hasSelection) return null
 

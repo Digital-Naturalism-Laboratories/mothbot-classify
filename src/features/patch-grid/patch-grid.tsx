@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useHotkeys } from 'react-hotkeys-hook'
+import { useHotkey } from '~/utils/use-hotkey'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '~/utils/cn'
 import type { PatchEntity } from '~/stores/entities/5.patches'
@@ -231,16 +231,7 @@ export function PatchGrid(props: PatchGridProps) {
     return id ?? null
   }, [hoverIndex, visualOrderIds])
 
-  useHotkeys(
-    'space',
-    (e) => {
-      if (!hoveredId) return
-      e.preventDefault()
-      onOpenPatchDetail(hoveredId)
-    },
-    { useKey: true, preventDefault: true },
-    [hoveredId, onOpenPatchDetail],
-  )
+  useHotkey('space', () => { if (hoveredId) onOpenPatchDetail(hoveredId) }, [hoveredId, onOpenPatchDetail])
 
   function focusItem(index: number) {
     requestAnimationFrame(() => {
