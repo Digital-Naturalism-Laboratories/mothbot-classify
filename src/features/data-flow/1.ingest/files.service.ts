@@ -1,9 +1,19 @@
 import { datasetStore } from '~/stores/dataset'
 import { pickerErrorStore } from '~/stores/ui'
 import { directoryFilesStore, selectedFilesStore } from './files.state'
-import { collectFilesWithPathsRecursively, pickDirectoryFilesWithPaths } from './files.fs'
+import {
+  collectFilesWithPathsRecursively,
+  normalizePathsToRoot,
+  pickDirectoryFilesWithPaths,
+  type IndexedPickedFile,
+} from './files.fs'
 import { validateProjectRootSelection } from './files.validation'
-import { ensureReadPermission, forgetSavedDirectory, loadSavedDirectory } from '~/features/data-flow/3.persist/files.persistence'
+import {
+  ensureReadPermission,
+  forgetSavedDirectory,
+  loadSavedDirectory,
+  persistPickedDirectory,
+} from '~/features/data-flow/3.persist/files.persistence'
 import { applyIndexedFilesState } from './files.initialize'
 import { singlePassIngest } from './files.single-pass'
 import { resetAllEntityStores } from '~/stores/entities'
@@ -11,13 +21,41 @@ import { resetAllEntityStores } from '~/stores/entities'
 export async function openDirectory() {
   console.log('🏁 openDirectory: start picking projects folder')
   const tStart = performance.now()
+  const maxRetries = 3
+  let retries = 0
+  let indexed: IndexedPickedFile[] = []
+  let directoryHandle: unknown = null
+  let totalPickMs = 0
 
-  const tPick = performance.now()
-  const indexed = await pickDirectoryFilesWithPaths()
-  const pickMs = Math.round(performance.now() - tPick)
+  while (retries < maxRetries) {
+    const tPick = performance.now()
+    const pickResult = await pickDirectoryFilesWithPaths()
+    const pickMs = Math.round(performance.now() - tPick)
+    totalPickMs += pickMs
+    indexed = pickResult.indexed
+    directoryHandle = pickResult.directoryHandle
+    const totalPicked = indexed?.length ?? 0
+    console.log('📂 openDirectory: collected files', { totalPicked, pickMs, retries })
+    if (!indexed?.length) return
+
+    const normalized = normalizePathsToRoot({ files: indexed })
+    if (normalized.ok) {
+      indexed = normalized.files
+      if (directoryHandle) {
+        await persistPickedDirectory(directoryHandle as any)
+      }
+      break
+    }
+
+    retries++
+    const msg = `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so project/site/deployment/night are included.`
+    pickerErrorStore.set(msg)
+    if (retries >= maxRetries) {
+      await forgetSavedDirectory()
+      return
+    }
+  }
   const totalPicked = indexed?.length ?? 0
-  console.log('📂 openDirectory: collected files', { totalPicked, pickMs })
-  if (!indexed?.length) return
 
   console.log('🌀 openDirectory: validating folder structure')
   const tValidate = performance.now()
@@ -35,11 +73,11 @@ export async function openDirectory() {
   const indexApplyMs = Math.round(performance.now() - tIndexApply)
 
   const tSingle = performance.now()
-  await singlePassIngest({ files: indexed as any })
+  await singlePassIngest({ files: indexed })
   const singleMs = Math.round(performance.now() - tSingle)
   const totalMs = Math.round(performance.now() - tStart)
   console.log('✅ openDirectory: ingestion complete', { totalFiles: totalPicked, totalMs })
-  console.log('⏱️ openDirectory: timings', { pickMs, validateMs, indexApplyMs, singleMs, totalMs })
+  console.log('⏱️ openDirectory: timings', { pickMs: totalPickMs, validateMs, indexApplyMs, singleMs, totalMs })
   pickerErrorStore.set(null)
 }
 
@@ -75,16 +113,23 @@ export async function tryRestoreFromSavedDirectory() {
       return false
     }
 
-    const items: Array<{ file: File; path: string; name: string; size: number }> = []
+    const items: IndexedPickedFile[] = []
     const tCollect = performance.now()
     console.log('🌀 restoreDirectory: starting file collection...')
 
-    await collectFilesWithPathsRecursively({ directoryHandle: handle as any, pathParts: [], items: items as any })
+    await collectFilesWithPathsRecursively({ directoryHandle: handle as any, pathParts: [], items })
     const collectMs = Math.round(performance.now() - tCollect)
     console.log('📂 restoreDirectory: collected files', { total: items.length, ms: collectMs })
+    const normalized = normalizePathsToRoot({ files: items })
+    if (!normalized.ok) {
+      const msg = `Saved folder is too deep. Please pick ${normalized.levelsUp} level(s) up so project/site/deployment/night are included.`
+      pickerErrorStore.set(msg)
+      return false
+    }
+    const normalizedItems = normalized.files
 
     const tValidate = performance.now()
-    const validation = validateProjectRootSelection({ files: items as any })
+    const validation = validateProjectRootSelection({ files: normalizedItems })
     const validateMs = Math.round(performance.now() - tValidate)
     console.log('🌀 restoreDirectory: validated folder structure', { validateMs })
     if (!validation.ok) {
@@ -94,12 +139,12 @@ export async function tryRestoreFromSavedDirectory() {
     }
 
     const tIndexApply = performance.now()
-    applyIndexedFilesState({ indexed: items as any })
+    applyIndexedFilesState({ indexed: normalizedItems })
     const indexApplyMs = Math.round(performance.now() - tIndexApply)
     console.log('🌀 restoreDirectory: applied indexed files', { indexApplyMs })
 
     const tSingle = performance.now()
-    await singlePassIngest({ files: items as any })
+    await singlePassIngest({ files: normalizedItems })
     const singleMs = Math.round(performance.now() - tSingle)
     console.log('🌀 restoreDirectory: single pass ingestion', { singleMs })
     const totalMs = Math.round(performance.now() - tStart)
