@@ -25,6 +25,7 @@ export function SelectionBar(props: SelectionBarProps) {
   useHotkey('a', () => { if (hasSelection) onAccept() }, [hasSelection, onAccept])
   useHotkey('u', () => { if (hasSelection) onUnselect() }, [hasSelection, onUnselect])
   useHotkey('shift+a', () => { onSelectAll() }, [onSelectAll])
+  useHotkey('mod+a', () => { onSelectAll() }, [onSelectAll])
 
   if (!hasSelection) return null
 
