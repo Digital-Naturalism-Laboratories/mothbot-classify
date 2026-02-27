@@ -62,7 +62,7 @@ describe('Data Flow Integration Tests', () => {
     id: 'patch1',
     patchId: 'patch1',
     photoId: 'photo1.jpg',
-    nightId: 'Dinacon2025/Dinacon2025_Les_BeachPalm/grupoKite_2025-06-23/2025-06-22',
+    nightId: 'Dinacon2025/Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23/2025-06-22',
     detectedBy: 'auto' as const,
   } as const
 
@@ -76,7 +76,7 @@ describe('Data Flow Integration Tests', () => {
     patch: { id: 'patch1', imageFile: { path: 'patches/patch1.jpg' } } as any,
     photo: { id: 'photo1.jpg' } as any,
     nightId: BASE_DETECTION.nightId,
-    nightDiskPath: 'Dinacon2025/Dinacon2025_Les_BeachPalm/grupoKite_2025-06-23/2025-06-22',
+    nightDiskPath: 'Dinacon2025/Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23/2025-06-22',
   } as const
 
   describe('Morphospecies Export Isolation', () => {

@@ -8,7 +8,7 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
     id: 'det1',
     patchId: 'patch1',
     photoId: 'photo1',
-    nightId: 'project/site/deployment/night1',
+    nightId: 'project/deployment/night1',
   } as const
 
   const BASE_PATCH = {
@@ -24,7 +24,7 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
     patch: BASE_PATCH as any,
     photo: BASE_PHOTO as any,
     nightId: BASE_DETECTION.nightId,
-    nightDiskPath: 'project/site/deployment/night1',
+    nightDiskPath: 'project/deployment/night1',
   } as const
 
   describe('deriveNameColumn - name column logic', () => {

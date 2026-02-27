@@ -12,34 +12,34 @@ function makeEntry(path: string): IndexedPickedFile {
 describe('normalizePathsToRoot', () => {
   it('strips one leading segment when projects root is selected', () => {
     const files = [
-      makeEntry('projects-root/project-1/site-1/deployment-1/night-1/patches/a.jpg'),
-      makeEntry('projects-root/project-1/site-1/deployment-1/night-1/photo_botdetection.json'),
+      makeEntry('Mothbox Datasets/Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/a.jpg'),
+      makeEntry('Mothbox Datasets/Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json'),
     ]
 
     const result = normalizePathsToRoot({ files })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.files[0]?.path).toBe('project-1/site-1/deployment-1/night-1/patches/a.jpg')
-    expect(result.files[1]?.path).toBe('project-1/site-1/deployment-1/night-1/photo_botdetection.json')
+    expect(result.files[0]?.path).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/a.jpg')
+    expect(result.files[1]?.path).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json')
   })
 
   it('keeps paths unchanged when project root is selected', () => {
     const files = [
-      makeEntry('project-1/site-1/deployment-1/night-1/patches/a.jpg'),
-      makeEntry('project-1/site-1/deployment-1/night-1/photo_botdetection.json'),
+      makeEntry('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/a.jpg'),
+      makeEntry('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json'),
     ]
 
     const result = normalizePathsToRoot({ files })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.files[0]?.path).toBe('project-1/site-1/deployment-1/night-1/patches/a.jpg')
-    expect(result.files[1]?.path).toBe('project-1/site-1/deployment-1/night-1/photo_botdetection.json')
+    expect(result.files[0]?.path).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/a.jpg')
+    expect(result.files[1]?.path).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json')
   })
 
   it('returns one level up when deployment folder is selected', () => {
-    const files = [makeEntry('deployment-1/night-1/patches/a.jpg')]
+    const files = [makeEntry('Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/a.jpg')]
 
     const result = normalizePathsToRoot({ files })
 
@@ -49,7 +49,7 @@ describe('normalizePathsToRoot', () => {
   })
 
   it('returns two levels up when night folder is selected', () => {
-    const files = [makeEntry('night-1/patches/a.jpg')]
+    const files = [makeEntry('2025-06-21/patches/a.jpg')]
 
     const result = normalizePathsToRoot({ files })
 
@@ -69,12 +69,22 @@ describe('normalizePathsToRoot', () => {
   })
 
   it('returns files unchanged when no patches jpg exists', () => {
-    const files = [makeEntry('project-1/site-1/deployment-1/night-1/photo_botdetection.json')]
+    const files = [makeEntry('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json')]
 
     const result = normalizePathsToRoot({ files })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.files[0]?.path).toBe('project-1/site-1/deployment-1/night-1/photo_botdetection.json')
+    expect(result.files[0]?.path).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json')
+  })
+
+  it('fails fast when parse confidence is too low', () => {
+    const files = [makeEntry('Mothbox Datasets/Dinacon2025/weird-night-name/patches/a.jpg')]
+
+    const result = normalizePathsToRoot({ files })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toContain('Could not confidently detect dataset root')
   })
 })

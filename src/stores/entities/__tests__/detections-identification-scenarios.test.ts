@@ -90,7 +90,7 @@ describe('Detection Identification Scenarios', () => {
     id: 'patch1',
     patchId: 'patch1',
     photoId: 'photo1',
-    nightId: 'project/site/deployment/night1',
+    nightId: 'project/deployment/night1',
     detectedBy: 'auto' as const,
   } as const
 
