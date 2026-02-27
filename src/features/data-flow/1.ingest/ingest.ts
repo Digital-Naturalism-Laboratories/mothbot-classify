@@ -5,7 +5,7 @@ import { nightsStore, type NightEntity } from '~/stores/entities/4.nights'
 import { photosStore, type PhotoEntity, type IndexedFile } from '~/stores/entities/photos'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
-import { parsePathParts, deriveSiteFromDeploymentFolder } from './ingest-paths'
+import { normalizeLegacyNightId, parsePathParts } from './ingest-paths'
 import { parseNightBotDetections, overlayNightUserDetections } from './ingest-night'
 
 export async function ingestFilesToStores(params: {
@@ -15,6 +15,8 @@ export async function ingestFilesToStores(params: {
 }) {
   const { files, parseDetectionsForNightId, patchMap } = params
   if (!files?.length) return
+  const targetNightId =
+    typeof parseDetectionsForNightId === 'string' ? normalizeLegacyNightId(parseDetectionsForNightId) : parseDetectionsForNightId
 
   const proj: Record<string, ProjectEntity> = {}
   const sites: Record<string, SiteEntity> = {}
@@ -23,11 +25,6 @@ export async function ingestFilesToStores(params: {
   const photos: Record<string, PhotoEntity> = {}
   const patches: Record<string, PatchEntity> = {}
   const detections: Record<string, DetectionEntity> = {}
-
-  let photoJpgCount = 0
-  let patchFileCount = 0
-  let botJsonCount = 0
-  let userJsonCount = 0
 
   for (const f of files) {
     const parts = parsePathParts({ path: f.path })
@@ -41,31 +38,47 @@ export async function ingestFilesToStores(params: {
 
     const projectId = project
     const siteId = `${project}/${site}`
-    const deploymentId = `${project}/${site}/${deployment}`
-    const nightId = `${project}/${site}/${deployment}/${night}`
+    const deploymentId = `${project}/${deployment}`
+    const nightId = normalizeLegacyNightId(`${project}/${deployment}/${night}`)
 
     proj[projectId] = proj[projectId] ?? { id: projectId, name: project }
-    const siteDisplayName = deriveSiteFromDeploymentFolder(deployment) || site
-    sites[siteId] = sites[siteId] ?? { id: siteId, name: siteDisplayName, projectId }
+    sites[siteId] = sites[siteId] ?? { id: siteId, name: site, projectId }
     deps[deploymentId] = deps[deploymentId] ?? { id: deploymentId, name: deployment, projectId, siteId }
     nights[nightId] = nights[nightId] ?? { id: nightId, name: night, projectId, siteId, deploymentId }
 
     const shouldIncludeMedia =
-      parseDetectionsForNightId === undefined ? true : parseDetectionsForNightId === null ? false : nightId === parseDetectionsForNightId
+      targetNightId === undefined ? true : targetNightId === null ? false : nightId === targetNightId
 
     if (isPhotoJpg && shouldIncludeMedia) {
       const photoId = `${baseName}.jpg`
       const existing = photos[photoId] ?? { id: photoId, name: photoId, nightId }
+      if (existing.nightId && existing.nightId !== nightId) {
+        console.warn('🚨 ingest: photoId collision across nights', {
+          photoId,
+          existingNightId: existing.nightId,
+          incomingNightId: nightId,
+          existingPath: existing.imageFile?.path || existing.botDetectionFile?.path || existing.userDetectionFile?.path,
+          incomingPath: f.path,
+        })
+      }
       photos[photoId] = { ...existing, imageFile: f }
-      photoJpgCount++
       continue
     }
 
     if (isPatch && shouldIncludeMedia) {
       const photoId = `${baseName}.jpg`
       const patchId = fileName
-      patches[patchId] = patches[patchId] ?? { id: patchId, name: patchId, nightId, photoId, imageFile: f }
-      patchFileCount++
+      const existingPatch = patches[patchId]
+      if (existingPatch && existingPatch.nightId !== nightId) {
+        console.warn('🚨 ingest: patchId collision across nights', {
+          patchId,
+          existingNightId: existingPatch.nightId,
+          incomingNightId: nightId,
+          existingPath: existingPatch.imageFile?.path,
+          incomingPath: f.path,
+        })
+      }
+      patches[patchId] = existingPatch ?? { id: patchId, name: patchId, nightId, photoId, imageFile: f }
       continue
     }
 
@@ -73,7 +86,6 @@ export async function ingestFilesToStores(params: {
       const photoId = `${baseName}.jpg`
       const existing = photos[photoId] ?? { id: photoId, name: photoId, nightId }
       photos[photoId] = { ...existing, botDetectionFile: f }
-      botJsonCount++
       continue
     }
 
@@ -81,7 +93,6 @@ export async function ingestFilesToStores(params: {
       const photoId = `${baseName}.jpg`
       const existing = photos[photoId] ?? { id: photoId, name: photoId, nightId }
       photos[photoId] = { ...existing, userDetectionFile: f }
-      userJsonCount++
       console.log('📂 ingest: found _identified.json', { path: f.path, photoId, nightId })
       continue
     }
@@ -90,11 +101,11 @@ export async function ingestFilesToStores(params: {
   if (parseDetectionsForNightId !== null) {
     // When parsing for a specific night, merge existing photos from store into local photos object
     // so parseNightBotDetections can see photos that already have botDetectionFile set
-    if (typeof parseDetectionsForNightId === 'string') {
+    if (typeof targetNightId === 'string') {
       const currentPhotos = photosStore.get() || {}
       // Merge existing photos into local photos, with local photos taking precedence
       for (const [photoId, existingPhoto] of Object.entries(currentPhotos)) {
-        if (existingPhoto.nightId === parseDetectionsForNightId) {
+        if (normalizeLegacyNightId(existingPhoto.nightId) === targetNightId) {
           if (!photos[photoId]) {
             photos[photoId] = existingPhoto
           } else {
@@ -109,11 +120,11 @@ export async function ingestFilesToStores(params: {
         }
       }
     }
-    await parseNightBotDetections({ photos, files, patchMap, parseDetectionsForNightId, patches, detections })
-    await overlayNightUserDetections({ photos, parseDetectionsForNightId, detections })
+    await parseNightBotDetections({ photos, files, patchMap, parseDetectionsForNightId: targetNightId, patches, detections })
+    await overlayNightUserDetections({ photos, parseDetectionsForNightId: targetNightId, detections })
   }
 
-  if (typeof parseDetectionsForNightId === 'string') {
+  if (typeof targetNightId === 'string') {
     const currProj = projectsStore.get() || {}
     const currSites = sitesStore.get() || {}
     const currDeps = deploymentsStore.get() || {}
@@ -132,7 +143,7 @@ export async function ingestFilesToStores(params: {
   if (parseDetectionsForNightId === null) {
     photosStore.set({})
     patchesStore.set({})
-  } else if (typeof parseDetectionsForNightId === 'string') {
+  } else if (typeof targetNightId === 'string') {
     const currentPhotos = photosStore.get() || {}
     const currentPatches = patchesStore.get() || {}
     photosStore.set({ ...currentPhotos, ...photos })
@@ -144,7 +155,7 @@ export async function ingestFilesToStores(params: {
 
   if (parseDetectionsForNightId === null) {
     detectionsStore.set({})
-  } else if (typeof parseDetectionsForNightId === 'string') {
+  } else if (typeof targetNightId === 'string') {
     const currentDetections = detectionsStore.get() || {}
     // Fresh file data wins over stale store data
     const merged: Record<string, DetectionEntity> = { ...currentDetections, ...detections }

@@ -1,11 +1,4 @@
-function isLikelyNightFolderName(name: string) {
-  const n = (name ?? '').toLowerCase()
-  if (!n) return false
-  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(n)
-  if (isDate) return true
-  if (n.startsWith('night')) return true
-  return false
-}
+import { isLikelyNightFolderName } from './ingest-paths'
 
 export function validateProjectRootSelection(params: {
   files: Array<{ file?: File; path: string; name: string; size: number }>
@@ -26,7 +19,7 @@ export function validateProjectRootSelection(params: {
   if (!hasNightDepth) {
     return {
       ok: false,
-      message: "Invalid folder. Expected structure: project/deployment/night/(patches/)?file. Please pick the parent 'projects' folder.",
+      message: "Invalid folder. Expected structure: dataset/deployment/night/(patches/)?file. Please pick the parent datasets folder.",
     }
   }
 
@@ -34,7 +27,7 @@ export function validateProjectRootSelection(params: {
   if (patchJpgs.length === 0) {
     return {
       ok: false,
-      message: "No 'patches' folders with .jpg files were found. Expected: project/site/deployment/night/patches/*.jpg.",
+      message: "No 'patches' folders with .jpg files were found. Expected: dataset/deployment/night/patches/*.jpg.",
     }
   }
 
@@ -51,21 +44,21 @@ export function validateProjectRootSelection(params: {
     const looksLikeNight = isLikelyNightFolderName(nightCandidate)
     if (looksLikeNight && idx < 4) {
       const missingCount = 3 - pre.length
-      const missingHint = missingCount >= 1 ? 'projects/deployments' : 'projects/deployments (one level is missing)'
+      const missingHint = missingCount >= 1 ? 'datasets/deployments' : 'datasets/deployments (one level is missing)'
       return {
         ok: false,
-        message: `Detected night and patches are valid, but ${missingHint} structure before the night is incorrect. Example: project/deployment/night/patches/<file>. Offending path: ${sample}`,
+        message: `Detected night and patches are valid, but ${missingHint} structure before the night is incorrect. Example: dataset/deployment/night/patches/<file>. Offending path: ${sample}`,
       }
     }
     if (badDepth.segments.length <= idx + 1) {
       return {
         ok: false,
-        message: `The 'patches' folder does not contain a file at the expected level. Expected: project/deployment/night/patches/<file>. Offending path: ${sample}`,
+        message: `The 'patches' folder does not contain a file at the expected level. Expected: dataset/deployment/night/patches/<file>. Offending path: ${sample}`,
       }
     }
     return {
       ok: false,
-      message: `Found a 'patches' folder at an unexpected location: ${sample}. Expected: project/deployment/night/patches/<file>.`,
+      message: `Found a 'patches' folder at an unexpected location: ${sample}. Expected: dataset/deployment/night/patches/<file>.`,
     }
   }
 

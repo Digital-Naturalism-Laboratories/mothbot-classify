@@ -7,6 +7,14 @@ export function isLikelyNightFolderName(name: string) {
   return false
 }
 
+export type ParsedNightId = {
+  project: string
+  site: string
+  deployment: string
+  night: string
+  nightId: string
+}
+
 export function deriveSiteFromDeploymentFolder(deploymentFolderName: string) {
   const name = deploymentFolderName ?? ''
   if (!name) return ''
@@ -15,23 +23,49 @@ export function deriveSiteFromDeploymentFolder(deploymentFolderName: string) {
   return name
 }
 
+export function normalizeLegacyNightId(nightId: string) {
+  const normalized = (nightId ?? '').replaceAll('\\', '/').replace(/^\/+/, '').trim()
+  if (!normalized) return ''
+
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length !== 4) return normalized
+
+  const [project, legacySite, deployment, night] = parts
+  const derivedSite = deriveSiteFromDeploymentFolder(deployment)
+  if (!project || !deployment || !night) return normalized
+  if (!legacySite || legacySite !== derivedSite) return normalized
+
+  return `${project}/${deployment}/${night}`
+}
+
+export function parseNightId(params: { nightId: string }): ParsedNightId | null {
+  const { nightId } = params
+  const normalized = normalizeLegacyNightId(nightId)
+  if (!normalized) return null
+
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length < 3) return null
+
+  const [project, deployment, night] = parts
+  if (!project || !deployment || !night) return null
+
+  const site = deriveSiteFromDeploymentFolder(deployment)
+  return {
+    project,
+    site,
+    deployment,
+    night,
+    nightId: `${project}/${deployment}/${night}`,
+  }
+}
+
 export function parsePathParts(params: { path: string }) {
   const { path } = params
   const normalized = (path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
   const segments = normalized.split('/').filter(Boolean)
   if (segments.length < 4) return null
-  let project = ''
-  let site = ''
-  let deployment = ''
-  let night = ''
-  let rest: string[] = []
-
-  if (segments.length >= 5) {
-    ;[project, site, deployment, night, ...rest] = segments
-  } else {
-    ;[project, deployment, night, ...rest] = segments
-    site = deriveSiteFromDeploymentFolder(deployment)
-  }
+  const [project, deployment, night, ...rest] = segments
+  const site = deriveSiteFromDeploymentFolder(deployment)
 
   if (!isLikelyNightFolderName(night)) return null
   const isPatchesFolder = rest[0] === 'patches'

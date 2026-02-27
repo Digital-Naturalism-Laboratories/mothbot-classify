@@ -48,7 +48,9 @@ export async function openDirectory() {
     }
 
     retries++
-    const msg = `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so project/site/deployment/night are included.`
+    const msg =
+      normalized.message ??
+      `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so dataset/deployment/night are included.`
     pickerErrorStore.set(msg)
     if (retries >= maxRetries) {
       await forgetSavedDirectory()
@@ -122,7 +124,9 @@ export async function tryRestoreFromSavedDirectory() {
     console.log('📂 restoreDirectory: collected files', { total: items.length, ms: collectMs })
     const normalized = normalizePathsToRoot({ files: items })
     if (!normalized.ok) {
-      const msg = `Saved folder is too deep. Please pick ${normalized.levelsUp} level(s) up so project/site/deployment/night are included.`
+      const msg =
+        normalized.message ??
+        `Saved folder is too deep. Please pick ${normalized.levelsUp} level(s) up so dataset/deployment/night are included.`
       pickerErrorStore.set(msg)
       return false
     }
