@@ -18,7 +18,21 @@ import { $isSpeciesPickerOpen, $speciesPickerProjectId } from '~/features/data-f
 import { userSessionStore, clearUserSession } from '~/stores/ui'
 import { useAppReady } from '~/features/data-flow/1.ingest/files-queries'
 import { Avatar, AvatarFallback } from '~/components/ui/avatar'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu'
+import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
+import { toast } from 'sonner'
+import {
+  formatDatasetHealthAuditSummary,
+  formatNightSummaryHealSummary,
+  healNightSummaryNightIds,
+  runDatasetHealthAudit,
+} from '~/features/data-flow/3.persist/dataset-health'
 // removed isLoadingFoldersStore usage here; loading is derived in root layout
 
 export function Nav() {
@@ -35,6 +49,8 @@ export function Nav() {
   const appReady = useAppReady()
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
   const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
+  const [isAuditingDataset, setIsAuditingDataset] = useState(false)
+  const [isHealingSummaries, setIsHealingSummaries] = useState(false)
   const activeProjectId = useMemo(() => (pathname.startsWith('/projects/') ? pathname.split('/')[2] : ''), [pathname])
   const activeSpeciesName = useMemo(() => {
     const listId = selection?.[activeProjectId]
@@ -117,6 +133,13 @@ export function Nav() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
                 <DropdownMenuItem onClick={() => void clearUserSession()}>Change user name…</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={isAuditingDataset} onClick={onAuditDataset}>
+                  {isAuditingDataset ? 'Auditing Dataset…' : 'Audit Dataset'}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={isHealingSummaries} onClick={onHealSummaries}>
+                  {isHealingSummaries ? 'Healing Summaries…' : 'Heal Summaries'}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
@@ -124,6 +147,41 @@ export function Nav() {
       </div>
     </header>
   )
+
+  function onAuditDataset() {
+    if (isAuditingDataset) return
+    setIsAuditingDataset(true)
+    const promise = runDatasetHealthAudit()
+    toast.promise(promise, {
+      loading: '🧪 Auditing dataset health…',
+      success: (report) => {
+        console.log('✅ Dataset audit report', report)
+        return `✅ Dataset audit complete: ${formatDatasetHealthAuditSummary(report)}`
+      },
+      error: '🚨 Failed to audit dataset health',
+    })
+    void promise.finally(() => setIsAuditingDataset(false))
+  }
+
+  function onHealSummaries() {
+    if (isHealingSummaries) return
+    const shouldProceed = window.confirm(
+      'Heal all night_summary.json files to canonical nightId format? This only updates summary nightId fields.',
+    )
+    if (!shouldProceed) return
+
+    setIsHealingSummaries(true)
+    const promise = healNightSummaryNightIds()
+    toast.promise(promise, {
+      loading: '🛠️ Healing night_summary IDs…',
+      success: (report) => {
+        console.log('✅ Night summary heal report', report)
+        return `✅ Summary heal complete: ${formatNightSummaryHealSummary(report)}`
+      },
+      error: '🚨 Failed to heal night summaries',
+    })
+    void promise.finally(() => setIsHealingSummaries(false))
+  }
 }
 
 function FolderPicking() {
@@ -174,31 +232,27 @@ function getBreadcrumbs(params: {
   items.push({ label: projectName, entityName: 'Project' })
 
   if (parts.length <= 3) return items
-  const siteId = parts[3]
-
-  if (!siteId) return items
-  const siteKey = `${projectId}/${siteId}`
-  const siteName = sites?.[siteKey]?.name ?? siteId
-  items.push({ label: siteName, entityName: 'Site' })
-
-  if (parts.length <= 5) return items
-  const deploymentId = parts[5]
+  const deploymentId = parts[3]
 
   if (!deploymentId) return items
-  const depKey = `${projectId}/${siteId}/${deploymentId}`
+  const depKey = `${projectId}/${deploymentId}`
   const deploymentName = deployments?.[depKey]?.name ?? deploymentId
+  const derivedSite = deriveSiteFromDeploymentFolder(deploymentName)
+  const siteKey = `${projectId}/${derivedSite}`
+  const siteName = sites?.[siteKey]?.name ?? derivedSite
+  if (siteName) items.push({ label: siteName, entityName: 'Site' })
   items.push({ label: deploymentName, entityName: 'Deployment' })
 
-  if (parts.length <= 7) return items
-  const nightId = parts[7]
+  if (parts.length <= 5) return items
+  const nightId = parts[5]
 
   if (!nightId) return items
-  const nightKey = `${projectId}/${siteId}/${deploymentId}/${nightId}`
+  const nightKey = `${projectId}/${deploymentId}/${nightId}`
   const nightName = nights?.[nightKey]?.name ?? nightId
   items.push({
     label: nightName,
     entityName: 'Night',
-    href: `/projects/${projectId}/sites/${siteId}/deployments/${deploymentId}/nights/${nightId}`,
+    href: `/projects/${projectId}/deployments/${deploymentId}/nights/${nightId}`,
   })
 
   return items

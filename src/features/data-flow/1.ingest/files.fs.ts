@@ -1,4 +1,5 @@
 import { ensureReadWritePermission } from '~/features/data-flow/3.persist/files.persistence'
+import { isLikelyNightFolderName, parsePathParts } from './ingest-paths'
 
 type FileSystemFileHandleLike = {
   getFile: () => Promise<File>
@@ -7,6 +8,8 @@ type FileSystemFileHandleLike = {
 
 type FileSystemDirectoryHandleLike = {
   values: () => AsyncIterable<FileSystemFileHandleLike | FileSystemDirectoryHandleLike>
+  queryPermission?: (options: { mode: 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
+  requestPermission?: (options: { mode: 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
   name?: string
 }
 
@@ -18,7 +21,7 @@ export type IndexedPickedFile = {
   size: number
 }
 
-type NormalizePathsResult = { ok: true; files: IndexedPickedFile[] } | { ok: false; levelsUp: number }
+type NormalizePathsResult = { ok: true; files: IndexedPickedFile[] } | { ok: false; levelsUp: number; message?: string }
 
 export type PickDirectoryFilesResult = {
   indexed: IndexedPickedFile[]
@@ -68,7 +71,7 @@ export async function pickDirectoryFilesWithPaths(): Promise<PickDirectoryFilesR
   if (!dirHandle) return { indexed: [], directoryHandle: null }
 
   // Try to proactively request RW so we can save later without prompting again
-  void ensureReadWritePermission(dirHandle as any)
+  void ensureReadWritePermission(dirHandle)
 
   const items: IndexedPickedFile[] = []
   await collectFilesWithPathsRecursively({ directoryHandle: dirHandle, pathParts: [], items })
@@ -115,53 +118,144 @@ export function normalizePathsToRoot(params: { files: IndexedPickedFile[] }): No
   const { files } = params
   if (!Array.isArray(files) || files.length === 0) return { ok: true, files: [] }
 
-  const sample = findPatchesSamplePath({ files })
-  if (!sample) return { ok: true, files }
+  const samplePaths = collectPatchesSamplePaths({ files, limit: 200 })
+  if (samplePaths.length === 0) return { ok: true, files }
 
-  const sampleSegments = sample.split('/').filter(Boolean)
-  const patchesIndex = sampleSegments.findIndex((segment) => segment.toLowerCase() === 'patches')
-  if (patchesIndex < 0) return { ok: true, files }
+  const candidateStripCounts = Array.from(
+    new Set(
+      samplePaths
+        .map((path) => {
+          const segments = path.split('/').filter(Boolean)
+          const patchesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'patches')
+          if (patchesIndex < 0) return -1
+          return patchesIndex - 3
+        })
+        .filter((n) => Number.isInteger(n)),
+    ),
+  )
 
-  const stripCountA = patchesIndex - 4
-  const stripCountB = patchesIndex - 3
-  const candidateStripCounts = [stripCountA, stripCountB].filter((stripCount) => stripCount >= 0)
-  if (candidateStripCounts.length === 0) {
-    const levelsUp = Math.max(1, Math.min(...[-stripCountA, -stripCountB].filter((n) => n > 0)))
+  const validCandidates = candidateStripCounts.filter((stripCount) => stripCount >= 0)
+  if (validCandidates.length === 0) {
+    const levelsNeeded = candidateStripCounts.filter((n) => n < 0).map((n) => Math.abs(n))
+    const levelsUp = Math.max(1, ...levelsNeeded)
     return { ok: false, levelsUp }
   }
 
-  const stripCount = Math.min(...candidateStripCounts)
-  const nightSegment = sampleSegments[patchesIndex - 1] ?? ''
-  if (!isLikelyNightFolderName(nightSegment)) return { ok: false, levelsUp: 1 }
+  const stripCount = selectBestStripCount({ candidateStripCounts: validCandidates, samplePaths })
+  if (stripCount === null) return { ok: false, levelsUp: 1 }
+
+  const evaluation = evaluateStripCount({ stripCount, samplePaths })
+  if (evaluation.validRatio < 0.8) {
+    return {
+      ok: false,
+      levelsUp: 1,
+      message: `Could not confidently detect dataset root. Parsed ${(evaluation.validRatio * 100).toFixed(
+        0,
+      )}% of sample patch paths; expected at least 80%. Sample failed paths: ${evaluation.invalidSamples.join(' | ')}`,
+    }
+  }
+
+  const nightHeuristicMismatches = collectNightHeuristicMismatches({ files, stripCount, limit: 5 })
+  if (nightHeuristicMismatches.count > 0) {
+    console.warn('🚨 normalizePathsToRoot: potential unsupported night naming', {
+      count: nightHeuristicMismatches.count,
+      samplePaths: nightHeuristicMismatches.samples,
+    })
+  }
 
   if (stripCount === 0) return { ok: true, files }
 
   const adjustedFiles = files.map((entry) => {
-    const normalizedPath = (entry.path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
-    const segments = normalizedPath.split('/').filter(Boolean)
-    const trimmedPath = segments.slice(stripCount).join('/')
+    const trimmedPath = trimPath({ path: entry.path, stripCount })
     return { ...entry, path: trimmedPath }
   })
   return { ok: true, files: adjustedFiles }
 }
 
-function findPatchesSamplePath(params: { files: IndexedPickedFile[] }) {
-  const { files } = params
+function collectPatchesSamplePaths(params: { files: IndexedPickedFile[]; limit: number }) {
+  const { files, limit } = params
+  const samplePaths: string[] = []
+
   for (const entry of files) {
     const normalizedPath = (entry.path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
     const segments = normalizedPath.split('/').filter(Boolean)
     const patchesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'patches')
     if (patchesIndex < 0) continue
     const next = segments[patchesIndex + 1] ?? ''
-    if (next.toLowerCase().endsWith('.jpg')) return normalizedPath
+    if (!next.toLowerCase().endsWith('.jpg')) continue
+    samplePaths.push(normalizedPath)
+    if (samplePaths.length >= limit) break
   }
-  return ''
+
+  return samplePaths
 }
 
-function isLikelyNightFolderName(name: string) {
-  const lower = (name ?? '').toLowerCase()
-  if (!lower) return false
-  if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) return true
-  if (lower.startsWith('night')) return true
-  return false
+function selectBestStripCount(params: { candidateStripCounts: number[]; samplePaths: string[] }) {
+  const { candidateStripCounts, samplePaths } = params
+  let bestStripCount: number | null = null
+  let bestRatio = -1
+
+  for (const candidate of candidateStripCounts) {
+    const evaluation = evaluateStripCount({ stripCount: candidate, samplePaths })
+    if (evaluation.validRatio > bestRatio) {
+      bestRatio = evaluation.validRatio
+      bestStripCount = candidate
+      continue
+    }
+    if (evaluation.validRatio === bestRatio && bestStripCount !== null && candidate > bestStripCount) {
+      bestStripCount = candidate
+    }
+  }
+
+  return bestStripCount
+}
+
+function evaluateStripCount(params: { stripCount: number; samplePaths: string[] }) {
+  const { stripCount, samplePaths } = params
+  if (!samplePaths.length) return { validRatio: 0, invalidSamples: [] as string[] }
+
+  let validCount = 0
+  const invalidSamples: string[] = []
+  for (const samplePath of samplePaths) {
+    const trimmed = trimPath({ path: samplePath, stripCount })
+    const parsed = parsePathParts({ path: trimmed })
+    if (parsed?.isPatch) {
+      validCount++
+      continue
+    }
+    if (invalidSamples.length < 5) invalidSamples.push(trimmed)
+  }
+
+  return { validRatio: validCount / samplePaths.length, invalidSamples }
+}
+
+function collectNightHeuristicMismatches(params: { files: IndexedPickedFile[]; stripCount: number; limit: number }) {
+  const { files, stripCount, limit } = params
+  const samples: string[] = []
+  let count = 0
+
+  for (const entry of files) {
+    const trimmedPath = trimPath({ path: entry.path, stripCount })
+    const segments = trimmedPath.split('/').filter(Boolean)
+    const patchesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'patches')
+    if (patchesIndex < 0) continue
+
+    const patchFile = segments[patchesIndex + 1] ?? ''
+    if (!patchFile.toLowerCase().endsWith('.jpg')) continue
+
+    const nightCandidate = segments[patchesIndex - 1] ?? ''
+    if (isLikelyNightFolderName(nightCandidate)) continue
+
+    count++
+    if (samples.length < limit) samples.push(trimmedPath)
+  }
+
+  return { count, samples }
+}
+
+function trimPath(params: { path: string; stripCount: number }) {
+  const { path, stripCount } = params
+  const normalizedPath = (path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
+  const segments = normalizedPath.split('/').filter(Boolean)
+  return segments.slice(stripCount).join('/')
 }

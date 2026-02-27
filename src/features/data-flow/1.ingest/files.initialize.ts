@@ -6,9 +6,23 @@ import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { loadMorphoCovers } from '~/features/data-flow/3.persist/covers'
 import { loadMorphoLinks } from '~/features/data-flow/3.persist/links'
 import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
+import { normalizeLegacyNightId } from './ingest-paths'
+
+type IndexedEntry = { file?: File; handle?: unknown; path: string; name: string; size: number }
+
+type NightSummary = {
+  nightId: string
+  totalDetections: number
+  totalIdentified: number
+  updatedAt?: number
+  morphoCounts?: Record<string, number>
+  morphoPreviewPatchIds?: Record<string, string>
+}
+
+type SummarySource = 'placeholder' | 'legacy' | 'canonical'
 
 export function applyIndexedFilesState(params: {
-  indexed: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>
+  indexed: IndexedEntry[]
 }) {
   const { indexed } = params
   if (!Array.isArray(indexed) || indexed.length === 0) return
@@ -29,20 +43,12 @@ export function applyIndexedFilesState(params: {
 }
 
 export function preloadNightSummariesFromIndexed(
-  indexed: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>,
+  indexed: IndexedEntry[],
 ) {
   try {
-    const summaries: Record<
-      string,
-      {
-        nightId: string
-        totalDetections: number
-        totalIdentified: number
-        updatedAt?: number
-        morphoCounts?: Record<string, number>
-        morphoPreviewPatchIds?: Record<string, string>
-      }
-    > = {}
+    const initialStore = nightSummariesStore.get() || {}
+    const placeholdersByNightId: Record<string, NightSummary> = {}
+    const sourceByNightId: Record<string, SummarySource> = {}
     for (const it of indexed) {
       const lower = (it?.name ?? '').toLowerCase()
       if (lower !== 'night_summary.json') continue
@@ -50,22 +56,21 @@ export function preloadNightSummariesFromIndexed(
       const parts = pathNorm.split('/').filter(Boolean)
       if (parts.length < 2) continue
       const baseParts = parts.slice(0, -1)
-      let nightId = ''
-      if (baseParts.length >= 4) {
-        nightId = baseParts.slice(0, 4).join('/')
-      } else if (baseParts.length === 3) {
-        const [project, deployment, night] = baseParts
-        const site = deriveSiteFromDeploymentFolder(deployment)
-        nightId = [project, site, deployment, night].join('/')
-      } else {
-        continue
+      if (baseParts.length < 3) continue
+      const nightId = normalizeLegacyNightId(baseParts.join('/'))
+      if (!placeholdersByNightId[nightId] && !initialStore[nightId]) {
+        placeholdersByNightId[nightId] = { nightId, totalDetections: 0, totalIdentified: 0 }
+        sourceByNightId[nightId] = 'placeholder'
       }
-      summaries[nightId] = { nightId, totalDetections: 0, totalIdentified: 0 }
-      void ensureTextFromIndexedEntry(it as any)
+
+      void ensureTextFromIndexedEntry(it)
         .then((txt) => JSON.parse(txt))
         .then((json) => {
-          const s = {
-            nightId,
+          const rawNightId = typeof json?.nightId === 'string' ? json.nightId : nightId
+          const sourceNightId = normalizeLegacyNightId(rawNightId)
+          const sourceType: 'legacy' | 'canonical' = isCanonicalNightId(rawNightId) ? 'canonical' : 'legacy'
+          const s: NightSummary = {
+            nightId: sourceNightId,
             totalDetections: Number(json?.totalDetections) || 0,
             totalIdentified: Number(json?.totalIdentified) || 0,
             updatedAt: typeof json?.updatedAt === 'number' ? json.updatedAt : undefined,
@@ -77,22 +82,32 @@ export function preloadNightSummariesFromIndexed(
                 : undefined,
           }
           const current = nightSummariesStore.get() || {}
-          nightSummariesStore.set({ ...current, [nightId]: s })
+          const existing = current[sourceNightId]
+          const existingSource = sourceByNightId[sourceNightId] ?? 'canonical'
+          const shouldReplace = shouldReplaceSummary({
+            incoming: s,
+            incomingSource: sourceType,
+            existing,
+            existingSource,
+          })
+          if (!shouldReplace) return
+          sourceByNightId[sourceNightId] = sourceType
+          nightSummariesStore.set({ ...current, [sourceNightId]: s })
         })
         .catch(() => {})
     }
-    if (Object.keys(summaries).length) {
+    if (Object.keys(placeholdersByNightId).length) {
       const current = nightSummariesStore.get() || {}
-      nightSummariesStore.set({ ...current, ...summaries })
+      nightSummariesStore.set({ ...placeholdersByNightId, ...current })
     }
   } catch {
     return
   }
 }
 
-export function preloadMorphoLinksFromIndexed(indexed: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>) {
+export function preloadMorphoLinksFromIndexed(indexed: IndexedEntry[]) {
   try {
-    const found: Array<{ entry: { file?: File; handle?: unknown; path: string; name: string; size: number } }> = []
+    const found: Array<{ entry: IndexedEntry }> = []
     for (const it of indexed) {
       const lower = (it?.name ?? '').toLowerCase()
       if (lower === 'morpho_links.json') found.push({ entry: it })
@@ -100,7 +115,7 @@ export function preloadMorphoLinksFromIndexed(indexed: Array<{ file?: File; hand
     if (!found.length) return
 
     for (const { entry } of found) {
-      void ensureTextFromIndexedEntry(entry as any)
+      void ensureTextFromIndexedEntry(entry)
         .then((txt) => JSON.parse(txt))
         .then((json) => {
           if (json && typeof json === 'object') {
@@ -115,14 +130,6 @@ export function preloadMorphoLinksFromIndexed(indexed: Array<{ file?: File; hand
   }
 }
 
-function deriveSiteFromDeploymentFolder(deploymentFolderName: string) {
-  const name = deploymentFolderName ?? ''
-  if (!name) return ''
-  const parts = name.split('_').filter(Boolean)
-  if (parts.length >= 2) return parts[1]
-  return name
-}
-
 async function ensureTextFromIndexedEntry(entry: { file?: File; handle?: { getFile?: () => Promise<File> } }) {
   if (entry?.file) {
     const text = await entry.file.text()
@@ -134,4 +141,30 @@ async function ensureTextFromIndexedEntry(entry: { file?: File; handle?: { getFi
 
   const text = await file.text()
   return text
+}
+
+function shouldReplaceSummary(params: {
+  incoming: NightSummary
+  incomingSource: Exclude<SummarySource, 'placeholder'>
+  existing?: NightSummary
+  existingSource: SummarySource
+}) {
+  const { incoming, incomingSource, existing, existingSource } = params
+  if (!existing) return true
+
+  if (typeof incoming.updatedAt === 'number' && typeof existing.updatedAt === 'number') {
+    return incoming.updatedAt >= existing.updatedAt
+  }
+  if (typeof incoming.updatedAt === 'number' && typeof existing.updatedAt !== 'number') return true
+  if (typeof incoming.updatedAt !== 'number' && typeof existing.updatedAt === 'number') return false
+
+  if (incomingSource === existingSource) return true
+  if (incomingSource === 'canonical') return true
+  return existingSource === 'placeholder'
+}
+
+function isCanonicalNightId(nightId: string) {
+  const normalized = normalizeLegacyNightId(nightId)
+  const parts = (nightId ?? '').replaceAll('\\', '/').replace(/^\/+/, '').split('/').filter(Boolean)
+  return parts.length === 3 && normalized === (nightId ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
 }

@@ -57,16 +57,16 @@ export function NightsListDisplay(props: { nightIds: string[]; onNavigate?: () =
 
   if (!nightIds.length) return null
 
-  function handleViewClick(params: { projectId: string; siteId: string; deploymentId: string; nightId: string }) {
-    const { projectId, siteId, deploymentId, nightId } = params
+  function handleViewClick(params: { projectId: string; deploymentId: string; nightId: string }) {
+    const { projectId, deploymentId, nightId } = params
 
     onNavigate?.()
 
     if (morphoKey) {
       const label = getLabelForMorphoKey({ detections, morphoKey })
-      navigateToNightWithSearch({ router, projectId, siteId, deploymentId, nightId, label })
+      navigateToNightWithSearch({ router, projectId, deploymentId, nightId, label })
     } else {
-      navigateToNight({ router, projectId, siteId, deploymentId, nightId })
+      navigateToNight({ router, projectId, deploymentId, nightId })
     }
   }
 
@@ -75,8 +75,8 @@ export function NightsListDisplay(props: { nightIds: string[]; onNavigate?: () =
       <h3 className='mb-6 text-14 font-semibold'>Nights</h3>
       <ul className='space-y-6 text-13'>
         {nightIds.map((n) => {
-          const { projectId, siteId, deploymentId, nightId } = parseNightIdParts(n)
-          const href = buildNightUrl({ projectId, siteId, deploymentId, nightId })
+          const { projectId, deploymentId, nightId } = parseNightIdParts(n)
+          const href = buildNightUrl({ projectId, deploymentId, nightId })
 
           return (
             <li key={n} className='flex items-center gap-8'>
@@ -86,7 +86,7 @@ export function NightsListDisplay(props: { nightIds: string[]; onNavigate?: () =
                   size='xsm'
                   className='flex-shrink-0'
                   onClick={() => {
-                    handleViewClick({ projectId: projectId!, siteId: siteId!, deploymentId: deploymentId!, nightId: nightId! })
+                    handleViewClick({ projectId: projectId!, deploymentId: deploymentId!, nightId: nightId! })
                   }}
                 >
                   View
@@ -103,17 +103,16 @@ export function NightsListDisplay(props: { nightIds: string[]; onNavigate?: () =
 function navigateToNightWithSearch(params: {
   router: ReturnType<typeof useRouter>
   projectId: string
-  siteId: string
   deploymentId: string
   nightId: string
   label: string
 }) {
-  const { router, projectId, siteId, deploymentId, nightId, label } = params
+  const { router, projectId, deploymentId, nightId, label } = params
   const search = { bucket: 'user' as const, rank: 'species' as const, name: label }
 
   router.navigate({
-    to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
-    params: { projectId, siteId, deploymentId, nightId },
+    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
+    params: { projectId, deploymentId, nightId },
     search,
   })
 }
@@ -121,15 +120,16 @@ function navigateToNightWithSearch(params: {
 function navigateToNight(params: {
   router: ReturnType<typeof useRouter>
   projectId: string
-  siteId: string
   deploymentId: string
   nightId: string
 }) {
-  const { router, projectId, siteId, deploymentId, nightId } = params
-  const href = buildNightUrl({ projectId, siteId, deploymentId, nightId })
-  if (href) {
-    router.navigate({ to: href as any })
-  }
+  const { router, projectId, deploymentId, nightId } = params
+  if (!projectId || !deploymentId || !nightId) return
+
+  router.navigate({
+    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
+    params: { projectId, deploymentId, nightId },
+  })
 }
 
 export function getLabelForMorphoKey(params: { detections?: Record<string, DetectionEntity>; morphoKey: string }) {
