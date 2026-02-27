@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useParams } from '@tanstack/react-router'
 import { expandMany, makeKey } from '~/features/left-panel/collapse.store'
 import { ensureSpeciesListSelection } from '~/features/data-flow/2.identify/species-picker.state'
@@ -26,7 +26,7 @@ export function NightView(props: { nightId: string }) {
   const { nightId } = props
 
   const router = useRouter()
-  const params = useParams({ from: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId' })
+  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
   const nights = useStore(nightsStore)
   const patches = useStore(patchesStore)
   const detections = useStore(detectionsStore)
@@ -37,6 +37,7 @@ export function NightView(props: { nightId: string }) {
   const [sortByClusters, setSortByClusters] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
+  const hasAppliedDefaultFallbackRef = useRef(false)
   const selected = useStore(selectedPatchIdsStore)
   const { setConfirmDialog } = useConfirmDialog()
 
@@ -78,6 +79,33 @@ export function NightView(props: { nightId: string }) {
       })
     }
   }, [search, nightId, detections, selectedBucket])
+
+  const fallbackSnapshot = useMemo(() => {
+    return buildDefaultFallbackSnapshot({ detections, nightId })
+  }, [detections, nightId])
+
+  useEffect(() => {
+    hasAppliedDefaultFallbackRef.current = false
+  }, [nightId])
+
+  useEffect(() => {
+    if (hasAppliedDefaultFallbackRef.current) return
+
+    const hasExplicitSearch = !!search?.bucket || !!search?.rank || !!search?.name
+    if (hasExplicitSearch) return
+
+    if (selectedBucket !== 'auto') return
+    if (selectedTaxon) return
+    if (fallbackSnapshot.autoDetectionsCount > 0) return
+    if (fallbackSnapshot.userDetectionsCount === 0) return
+
+    hasAppliedDefaultFallbackRef.current = true
+
+    const fallbackTaxon = fallbackSnapshot.hasUserInsecta ? ({ rank: 'class', name: 'Insecta' } as const) : undefined
+    setSelectedBucket('user')
+    setSelectedTaxon(fallbackTaxon)
+    navigateToTaxonSelection({ router, params, taxon: fallbackTaxon, bucket: 'user' })
+  }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, params])
 
   const list = useMemo(() => {
     return Object.values(patches).filter((patch) => patch.nightId === nightId)
@@ -422,7 +450,7 @@ function parseTaxonFromSearch(params: { search?: { bucket?: 'auto' | 'user'; ran
 
 function navigateToTaxonSelection(params: {
   router: ReturnType<typeof useRouter>
-  params: { projectId: string; siteId: string; deploymentId: string; nightId: string }
+  params: { projectId: string; deploymentId: string; nightId: string }
   taxon?: TaxonSelection
   bucket: 'auto' | 'user'
 }) {
@@ -437,10 +465,9 @@ function navigateToTaxonSelection(params: {
   }
 
   router.navigate({
-    to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
+    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
     params: {
       projectId: routeParams.projectId,
-      siteId: routeParams.siteId,
       deploymentId: routeParams.deploymentId,
       nightId: routeParams.nightId,
     },
@@ -481,4 +508,26 @@ function matchesSpeciesName(params: { taxon?: { species?: string }; morphospecie
   if (taxon?.species && taxon.species === searchName) return true
   if (morphospecies && normalizeMorphoKey(morphospecies) === normalizeMorphoKey(searchName)) return true
   return false
+}
+
+function buildDefaultFallbackSnapshot(params: {
+  detections: Record<string, DetectionEntity>
+  nightId: string
+}) {
+  const { detections, nightId } = params
+  let autoDetectionsCount = 0
+  let userDetectionsCount = 0
+  let hasUserInsecta = false
+
+  for (const detection of Object.values(detections ?? {})) {
+    if (detection?.nightId !== nightId) continue
+    if (detection?.detectedBy === 'user') {
+      userDetectionsCount++
+      if (detection?.taxon?.class === 'Insecta') hasUserInsecta = true
+      continue
+    }
+    autoDetectionsCount++
+  }
+
+  return { autoDetectionsCount, userDetectionsCount, hasUserInsecta }
 }

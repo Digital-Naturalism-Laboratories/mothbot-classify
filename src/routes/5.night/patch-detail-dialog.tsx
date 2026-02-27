@@ -159,7 +159,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
 function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity }) {
   const { patch, detection } = props
 
-  const patchUrl = useObjectUrl(patch?.imageFile?.file)
+  const patchUrl = useObjectUrl(patch?.imageFile?.file, patch?.imageFile?.handle)
 
   const finestTaxonLevel = detection ? deriveTaxonNameFromDetection({ detection }) : undefined
 
@@ -199,7 +199,7 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
 function SourcePhoto(props: { photo?: PhotoEntity }) {
   const { photo } = props
 
-  const photoUrl = useObjectUrl(photo?.imageFile?.file)
+  const photoUrl = useObjectUrl(photo?.imageFile?.file, photo?.imageFile?.handle)
 
   return (
     <div className='space-y-8'>

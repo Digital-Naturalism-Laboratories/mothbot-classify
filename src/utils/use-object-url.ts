@@ -1,19 +1,37 @@
 import { useEffect, useState } from 'react'
 
-export function useObjectUrl(file?: File) {
+type HandleLike = { getFile?: () => Promise<File> }
+
+export function useObjectUrl(fileOrHandle?: File | null, handle?: HandleLike | unknown) {
   const [url, setUrl] = useState<string>('')
 
   useEffect(() => {
-    if (!file) {
-      setUrl('')
-      return
+    let revoke: (() => void) | undefined
+
+    if (fileOrHandle instanceof File) {
+      const objectUrl = URL.createObjectURL(fileOrHandle)
+      setUrl(objectUrl)
+      revoke = () => URL.revokeObjectURL(objectUrl)
+      return revoke
     }
-    const objectUrl = URL.createObjectURL(file)
-    setUrl(objectUrl)
-    return () => {
-      URL.revokeObjectURL(objectUrl)
+
+    const h = handle as HandleLike | undefined
+    if (h && typeof h?.getFile === 'function') {
+      let cancelled = false
+      void h.getFile().then((file) => {
+        if (cancelled || !file) return
+        const objectUrl = URL.createObjectURL(file)
+        setUrl(objectUrl)
+        revoke = () => URL.revokeObjectURL(objectUrl)
+      }).catch(() => {})
+      return () => {
+        cancelled = true
+        revoke?.()
+      }
     }
-  }, [file])
+
+    setUrl('')
+  }, [fileOrHandle, handle])
 
   return url
 }

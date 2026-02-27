@@ -60,7 +60,7 @@ function PatchItemImpl(props: PatchItemProps) {
   const clusterId = typeof detection?.clusterId === 'number' ? detection.clusterId : undefined
   const isSelected = selected?.has?.(id)
 
-  const url = useObjectUrl(patch?.imageFile?.file)
+  const url = useObjectUrl(patch?.imageFile?.file, patch?.imageFile?.handle)
 
   const [controlsPinned, setControlsPinned] = useState(false)
 
