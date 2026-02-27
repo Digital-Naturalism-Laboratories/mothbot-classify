@@ -130,13 +130,14 @@ export function preloadMorphoLinksFromIndexed(indexed: IndexedEntry[]) {
   }
 }
 
-async function ensureTextFromIndexedEntry(entry: { file?: File; handle?: { getFile?: () => Promise<File> } }) {
+async function ensureTextFromIndexedEntry(entry: { file?: File; handle?: unknown }) {
   if (entry?.file) {
     const text = await entry.file.text()
     return text
   }
 
-  const file = await entry?.handle?.getFile?.()
+  const handle = entry?.handle as { getFile?: () => Promise<File> } | undefined
+  const file = await handle?.getFile?.()
   if (!file) return ''
 
   const text = await file.text()
