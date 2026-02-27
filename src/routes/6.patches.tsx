@@ -8,7 +8,7 @@ import { ViewContainer } from '~/styles'
 export function Patches() {
   const { isLoading: isLoadingFolders } = useAppLoading()
   const dataset = useStore(datasetStore)
-  const params = useParams({ from: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId' })
+  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
 
   if (isLoadingFolders) return <CenteredLoader>🌀 Loading patches</CenteredLoader>
   if (!dataset) return <p className='text-sm text-neutral-500'>No dataset loaded</p>
@@ -26,7 +26,7 @@ export function Patches() {
     <ViewContainer tabIndex={0} className='space-y-4'>
       <h2 className='text-lg font-semibold'>Patches for {night.name}</h2>
       {patches.length === 0 ? (
-        <p className='text-sm text-neutral-500'>No patches found</p>
+        <p className='text-sm text-neutral-500'>No patches found. Select a different view</p>
       ) : (
         <ul className='grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4'>
           {patches.map((patch) => (

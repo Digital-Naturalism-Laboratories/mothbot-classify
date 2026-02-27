@@ -16,7 +16,7 @@ export const indexRoute = createRoute({
 
 export const nightRoute = createRoute({
   getParentRoute,
-  path: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
+  path: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
   component: Night,
 })
 

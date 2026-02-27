@@ -28,8 +28,8 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     className,
   } = props
 
-  const params = useParams({ from: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId' })
-  const nightId = `${params.projectId}/${params.siteId}/${params.deploymentId}/${params.nightId}`
+  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
+  const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
   const detections = useStore(detectionsStore)
   const errorCountForNight = Object.values(detections ?? {}).filter(
     (d) => (d as any)?.nightId === nightId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,

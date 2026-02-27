@@ -14,6 +14,7 @@ import { Column } from '~/styles'
 import classed from '~/styles/classed'
 import { InlineProgress } from './inline-progress'
 import { ItemActions } from './item-actions'
+import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
 
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
@@ -169,7 +170,7 @@ function DeploymentsList(props: DeploymentsListProps) {
   return (
     <Ul>
       {list.map((dep) => (
-        <DeploymentItem key={dep.id} projectId={projectId} siteId={siteId} deployment={dep} nights={nights} progressIndex={progressIndex} />
+        <DeploymentItem key={dep.id} projectId={projectId} deployment={dep} nights={nights} progressIndex={progressIndex} />
       ))}
     </Ul>
   )
@@ -177,13 +178,12 @@ function DeploymentsList(props: DeploymentsListProps) {
 
 type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
   projectId: string
-  siteId: string
   deployment: DeploymentEntity
   progressIndex: ProgressIndex
 }
 
 function DeploymentItem(props: DeploymentItemProps) {
-  const { projectId, siteId, deployment, nights, progressIndex } = props
+  const { projectId, deployment, nights, progressIndex } = props
   const prog = progressIndex.byDeployment[deployment.id] ?? { total: 0, identified: 0 }
 
   return (
@@ -196,20 +196,19 @@ function DeploymentItem(props: DeploymentItemProps) {
         </div>
       </div>
 
-      <NightsList projectId={projectId} siteId={siteId} deploymentId={deployment.id} nights={nights} progressIndex={progressIndex} />
+      <NightsList projectId={projectId} deploymentId={deployment.id} nights={nights} progressIndex={progressIndex} />
     </Li>
   )
 }
 
 type NightsListProps = Pick<HierarchyStores, 'nights'> & {
   projectId: string
-  siteId: string
   deploymentId: string
   progressIndex: ProgressIndex
 }
 
 function NightsList(props: NightsListProps) {
-  const { projectId, siteId, deploymentId, nights, progressIndex } = props
+  const { projectId, deploymentId, nights, progressIndex } = props
   const list = getNightsForDeployment({ nights, deploymentId })
   const exportingNightIds = useStore(exportingNightIdsStore)
   if (!list.length) return null
@@ -223,10 +222,9 @@ function NightsList(props: NightsListProps) {
           <Li key={night.id} className='group/night bg-stone-50 px-0 '>
             <div className='flex items-center gap-12 '>
               <Link
-                to={'/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId'}
+                to={'/projects/$projectId/deployments/$deploymentId/nights/$nightId'}
                 params={{
                   projectId,
-                  siteId: lastPathSegment({ id: siteId }),
                   deploymentId: lastPathSegment({ id: deploymentId }),
                   nightId: lastPathSegment({ id: night.id }),
                 }}
@@ -304,11 +302,11 @@ function buildProgressIndex(params: {
       byNight[nightId] = { total, identified }
 
       const parts = nightId.split('/').filter(Boolean)
-      if (parts.length >= 4) {
-        const [projectId, siteId, deploymentId] = parts
+      if (parts.length >= 3) {
+        const [projectId, deploymentId] = parts
 
         if (deploymentId) {
-          const deploymentIdFull = `${projectId}/${siteId}/${deploymentId}`
+          const deploymentIdFull = `${projectId}/${deploymentId}`
           const existing = byDeployment[deploymentIdFull] ?? { total: 0, identified: 0 }
           byDeployment[deploymentIdFull] = {
             total: existing.total + total,
@@ -316,10 +314,11 @@ function buildProgressIndex(params: {
           }
         }
 
-        if (siteId) {
-          const siteIdFull = `${projectId}/${siteId}`
-          const existing = bySite[siteIdFull] ?? { total: 0, identified: 0 }
-          bySite[siteIdFull] = {
+        const site = deriveSiteFromDeploymentFolder(deploymentId)
+        if (site) {
+          const siteId = `${projectId}/${site}`
+          const existing = bySite[siteId] ?? { total: 0, identified: 0 }
+          bySite[siteId] = {
             total: existing.total + total,
             identified: existing.identified + identified,
           }
@@ -346,11 +345,11 @@ function buildProgressIndex(params: {
       }
 
       const parts = nightId.split('/').filter(Boolean)
-      if (parts.length >= 4) {
-        const [projectId, siteId, deploymentId] = parts
+      if (parts.length >= 3) {
+        const [projectId, deploymentId] = parts
 
         if (deploymentId) {
-          const deploymentIdFull = `${projectId}/${siteId}/${deploymentId}`
+          const deploymentIdFull = `${projectId}/${deploymentId}`
           const existing = byDeployment[deploymentIdFull] ?? { total: 0, identified: 0 }
           byDeployment[deploymentIdFull] = {
             total: existing.total + 1,
@@ -358,10 +357,11 @@ function buildProgressIndex(params: {
           }
         }
 
-        if (siteId) {
-          const siteIdFull = `${projectId}/${siteId}`
-          const existing = bySite[siteIdFull] ?? { total: 0, identified: 0 }
-          bySite[siteIdFull] = {
+        const site = deriveSiteFromDeploymentFolder(deploymentId)
+        if (site) {
+          const siteId = `${projectId}/${site}`
+          const existing = bySite[siteId] ?? { total: 0, identified: 0 }
+          bySite[siteId] = {
             total: existing.total + 1,
             identified: existing.identified + ((detection as any)?.detectedBy === 'user' ? 1 : 0),
           }

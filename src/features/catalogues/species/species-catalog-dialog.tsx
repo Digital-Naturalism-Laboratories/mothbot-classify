@@ -15,6 +15,7 @@ import { CountsRow } from '~/features/left-panel/counts-row'
 import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope-filters'
 import { extractRouteIds, ensureFileFromIndexed, computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
+import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
 
 export type SpeciesCatalogDialogProps = {
   open: boolean
@@ -41,11 +42,9 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
     }
     counts.all = countSpeciesForNightIds({ detections })
     if (projectId) counts.project = countSpeciesForNightIds({ detections, startsWith: `${projectId}/` })
-    if (projectId && siteId) counts.site = countSpeciesForNightIds({ detections, startsWith: `${projectId}/${siteId}/` })
-    if (projectId && siteId && deploymentId)
-      counts.deployment = countSpeciesForNightIds({ detections, startsWith: `${projectId}/${siteId}/${deploymentId}/` })
-    if (projectId && siteId && deploymentId && nightId)
-      counts.night = countSpeciesForNightIds({ detections, equals: `${projectId}/${siteId}/${deploymentId}/${nightId}` })
+    if (projectId && siteId) counts.site = countSpeciesForNightIds({ detections, projectId, siteId })
+    if (projectId && deploymentId) counts.deployment = countSpeciesForNightIds({ detections, startsWith: `${projectId}/${deploymentId}/` })
+    if (projectId && deploymentId && nightId) counts.night = countSpeciesForNightIds({ detections, equals: `${projectId}/${deploymentId}/${nightId}` })
     return counts
   }, [detections, projectId, siteId, deploymentId, nightId])
 
@@ -78,8 +77,8 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
               onScopeChange={setUsageScope}
               hasProject={!!projectId}
               hasSite={!!(projectId && siteId)}
-              hasDeployment={!!(projectId && siteId && deploymentId)}
-              hasNight={!!(projectId && siteId && deploymentId && nightId)}
+              hasDeployment={!!(projectId && deploymentId)}
+              hasNight={!!(projectId && deploymentId && nightId)}
               counts={scopeCounts}
             />
           </Row>
@@ -345,8 +344,14 @@ function useSpeciesPreviewUrl(params: { speciesName: string }) {
   return previewUrl
 }
 
-function countSpeciesForNightIds(params: { detections?: Record<string, DetectionEntity>; startsWith?: string; equals?: string }) {
-  const { detections, startsWith, equals } = params
+function countSpeciesForNightIds(params: {
+  detections?: Record<string, DetectionEntity>
+  startsWith?: string
+  equals?: string
+  projectId?: string
+  siteId?: string
+}) {
+  const { detections, startsWith, equals, projectId, siteId } = params
   const speciesSet = new Set<string>()
 
   for (const det of Object.values(detections || {})) {
@@ -357,6 +362,12 @@ function countSpeciesForNightIds(params: { detections?: Record<string, Detection
     if (!nightId) continue
     if (equals && nightId !== equals) continue
     if (startsWith && !nightId.startsWith(startsWith)) continue
+    if (projectId && siteId) {
+      const parts = nightId.split('/').filter(Boolean)
+      const deployment = parts[1] ?? ''
+      const derivedSite = deriveSiteFromDeploymentFolder(deployment)
+      if (parts[0] !== projectId || derivedSite !== siteId) continue
+    }
 
     const species = det?.taxon?.species
     if (species) speciesSet.add(String(species).trim())

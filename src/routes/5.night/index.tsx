@@ -11,14 +11,14 @@ import { NightView } from './night-view'
 import { useNightIngest } from './use-night-ingest'
 
 export function Night() {
-  const params = useParams({ from: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId' })
+  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
   const nights = useStore(nightsStore)
   const { isLoading: isLoadingFolders } = useAppLoading()
 
   const ingestProgress = useStore(nightIngestProgressStore)
   const [isNightIngesting, setIsNightIngesting] = useState(false)
 
-  const nightId = `${params.projectId}/${params.siteId}/${params.deploymentId}/${params.nightId}`
+  const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
   const night = nights[nightId]
 
   const ingestState = useNightIngest({ nightId })

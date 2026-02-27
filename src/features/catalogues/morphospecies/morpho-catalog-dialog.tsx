@@ -28,6 +28,7 @@ import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { Column, Row } from '~/styles'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { MorphoSpeciesDetailsDialog } from './morpho-details-dialog'
+import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
 
 export type MorphoCatalogDialogProps = {
   open: boolean
@@ -38,7 +39,8 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
   const { open, onOpenChange } = props
 
   const route = useRouterState({ select: (s) => s.location })
-  const { projectId, siteId, deploymentId, nightId } = useMemo(() => extractRouteIds(route?.pathname || ''), [route?.pathname])
+  const { projectId, deploymentId, nightId } = useMemo(() => extractRouteIds(route?.pathname || ''), [route?.pathname])
+  const siteId = useMemo(() => (deploymentId ? deriveSiteFromDeploymentFolder(deploymentId) : undefined), [deploymentId])
   const [usageScope, setUsageScope] = useState<ScopeType>('all')
 
   const summaries = useStore(nightSummariesStore)
@@ -53,11 +55,9 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
     }
     counts.all = countMorphoKeysForNightIds({ summaries })
     if (projectId) counts.project = countMorphoKeysForNightIds({ summaries, startsWith: `${projectId}/` })
-    if (projectId && siteId) counts.site = countMorphoKeysForNightIds({ summaries, startsWith: `${projectId}/${siteId}/` })
-    if (projectId && siteId && deploymentId)
-      counts.deployment = countMorphoKeysForNightIds({ summaries, startsWith: `${projectId}/${siteId}/${deploymentId}/` })
-    if (projectId && siteId && deploymentId && nightId)
-      counts.night = countMorphoKeysForNightIds({ summaries, equals: `${projectId}/${siteId}/${deploymentId}/${nightId}` })
+    if (projectId && siteId) counts.site = countMorphoKeysForNightIds({ summaries, projectId, siteId })
+    if (projectId && deploymentId) counts.deployment = countMorphoKeysForNightIds({ summaries, startsWith: `${projectId}/${deploymentId}/` })
+    if (projectId && deploymentId && nightId) counts.night = countMorphoKeysForNightIds({ summaries, equals: `${projectId}/${deploymentId}/${nightId}` })
     return counts
   }, [summaries, projectId, siteId, deploymentId, nightId])
 
@@ -91,8 +91,8 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
               onScopeChange={setUsageScope}
               hasProject={!!projectId}
               hasSite={!!(projectId && siteId)}
-              hasDeployment={!!(projectId && siteId && deploymentId)}
-              hasNight={!!(projectId && siteId && deploymentId && nightId)}
+              hasDeployment={!!(projectId && deploymentId)}
+              hasNight={!!(projectId && deploymentId && nightId)}
               counts={scopeCounts}
             />
           </Row>
@@ -363,8 +363,8 @@ function handleLoadInNight(params: {
   }
 
   router.navigate({
-    to: '/projects/$projectId/sites/$siteId/deployments/$deploymentId/nights/$nightId',
-    params: { projectId: parsed.projectId, siteId: parsed.siteId, deploymentId: parsed.deploymentId, nightId: parsed.nightId },
+    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
+    params: { projectId: parsed.projectId, deploymentId: parsed.deploymentId, nightId: parsed.nightId },
     search,
   })
 
@@ -583,13 +583,12 @@ function parseNightIdParts(params: { nightId: string }) {
   const { nightId } = params
   const parts = nightId.split('/')
   const projectId = parts?.[0]
-  const siteId = parts?.[1]
-  const deploymentId = parts?.[2]
-  const nightIdPart = parts?.[3]
+  const deploymentId = parts?.[1]
+  const nightIdPart = parts?.[2]
 
-  if (!projectId || !siteId || !deploymentId || !nightIdPart) return null
+  if (!projectId || !deploymentId || !nightIdPart) return null
 
-  return { projectId, siteId, deploymentId, nightId: nightIdPart }
+  return { projectId, deploymentId, nightId: nightIdPart }
 }
 
 function computePrimaryProjectIdForMorphoKey(params: { summaries?: Record<string, any>; nights?: Record<string, any>; morphoKey: string }) {
@@ -617,12 +616,24 @@ function findFirstNightForMorphoKey(params: { summaries?: Record<string, any>; m
   return out[0]
 }
 
-function countMorphoKeysForNightIds(params: { summaries?: Record<string, any>; startsWith?: string; equals?: string }) {
-  const { summaries, startsWith, equals } = params
+function countMorphoKeysForNightIds(params: {
+  summaries?: Record<string, any>
+  startsWith?: string
+  equals?: string
+  projectId?: string
+  siteId?: string
+}) {
+  const { summaries, startsWith, equals, projectId, siteId } = params
   const keys = new Set<string>()
   for (const [nid, s] of Object.entries(summaries || {})) {
     if (equals && nid !== equals) continue
     if (startsWith && !nid.startsWith(startsWith)) continue
+    if (projectId && siteId) {
+      const parts = nid.split('/').filter(Boolean)
+      const deployment = parts[1] ?? ''
+      const derivedSite = deriveSiteFromDeploymentFolder(deployment)
+      if (parts[0] !== projectId || derivedSite !== siteId) continue
+    }
     const m = (s as any)?.morphoCounts as Record<string, number> | undefined
     if (!m) continue
     for (const k of Object.keys(m)) keys.add(k)
