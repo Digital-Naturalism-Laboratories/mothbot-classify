@@ -240,12 +240,12 @@ function parseNightIdParts(params: { nightId: string }): { project: string; depl
   if (!nightId) return null
 
   const parts = nightId.split('/').filter(Boolean)
-  // nightId format: project/site/deployment/night
-  if (parts.length < 4) return null
+  // nightId format: project/deployment/night
+  if (parts.length < 3) return null
 
   const project = parts[0] || ''
-  const deployment = parts[2] || ''
-  const night = parts[3] || ''
+  const deployment = parts[1] || ''
+  const night = parts[2] || ''
 
   if (!project || !deployment || !night) return null
 
