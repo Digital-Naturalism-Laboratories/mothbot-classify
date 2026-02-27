@@ -133,6 +133,7 @@ export function Nav() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align='end'>
                 <DropdownMenuItem onClick={() => void clearUserSession()}>Change user name…</DropdownMenuItem>
+                <DropdownMenuItem onClick={clearSelections}>Clear</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled={isAuditingDataset} onClick={onAuditDataset}>
                   {isAuditingDataset ? 'Auditing Dataset…' : 'Audit Dataset'}
@@ -187,9 +188,6 @@ export function Nav() {
 function FolderPicking() {
   const openMutation = useOpenDirectoryMutation()
 
-  function onClear() {
-    clearSelections()
-  }
   function onPick() {
     if (openMutation.isPending) return
     void openMutation.mutateAsync()
@@ -206,7 +204,6 @@ function FolderPicking() {
           'Pick projects folder'
         )}
       </Button>
-      <Button onClick={onClear}>Clear</Button>
     </section>
   )
 }
