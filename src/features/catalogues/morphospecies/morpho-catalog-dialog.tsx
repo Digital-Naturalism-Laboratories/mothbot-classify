@@ -29,6 +29,7 @@ import { Column, Row } from '~/styles'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { MorphoSpeciesDetailsDialog } from './morpho-details-dialog'
 import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
+import { buildFallbackPreviewPairs, buildSummaryPreviewPairs, selectMorphoPreviewPairs } from './morpho-preview'
 
 export type MorphoCatalogDialogProps = {
   open: boolean
@@ -403,22 +404,19 @@ function useMorphoPreviewUrl(params: { morphoKey: string }) {
   const summaries = useStore(nightSummariesStore)
   const nights = useStore(nightsStore)
   const covers = useStore(morphoCoversStore)
+  const detections = useStore(detectionsStore)
+
+  const summaryPreviewPairs = useMemo(() => {
+    return buildSummaryPreviewPairs({ morphoKey, summaries, nights, covers })
+  }, [summaries, nights, morphoKey, covers])
+
+  const fallbackPreviewPairs = useMemo(() => {
+    return buildFallbackPreviewPairs({ morphoKey, detections })
+  }, [detections, morphoKey])
 
   const previewPairs = useMemo(() => {
-    const pairs: Array<{ nightId: string; patchId: string }> = []
-
-    const override = covers?.[normalizeMorphoKey(morphoKey)]
-    if (override?.nightId && override?.patchId) pairs.push({ nightId: override.nightId, patchId: override.patchId })
-
-    for (const [nightId, s] of Object.entries(summaries ?? {})) {
-      const countForKey = (s as any)?.morphoCounts?.[morphoKey]
-      if (!countForKey) continue
-      if (!nights?.[nightId]) continue
-      const pid = (s as any)?.morphoPreviewPatchIds?.[morphoKey]
-      if (pid) pairs.push({ nightId, patchId: String(pid) })
-    }
-    return pairs
-  }, [summaries, nights, morphoKey, covers])
+    return selectMorphoPreviewPairs({ summaryPreviewPairs, fallbackPreviewPairs })
+  }, [summaryPreviewPairs, fallbackPreviewPairs])
 
   const previewFile = usePreviewFile({ previewPairs })
   const previewUrl = useObjectUrl(previewFile)

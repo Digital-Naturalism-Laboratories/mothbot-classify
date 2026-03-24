@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { TaxonomyDisplay, UsageStatsDisplay, ProjectsListDisplay, NightsListDisplay } from '~/features/catalogues/shared/details-common'
+import { buildFallbackPreviewPairs, buildSummaryPreviewPairs, selectMorphoPreviewPairs } from './morpho-preview'
 
 export type MorphoSpeciesDetailsDialogProps = PropsWithChildren<{
   morphoKey: string
@@ -38,10 +39,9 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
   const usage = useMemo(() => {
     const nightIds: string[] = []
     const projectIds = new Set<string>()
-    const previewPairs: Array<{ nightId: string; patchId: string }> = []
-
-    const override = covers?.[normalizeMorphoKey(morphoKey)]
-    if (override?.nightId && override?.patchId) previewPairs.push({ nightId: override.nightId, patchId: override.patchId })
+    const summaryPreviewPairs = buildSummaryPreviewPairs({ morphoKey, summaries, nights, covers })
+    const fallbackPreviewPairs = buildFallbackPreviewPairs({ morphoKey, detections: allDetections })
+    const previewPairs = selectMorphoPreviewPairs({ summaryPreviewPairs, fallbackPreviewPairs })
 
     for (const [nightId, s] of Object.entries(summaries ?? {})) {
       const count = (s as any)?.morphoCounts?.[morphoKey]
@@ -49,11 +49,9 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
       nightIds.push(nightId)
       const projectId = (nights?.[nightId] as any)?.projectId
       if (projectId) projectIds.add(projectId)
-      const previewId = (s as any)?.morphoPreviewPatchIds?.[morphoKey]
-      if (previewId) previewPairs.push({ nightId, patchId: String(previewId) })
     }
     return { nightIds, projectIds: Array.from(projectIds), previewPairs }
-  }, [summaries, nights, morphoKey, covers])
+  }, [summaries, nights, morphoKey, covers, allDetections])
 
   const taxonomy = useMemo(() => {
     const morphoDetections = Object.values(allDetections ?? {}).filter((d) => {
