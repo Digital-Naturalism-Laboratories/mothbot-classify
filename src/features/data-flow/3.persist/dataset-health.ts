@@ -121,6 +121,7 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
 
   report.photoCollisionCount = photoCollisionKeys.size
   report.patchCollisionCount = patchCollisionKeys.size
+
   return report
 }
 

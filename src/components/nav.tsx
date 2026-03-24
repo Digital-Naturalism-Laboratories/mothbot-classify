@@ -16,7 +16,6 @@ import { projectSpeciesSelectionStore } from '~/stores/species/project-species-l
 import { SpeciesPicker } from '~/features/data-flow/2.identify/species-picker'
 import { $isSpeciesPickerOpen, $speciesPickerProjectId } from '~/features/data-flow/2.identify/species-picker.state'
 import { userSessionStore, clearUserSession } from '~/stores/ui'
-import { useAppReady } from '~/features/data-flow/1.ingest/files-queries'
 import { Avatar, AvatarFallback } from '~/components/ui/avatar'
 import {
   DropdownMenu,
@@ -46,7 +45,6 @@ export function Nav() {
   const speciesLists = useStore(speciesListsStore)
   const isSpeciesLoading = useStore(speciesListsLoadingStore)
   const session = useStore(userSessionStore)
-  const appReady = useAppReady()
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
   const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isAuditingDataset, setIsAuditingDataset] = useState(false)
@@ -122,28 +120,26 @@ export function Nav() {
         </div>
 
         <div className='ml-auto'>
-          {appReady ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className='rounded-full border hover:bg-neutral-50 p-2'>
-                  <Avatar>
-                    <AvatarFallback>{(session?.initials || '?').toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
-                <DropdownMenuItem onClick={() => void clearUserSession()}>Change user name…</DropdownMenuItem>
-                <DropdownMenuItem onClick={clearSelections}>Clear</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled={isAuditingDataset} onClick={onAuditDataset}>
-                  {isAuditingDataset ? 'Auditing Dataset…' : 'Audit Dataset'}
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={isHealingSummaries} onClick={onHealSummaries}>
-                  {isHealingSummaries ? 'Healing Summaries…' : 'Heal Summaries'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className='rounded-full border hover:bg-neutral-50 p-2'>
+                <Avatar>
+                  <AvatarFallback>{(session?.initials || '?').toUpperCase()}</AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem onClick={() => void clearUserSession()}>Change user name…</DropdownMenuItem>
+              <DropdownMenuItem onClick={clearSelections}>Clear</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={isAuditingDataset} onClick={onAuditDataset}>
+                {isAuditingDataset ? 'Auditing Dataset…' : 'Audit Dataset'}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isHealingSummaries} onClick={onHealSummaries}>
+                {isHealingSummaries ? 'Healing Summaries…' : 'Heal Summaries'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

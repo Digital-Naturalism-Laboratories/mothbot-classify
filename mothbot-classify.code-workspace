@@ -1,0 +1,21 @@
+{
+  "folders": [
+	{
+		"path": "."
+	},
+	{
+		"path": "../../../Desktop/Mothbox Datasets"
+	},
+	{
+		"path": "../../../Desktop/Mothbox Dataset (backup)"
+	}
+],
+  "settings": {
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "#73394d",
+      "titleBar.inactiveBackground": "#73394d",
+      "titleBar.activeForeground": "#bb7f94",
+      "titleBar.inactiveForeground": "#bb7f94"
+    }
+  }
+}
