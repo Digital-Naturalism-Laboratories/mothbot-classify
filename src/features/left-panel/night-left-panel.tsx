@@ -4,9 +4,12 @@ import { Progress } from '~/components/ui/progress'
 import { Button } from '~/components/ui/button'
 import { useParams } from '@tanstack/react-router'
 import { useStore } from '@nanostores/react'
+import { useState, type ReactNode } from 'react'
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { detectionsStore } from '~/stores/entities/detections'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
+import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
 import { PatchSizeControl } from '~/components/atomic/patch-size-control'
 import type { NightLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
@@ -19,7 +22,10 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     totalPatches,
     totalDetections,
     totalIdentified = 0,
+    sizeThreshold,
+    sizeThresholdMax,
     sortByClusters,
+    onSizeThresholdChange,
     onSortByClustersChange,
     selectedTaxon,
     selectedBucket,
@@ -31,6 +37,7 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
   const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
   const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
   const detections = useStore(detectionsStore)
+  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(
     (d) => (d as any)?.nightId === nightId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
   ).length
@@ -59,7 +66,14 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
         </div>
       </div>
 
-      <PatchSizeControl className='mb-16' />
+      <LayoutOptionsSection
+        className='mb-16'
+        open={layoutOptionsOpen}
+        onToggle={() => setLayoutOptionsOpen((currentValue) => !currentValue)}
+      >
+        <PatchSizeControl compact />
+        <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
+      </LayoutOptionsSection>
 
       <TaxonomySection
         title='Machine identified'
@@ -132,4 +146,76 @@ function showDarwinExportToast(params: { nightId: string }) {
     }),
     error: '🚨 Failed to export Darwin CSV',
   })
+}
+
+type LayoutOptionsSectionProps = {
+  className?: string
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}
+
+function LayoutOptionsSection(props: LayoutOptionsSectionProps) {
+  const { className, open, onToggle, children } = props
+  const Icon = open ? ChevronDownIcon : ChevronRightIcon
+
+  return (
+    <div className={className}>
+      <button
+        type='button'
+        className={cn(
+          'flex w-full items-center justify-between gap-8 text-left',
+          'text-14 font-semibold text-ink-primary',
+        )}
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={open ? 'Collapse layout options' : 'Expand layout options'}
+      >
+        <span>Layout Options</span>
+        <Icon className='h-14 w-14 text-neutral-500' />
+      </button>
+
+      {!open ? null : <div className='space-y-10 pt-8'>{children}</div>}
+    </div>
+  )
+}
+
+type SizeThresholdControlProps = {
+  value: number
+  max: number
+  onChange: (value: number) => void
+}
+
+function SizeThresholdControl(props: SizeThresholdControlProps) {
+  const { value, max, onChange } = props
+  const sliderMax = Math.max(1, max)
+  const sliderStep = getSizeThresholdStep({ max: sliderMax })
+  const valueLabel = getSizeThresholdLabel({ value, max })
+
+  return (
+    <LabeledSliderControl
+      label='Size threshold'
+      value={valueLabel}
+      sliderValue={Math.min(value, sliderMax)}
+      min={0}
+      max={sliderMax}
+      step={sliderStep}
+      disabled={max <= 0}
+      onChange={onChange}
+    />
+  )
+}
+
+function getSizeThresholdStep(params: { max: number }) {
+  const { max } = params
+  if (max <= 200) return 1
+  if (max <= 1000) return 5
+  return 10
+}
+
+function getSizeThresholdLabel(params: { value: number; max: number }) {
+  const { value, max } = params
+  if (max <= 0) return 'No size data'
+  if (value <= 0) return 'All sizes'
+  return `>= ${value}px`
 }

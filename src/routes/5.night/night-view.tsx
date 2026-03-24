@@ -19,6 +19,7 @@ import { PatchDetailDialog } from './patch-detail-dialog'
 import { PatchGrid } from '~/features/patch-grid/patch-grid'
 import { SelectionBar } from './selection-bar'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
+import { computeDetectionLongestDimension } from '~/features/patch-grid/grid-utils'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
 
@@ -34,6 +35,7 @@ export function NightView(props: { nightId: string }) {
   const [selectedTaxon, setSelectedTaxon] = useState<TaxonSelection>(undefined)
   const [identifyOpen, setIdentifyOpen] = useState(false)
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
+  const [sizeThreshold, setSizeThreshold] = useState(0)
   const [sortByClusters, setSortByClusters] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
@@ -89,6 +91,10 @@ export function NightView(props: { nightId: string }) {
   }, [nightId])
 
   useEffect(() => {
+    setSizeThreshold(0)
+  }, [nightId])
+
+  useEffect(() => {
     if (hasAppliedDefaultFallbackRef.current) return
 
     const hasExplicitSearch = !!search?.bucket || !!search?.rank || !!search?.name
@@ -117,9 +123,14 @@ export function NightView(props: { nightId: string }) {
     () => Object.values(detections ?? {}).filter((d) => d.nightId === nightId && (d as any)?.detectedBy === 'user').length,
     [detections, nightId],
   )
+  const sizeThresholdMax = useMemo(() => {
+    return getMaxDetectionLongestDimension({ patches: list, detections })
+  }, [list, detections])
+  const clampedSizeThreshold = clampSizeThreshold({ value: sizeThreshold, max: sizeThresholdMax })
+
   const filtered = useMemo(
-    () => filterPatchesByTaxon({ patches: list, detections, selectedTaxon, selectedBucket }),
-    [list, detections, selectedTaxon, selectedBucket],
+    () => filterPatches({ patches: list, detections, selectedTaxon, selectedBucket, sizeThreshold: clampedSizeThreshold }),
+    [list, detections, selectedTaxon, selectedBucket, clampedSizeThreshold],
   )
   const totalPatches = list.length
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
@@ -196,8 +207,11 @@ export function NightView(props: { nightId: string }) {
         totalPatches={totalPatches}
         totalDetections={totalDetections}
         totalIdentified={totalIdentified}
+        sizeThreshold={clampedSizeThreshold}
+        sizeThresholdMax={sizeThresholdMax}
         warnings={nightWarnings}
         sortByClusters={sortByClusters}
+        onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
         selectedTaxon={selectedTaxon as any}
         selectedBucket={selectedBucket}
@@ -361,6 +375,45 @@ function filterPatchesByTaxon(params: {
     const detectedBy = det?.detectedBy === 'user' ? 'user' : 'auto'
     return detectedBy === selectedBucket
   })
+  return result
+}
+
+function filterPatches(params: {
+  patches: PatchEntity[]
+  detections: Record<string, DetectionEntity>
+  selectedTaxon: TaxonSelection
+  selectedBucket?: 'auto' | 'user'
+  sizeThreshold: number
+}) {
+  const { patches, detections, selectedTaxon, selectedBucket, sizeThreshold } = params
+  const taxonFilteredPatches = filterPatchesByTaxon({ patches, detections, selectedTaxon, selectedBucket })
+  if (sizeThreshold <= 0) return taxonFilteredPatches
+
+  const result = taxonFilteredPatches.filter((patch) => {
+    const detection = detections?.[patch.id]
+    const longestDimension = computeDetectionLongestDimension({ detection })
+    return longestDimension >= sizeThreshold
+  })
+  return result
+}
+
+function getMaxDetectionLongestDimension(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity> }) {
+  const { patches, detections } = params
+  let maxLongestDimension = 0
+
+  for (const patch of patches) {
+    const detection = detections?.[patch.id]
+    const longestDimension = computeDetectionLongestDimension({ detection })
+    if (longestDimension > maxLongestDimension) maxLongestDimension = longestDimension
+  }
+
+  const result = Math.ceil(maxLongestDimension)
+  return result
+}
+
+function clampSizeThreshold(params: { value: number; max: number }) {
+  const { value, max } = params
+  const result = Math.max(0, Math.min(value, max))
   return result
 }
 

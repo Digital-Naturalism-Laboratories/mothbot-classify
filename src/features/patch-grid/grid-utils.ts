@@ -11,25 +11,47 @@ export function chunkIds(ids: string[], size: number) {
 
 export function computeDetectionArea(params: { detection?: DetectionEntity }) {
   const { detection } = params
+  const bounds = computeDetectionBounds({ detection })
+  if (!bounds) return 0
+
+  const area = bounds.width * bounds.height
+  return area
+}
+
+export function computeDetectionLongestDimension(params: { detection?: DetectionEntity }) {
+  const { detection } = params
+  const bounds = computeDetectionBounds({ detection })
+  if (!bounds) return 0
+
+  const longestDimension = Math.max(bounds.width, bounds.height)
+  return longestDimension
+}
+
+function computeDetectionBounds(params: { detection?: DetectionEntity }) {
+  const { detection } = params
   const points = detection?.points
-  if (!Array.isArray(points) || points.length === 0) return 0
+  if (!Array.isArray(points) || points.length === 0) return null
+
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
   let maxX = Number.NEGATIVE_INFINITY
   let maxY = Number.NEGATIVE_INFINITY
-  for (const pt of points) {
-    const x = typeof pt?.[0] === 'number' ? pt[0] : null
-    const y = typeof pt?.[1] === 'number' ? pt[1] : null
+
+  for (const point of points) {
+    const x = typeof point?.[0] === 'number' ? point[0] : null
+    const y = typeof point?.[1] === 'number' ? point[1] : null
     if (x == null || y == null) continue
     if (x < minX) minX = x
     if (y < minY) minY = y
     if (x > maxX) maxX = x
     if (y > maxY) maxY = y
   }
+
+  if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null
+
   const width = Math.max(0, maxX - minX)
   const height = Math.max(0, maxY - minY)
-  const area = width * height
-  return area
+  return { width, height }
 }
 
 export function getRankValue(params: { det?: DetectionEntity; rank: 'order' | 'family' | 'genus' | 'species' }) {

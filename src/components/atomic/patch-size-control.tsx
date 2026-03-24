@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { atom } from 'nanostores'
 import { cn } from '~/utils/cn'
-import { Slider } from '~/components/ui/slider'
+import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
 
 export const patchColumnsStore = atom<number>(6)
 
@@ -10,26 +10,29 @@ export function setPatchColumns(value: number) {
   patchColumnsStore.set(clamped)
 }
 
-export function PatchSizeControl(props: { className?: string }) {
-  const { className } = props || {}
+type PatchSizeControlProps = {
+  className?: string
+  compact?: boolean
+}
+
+export function PatchSizeControl(props: PatchSizeControlProps) {
+  const { className, compact = false } = props
   const columns = useStore(patchColumnsStore)
+  const value = `${columns} col`
 
   return (
-    <div className={cn(className)}>
-      <h3 className='mb-6 text-16 font-semibold'>Grid columns</h3>
-      <div className='flex items-center gap-8'>
-        <span className='w-36 text-12 text-neutral-600'>{columns} col</span>
-        <Slider
-          value={[columns]}
-          min={1}
-          max={12}
-          step={1}
-          onValueChange={(vals) => {
-            const v = vals?.[0]
-            if (typeof v === 'number') setPatchColumns(v)
-          }}
-        />
-      </div>
+    <div className={cn('space-y-6', className)}>
+      {compact ? null : <h3 className='text-16 font-semibold'>Grid columns</h3>}
+
+      <LabeledSliderControl
+        label='Grid columns'
+        value={value}
+        sliderValue={columns}
+        min={1}
+        max={12}
+        step={1}
+        onChange={setPatchColumns}
+      />
     </div>
   )
 }
