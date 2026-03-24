@@ -5,7 +5,7 @@ import { Button } from '~/components/ui/button'
 import { useParams } from '@tanstack/react-router'
 import { useStore } from '@nanostores/react'
 import { useState, type ReactNode } from 'react'
-import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
 import { detectionsStore } from '~/stores/entities/detections'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
@@ -157,7 +157,7 @@ type LayoutOptionsSectionProps = {
 
 function LayoutOptionsSection(props: LayoutOptionsSectionProps) {
   const { className, open, onToggle, children } = props
-  const Icon = open ? ChevronDownIcon : ChevronRightIcon
+  const Icon = open ? ChevronUpIcon : ChevronDownIcon
 
   return (
     <div className={className}>
