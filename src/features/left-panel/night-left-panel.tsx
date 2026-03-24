@@ -1,4 +1,4 @@
-import { Column } from '~/styles'
+import { Column, PanelHeading } from '~/styles'
 import { cn } from '~/utils/cn'
 import { Progress } from '~/components/ui/progress'
 import { Button } from '~/components/ui/button'
@@ -46,7 +46,7 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     <Column className={cn('px-16 py-20 pt-12', className)}>
       <WarningsBox warnings={warnings} className='mb-16' />
       <div className='mb-16'>
-        <h3 className='mb-6 text-16 font-semibold'>Summary</h3>
+        <PanelHeading className='mb-6'>Summary</PanelHeading>
         <div className='space-y-4 text-13 text-neutral-700'>
           <div className='flex items-center justify-between'>
             <span>Total patches</span>
@@ -164,14 +164,15 @@ function LayoutOptionsSection(props: LayoutOptionsSectionProps) {
       <button
         type='button'
         className={cn(
-          'flex w-full items-center justify-between gap-8 text-left',
+          '-mx-8 flex w-[calc(100%+16px)] items-center justify-between gap-8 rounded-md p-8 text-left',
           'text-14 font-semibold text-ink-primary',
+          'hover:bg-inka-100',
         )}
         onClick={onToggle}
         aria-expanded={open}
         aria-label={open ? 'Collapse layout options' : 'Expand layout options'}
       >
-        <span>Layout Options</span>
+        <PanelHeading className='text-inherit'>Layout Options</PanelHeading>
         <Icon className='h-14 w-14 text-neutral-500' />
       </button>
 

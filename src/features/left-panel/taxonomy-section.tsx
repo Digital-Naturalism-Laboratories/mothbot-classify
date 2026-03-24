@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
 import { clearPatchSelection } from '~/stores/ui'
-import { LeftPanelHeading } from '~/styles'
+import { PanelHeading } from '~/styles'
 import { collapsedKeysStore, collapseMany, expandMany, makeKey, toggleKey } from './collapse.store'
 import { CountsRow } from './counts-row'
 import type { TaxonomyNode } from './left-panel.types'
@@ -54,7 +54,7 @@ export function TaxonomySection(props: TaxonomySectionProps) {
   if (!hasNodes && !hasErrors) {
     return (
       <div className={className}>
-        <LeftPanelHeading className='mb-6 text-14 font-semibold'>{title}</LeftPanelHeading>
+        <PanelHeading className='mb-6'>{title}</PanelHeading>
         <p className='text-13 text-neutral-500'>{emptyText}</p>
       </div>
     )
@@ -135,7 +135,7 @@ function SectionHeader(props: {
   const { title, bucket, nodes, sortByClusters = false, onSortByClustersChange } = props
   return (
     <div className='mb-6 flex items-center justify-between'>
-      <h4 className='text-14 font-semibold'>{title}</h4>
+      <PanelHeading>{title}</PanelHeading>
 
       <SectionMoreMenu
         bucket={bucket}
