@@ -18,6 +18,7 @@ import { hasTaxonFields } from '~/models/taxonomy/validate'
 import { getProjectIdFromNightId } from '~/utils/paths'
 import { validateAndGroupDetectionsForAccept, resolveOrderTaxonFromSpeciesList } from '~/features/data-flow/2.identify/accept'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
+import { computeFinalLabel } from '~/models/taxonomy/label'
 
 // Re-export DetectionEntity from its canonical location
 export type { DetectionEntity } from '~/models/detection.types'
@@ -107,6 +108,14 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
 
     if (isError) {
       updated[id] = updateDetectionAsError({ existing, ...context })
+      continue
+    }
+
+    if (hasTaxon && taxon && isMorphospeciesLabelWithTaxon({ label: trimmed, taxon })) {
+      const morphoResult = updateDetectionAsMorphospecies({ existing, morphospecies: trimmed, taxon, ...context })
+      if (morphoResult) {
+        updated[id] = morphoResult
+      }
       continue
     }
 
@@ -319,4 +328,17 @@ export function bulkIdentifyMorphospecies(params: { morphoKey: string; taxon: Ta
   updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
 
   return { updatedCount: detectionIds.length, nightCount: touchedNightIds.size }
+}
+
+function isMorphospeciesLabelWithTaxon(params: { label: string; taxon: TaxonRecord }) {
+  const { label, taxon } = params
+
+  if (!label) return false
+
+  const normalizedLabel = label.trim().toLowerCase()
+  const normalizedTaxonLabel = computeFinalLabel({ taxon }).trim().toLowerCase()
+
+  if (!normalizedTaxonLabel) return false
+
+  return normalizedLabel !== normalizedTaxonLabel
 }

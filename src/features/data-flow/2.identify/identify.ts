@@ -21,7 +21,7 @@ import { computeFinalLabel } from '~/models/taxonomy/label'
 
 export type IdentificationInput =
   | { type: 'taxon'; taxon: TaxonRecord; label?: string }
-  | { type: 'morphospecies'; text: string }
+  | { type: 'morphospecies'; text: string; taxon?: TaxonRecord }
   | { type: 'error' }
   | { type: 'accept' }
 
@@ -52,7 +52,14 @@ export function identifyDetection(params: {
 
   if (input.type === 'error') return handleErrorIdentification({ detection, context })
   if (input.type === 'accept') return handleAcceptIdentification({ detection, context })
-  if (input.type === 'morphospecies') return handleMorphospeciesIdentification({ detection, text: input.text, context })
+  if (input.type === 'morphospecies') {
+    return handleMorphospeciesIdentification({
+      detection,
+      text: input.text,
+      taxon: input.taxon,
+      context,
+    })
+  }
   if (input.type === 'taxon') return handleTaxonIdentification({ detection, taxon: input.taxon, label: input.label, context })
 
   return { detection, changed: false, skipped: true, skipReason: 'Unknown input type' }
@@ -93,14 +100,15 @@ function handleAcceptIdentification(params: { detection: DetectionEntity; contex
 function handleMorphospeciesIdentification(params: {
   detection: DetectionEntity
   text: string
+  taxon?: TaxonRecord
   context?: IdentificationContext
 }): IdentificationResult {
-  const { detection, text, context } = params
+  const { detection, text, taxon, context } = params
   const trimmed = text.trim()
 
   if (!trimmed) return { detection, changed: false, skipped: true, skipReason: 'Empty morphospecies text' }
 
-  const existingTaxon: Partial<TaxonRecord> = detection?.taxon ?? {}
+  const existingTaxon = getMorphospeciesContextTaxon({ detection, taxon })
 
   if (!hasHigherTaxonomyContext(existingTaxon)) {
     return {
@@ -130,6 +138,17 @@ function handleMorphospeciesIdentification(params: {
   }
 
   return { detection: next, changed: true, skipped: false }
+}
+
+function getMorphospeciesContextTaxon(params: {
+  detection: DetectionEntity
+  taxon?: TaxonRecord
+}): Partial<TaxonRecord> {
+  const { detection, taxon } = params
+
+  if (taxon && hasHigherTaxonomyContext(taxon)) return taxon
+
+  return detection?.taxon ?? {}
 }
 
 function handleTaxonIdentification(params: {

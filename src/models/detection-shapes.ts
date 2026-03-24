@@ -207,6 +207,7 @@ export function updateDetectionWithTaxon(params: UpdateDetectionWithTaxonParams)
 export type UpdateDetectionAsMorphospeciesParams = {
   existing: DetectionEntity
   morphospecies: string
+  taxon?: TaxonRecord
   speciesListId?: string
   speciesListDOI?: string
 }
@@ -217,11 +218,11 @@ export type UpdateDetectionAsMorphospeciesParams = {
  * Returns null if the detection lacks required context.
  */
 export function updateDetectionAsMorphospecies(params: UpdateDetectionAsMorphospeciesParams): DetectionEntity | null {
-  const { existing, morphospecies, speciesListId, speciesListDOI } = params
+  const { existing, morphospecies, taxon, speciesListId, speciesListDOI } = params
 
   const result = identifyDetection({
     detection: existing,
-    input: { type: 'morphospecies', text: morphospecies },
+    input: { type: 'morphospecies', text: morphospecies, taxon },
     context: { speciesListId, speciesListDOI },
   })
 

@@ -73,8 +73,8 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [speciesOptions])
 
   const recentOptions = useMemo(() => {
-    return getRecentOptions({ detections })
-  }, [detections])
+    return getRecentOptions({ detections, projectId })
+  }, [detections, projectId])
 
   const filteredRecentOptions = useMemo(() => {
     const q = (query ?? '').trim().toLowerCase()
@@ -90,11 +90,11 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     return limitOptions(morphoOptions || [])
   }, [morphoOptions])
 
-  function handleSelect(label: string) {
+  function submitSelection(label: string, taxon?: TaxonRecord) {
     const value = (label ?? '').trim()
     if (!value) return
-    logIdentificationResult({ detectionIds, label: value })
-    onSubmit(value)
+    logIdentificationResult({ detectionIds, label: value, taxon })
+    onSubmit(value, taxon)
     onOpenChange(false)
   }
 
@@ -103,9 +103,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     const label = deriveLabelFromTaxon(t)
     if (!label) return
 
-    logIdentificationResult({ detectionIds, label, taxon: t })
-    onSubmit(label, t)
-    onOpenChange(false)
+    submitSelection(label, t)
   }
 
   function handleSelectTaxon(t: TaxonRecord) {
@@ -142,9 +140,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   function handleSubmitFreeText() {
     const value = query.trim()
     if (!value) return
-    logIdentificationResult({ detectionIds, label: value })
-    onSubmit(value)
-    onOpenChange(false)
+    submitSelection(value)
   }
 
   function finalizeTaxonIdentification(partialTaxon: TaxonRecord, taxonID: string | number | undefined) {
@@ -273,7 +269,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
 
             {query.trim().toUpperCase() === 'ERROR' ? (
               <CommandGroup heading='Actions'>
-                <CommandItem onSelect={() => handleSelect('ERROR')}>
+                <CommandItem onSelect={() => submitSelection('ERROR')}>
                   <div className='flex items-center justify-between w-full'>
                     <span className='text-13 text-red-700'>ERROR</span>
                     <span className='text-11 text-neutral-500'>Mark as error</span>
@@ -292,11 +288,11 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
                     isMorphospecies={r.isMorphospecies}
                     onSelect={() => {
                       if (r.isMorphospecies) {
-                        handleSelect(r.label)
+                        submitSelection(r.label, r.taxon)
                       } else if (r.taxon) {
                         handleSelectRecentTaxon(r.taxon)
                       } else {
-                        handleSelect(r.label)
+                        submitSelection(r.label)
                       }
                     }}
                     subtitleClassName='text-11 text-neutral-500 flex items-center gap-4'
@@ -312,7 +308,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
                     key={'morpho:' + r.label}
                     label={r.label}
                     taxon={r.taxon}
-                    onSelect={() => handleSelect(r.label)}
+                    onSelect={() => submitSelection(r.label, r.taxon)}
                     itemClassName='row gap-x-8 !py-8'
                   />
                 ))}
@@ -630,14 +626,18 @@ function getSpeciesOptions(params: GetSpeciesOptionsParams) {
 
 type GetRecentOptionsParams = {
   detections?: Record<string, DetectionEntity>
+  projectId?: string
 }
 
 function getRecentOptions(params: GetRecentOptionsParams) {
-  const { detections } = params
+  const { detections, projectId } = params
 
   const all = Object.values(detections ?? {})
     .filter(
-      (d: DetectionEntity | undefined) => d?.detectedBy === 'user' && (!!d?.taxon?.scientificName || !!d?.label || !!d?.morphospecies),
+      (d: DetectionEntity | undefined) =>
+        d?.detectedBy === 'user' &&
+        isDetectionInProject({ detection: d, projectId }) &&
+        (!!d?.taxon?.scientificName || !!d?.label || !!d?.morphospecies),
     )
     .sort((a, b) => ((b?.identifiedAt ?? 0) as number) - ((a?.identifiedAt ?? 0) as number))
 
@@ -688,8 +688,7 @@ function getMorphoOptions(params: GetMorphoOptionsParams) {
     const det = d as DetectionEntity | undefined
     if (!det) continue
     if (det.detectedBy !== 'user') continue
-    const nightId = (det.nightId ?? '').trim()
-    if (projectId && nightId && !nightId.startsWith(projectId + '/')) continue
+    if (!isDetectionInProject({ detection: det, projectId })) continue
     const raw = typeof det.morphospecies === 'string' ? det.morphospecies : ''
     const label = (raw ?? '').trim()
     if (!label) continue
@@ -710,4 +709,14 @@ function getMorphoOptions(params: GetMorphoOptionsParams) {
 function deriveLabelFromTaxon(t: TaxonRecord): string {
   const preferred = (t?.scientificName ?? '').trim()
   return preferred || getDisplayLabelForTaxon(t)
+}
+
+function isDetectionInProject(params: { detection?: DetectionEntity; projectId?: string }) {
+  const { detection, projectId } = params
+  if (!projectId) return true
+
+  const nightId = (detection?.nightId ?? '').trim()
+  if (!nightId) return false
+
+  return nightId.startsWith(projectId + '/')
 }
