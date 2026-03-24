@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { useStore } from '@nanostores/react'
+import { PatchDownloadContextMenu } from '~/components/atomic/patch-download-context-menu'
 import { detectionStoreById, detectionsStore } from '~/stores/entities/detections'
 import { patchStoreById } from '~/stores/entities/patch-selectors'
 import { Badge } from '~/components/ui/badge'
@@ -209,28 +210,35 @@ function PatchItemImpl(props: PatchItemProps) {
           isSelected && 'ring-2 group-hover:ring-2 group-hover:ring-blue-400 ring-blue-600',
         )}
       />
-      {url ? (
-        <div className='flex-1'>
-          <img
-            src={url}
-            alt={patch?.name ?? 'patch'}
-            className='aspect-square w-full object-contain rounded-t-[5px]'
-            onDragStart={(e) => e.preventDefault()}
-            decoding='async'
-            loading='lazy'
-            onLoad={() => {
-              if (!id) return
-              props?.onImageLoad?.(id)
-            }}
-            onError={() => {
-              if (!id) return
-              props?.onImageError?.(id)
-            }}
-          />
-        </div>
-      ) : (
-        <div className='aspect-square w-full ' />
-      )}
+      <PatchDownloadContextMenu
+        file={patch?.imageFile?.file}
+        handle={patch?.imageFile?.handle}
+        originalUrl={url}
+        originalDownloadName={patch?.name ?? 'patch.jpg'}
+      >
+        {url ? (
+          <div className='flex-1'>
+            <img
+              src={url}
+              alt={patch?.name ?? 'patch'}
+              className='aspect-square w-full object-contain rounded-t-[5px]'
+              onDragStart={(e) => e.preventDefault()}
+              decoding='async'
+              loading='lazy'
+              onLoad={() => {
+                if (!id) return
+                props?.onImageLoad?.(id)
+              }}
+              onError={() => {
+                if (!id) return
+                props?.onImageError?.(id)
+              }}
+            />
+          </div>
+        ) : (
+          <div className='aspect-square w-full ' />
+        )}
+      </PatchDownloadContextMenu>
 
       {!compact && <TaxonRankRow rank={rank} label={label} />}
     </Column>

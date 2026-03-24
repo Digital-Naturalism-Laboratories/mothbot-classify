@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { PatchDownloadContextMenu } from '~/components/atomic/patch-download-context-menu'
 import { TaxonRankBadge } from '~/components/taxon-rank-badge'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog'
@@ -162,16 +163,25 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
   const patchUrl = useObjectUrl(patch?.imageFile?.file, patch?.imageFile?.handle)
 
   const finestTaxonLevel = detection ? deriveTaxonNameFromDetection({ detection }) : undefined
+  const patchAlt = finestTaxonLevel ?? patch?.name ?? 'patch'
+  const originalDownloadName = patch?.name ?? 'patch.jpg'
 
   return (
     <div className='space-y-8'>
-      <ImageWithDownloadName
-        src={patchUrl}
-        alt={finestTaxonLevel ?? patch?.name ?? 'patch'}
-        downloadName={finestTaxonLevel ?? patch?.name ?? undefined}
-        className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
-        fallback={<div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />}
-      />
+      <PatchDownloadContextMenu
+        file={patch?.imageFile?.file}
+        handle={patch?.imageFile?.handle}
+        originalUrl={patchUrl}
+        originalDownloadName={originalDownloadName}
+      >
+        <div className='w-full'>
+          {patchUrl ? (
+            <img src={patchUrl} alt={patchAlt} className='w-full max-h-[300px] object-contain rounded-md border border-black/10' />
+          ) : (
+            <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />
+          )}
+        </div>
+      </PatchDownloadContextMenu>
       <div className='flex flex-wrap gap-8'>
         {patchUrl ? (
           <a href={patchUrl} target='_blank' rel='noreferrer'>
