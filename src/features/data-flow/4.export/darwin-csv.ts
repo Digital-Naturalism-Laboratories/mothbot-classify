@@ -41,6 +41,11 @@ const DARWIN_COLUMNS = [
   'mothbox',
   'filepath',
   'original_mothbox_identifciation',
+  'cluster_ID',
+  'temporal_subcluster_ID',
+  'width',
+  'height',
+  'area',
 
   // Date/Time
   'eventDate',
@@ -309,6 +314,7 @@ export function buildDarwinShapeFromDetection(params: {
   const userInitials = userSessionStore.get()?.initials || ''
   const identifiedBy = detection?.detectedBy === 'user' ? userInitials : ''
   const ID_confidence = ''
+  const geometryFields = buildGeometryExportFields({ detection })
 
   const row: DarwinRow = {
     basisOfRecord: 'MachineObservation',
@@ -340,6 +346,7 @@ export function buildDarwinShapeFromDetection(params: {
     filepath,
     mothbox,
     original_mothbox_identifciation: detection?.originalMothboxLabel || '',
+    ...geometryFields,
     deployment,
     image_id,
   }
@@ -404,6 +411,79 @@ function extractDetectionByFromPatchId(params: { patchId: string; photoBase: str
 
   if (idx >= 0) name = name.slice(idx + 1)
   return name
+}
+
+function buildGeometryExportFields(params: { detection: DetectionEntity }) {
+  const { detection } = params
+  const clusterFields = deriveClusterExportFields({ clusterId: detection?.clusterId })
+  const patchSizeFields = derivePatchDimensionsFromPoints({ points: detection?.points })
+
+  return {
+    cluster_ID: clusterFields.clusterId,
+    temporal_subcluster_ID: clusterFields.temporalSubclusterId,
+    width: patchSizeFields.width,
+    height: patchSizeFields.height,
+    area: patchSizeFields.area,
+  }
+}
+
+function deriveClusterExportFields(params: { clusterId?: number | null }) {
+  const { clusterId } = params
+  if (typeof clusterId !== 'number' || !Number.isFinite(clusterId) || clusterId < 0) {
+    return { clusterId: '', temporalSubclusterId: '' }
+  }
+
+  const clusterIdString = String(clusterId)
+  const [topLevelId, subclusterId = ''] = clusterIdString.split('.')
+  const temporalSubclusterId = subclusterId.replace(/^0+/, '')
+
+  return {
+    clusterId: topLevelId || '',
+    temporalSubclusterId,
+  }
+}
+
+function derivePatchDimensionsFromPoints(params: { points?: number[][] }) {
+  const { points } = params
+  if (!Array.isArray(points) || points.length < 2) {
+    return { width: '', height: '', area: '' }
+  }
+
+  const edgeLengths = getEdgeLengths({ points })
+  if (edgeLengths.length < 2) {
+    return { width: '', height: '', area: '' }
+  }
+
+  const width = Math.round(Math.min(...edgeLengths))
+  const height = Math.round(Math.max(...edgeLengths))
+  const area = width * height
+
+  return {
+    width: String(width),
+    height: String(height),
+    area: String(area),
+  }
+}
+
+function getEdgeLengths(params: { points: number[][] }) {
+  const { points } = params
+  const edgeLengths: number[] = []
+
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i]
+    const end = points[(i + 1) % points.length]
+    const startX = typeof start?.[0] === 'number' ? start[0] : null
+    const startY = typeof start?.[1] === 'number' ? start[1] : null
+    const endX = typeof end?.[0] === 'number' ? end[0] : null
+    const endY = typeof end?.[1] === 'number' ? end[1] : null
+
+    if (startX == null || startY == null || endX == null || endY == null) continue
+
+    const distance = Math.hypot(endX - startX, endY - startY)
+    if (distance > 0) edgeLengths.push(distance)
+  }
+
+  return edgeLengths
 }
 
 /**

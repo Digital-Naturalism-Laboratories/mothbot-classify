@@ -4,6 +4,13 @@ import { buildDarwinShapeFromDetection } from '../darwin-csv'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
 
 describe('Darwin CSV Export - Taxonomy Columns', () => {
+  const ROTATED_PATCH_POINTS = [
+    [3949.6025390625, 2794.5068359375],
+    [4054.07275390625, 2441.50244140625],
+    [3764.1904296875, 2355.712890625],
+    [3659.72021484375, 2708.71728515625],
+  ] as const
+
   const BASE_DETECTION = {
     id: 'det1',
     patchId: 'patch1',
@@ -185,6 +192,50 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
   })
 
   describe('taxonomy columns population', () => {
+    it('should export cluster IDs and rotated patch dimensions from points', () => {
+      const detection: DetectionEntity = {
+        ...BASE_DETECTION,
+        label: 'Hemiptera',
+        clusterId: 1438.105,
+        points: [...ROTATED_PATCH_POINTS.map((point) => [...point])],
+        taxon: {
+          scientificName: 'Hemiptera',
+          taxonRank: 'order',
+          order: 'Hemiptera',
+        },
+      }
+
+      const row = buildDarwinShapeFromDetection({
+        detection,
+        ...BASE_PARAMS,
+      })
+
+      expect(row.cluster_ID).toBe('1438')
+      expect(row.temporal_subcluster_ID).toBe('105')
+      expect(row.width).toBe('302')
+      expect(row.height).toBe('368')
+      expect(row.area).toBe('111136')
+    })
+
+    it('should leave cluster and patch size columns blank when data is unavailable', () => {
+      const detection: DetectionEntity = {
+        ...BASE_DETECTION,
+        label: 'Unknown',
+        clusterId: -1,
+      }
+
+      const row = buildDarwinShapeFromDetection({
+        detection,
+        ...BASE_PARAMS,
+      })
+
+      expect(row.cluster_ID).toBe('')
+      expect(row.temporal_subcluster_ID).toBe('')
+      expect(row.width).toBe('')
+      expect(row.height).toBe('')
+      expect(row.area).toBe('')
+    })
+
     it('should populate all taxonomy columns correctly with full species', () => {
       const detection: DetectionEntity = {
         ...BASE_DETECTION,
