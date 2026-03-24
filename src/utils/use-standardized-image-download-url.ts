@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { preserveJpegExifMetadata } from '~/utils/jpeg-exif'
 
 type HandleLike = { getFile?: () => Promise<File> }
 
@@ -81,7 +82,8 @@ export async function createStandardizedImageBlob(params: StandardizedImageBlobP
   context.drawImage(image.image, 0, 0, dimensions.width, dimensions.height)
 
   const blob = await canvasToBlob(canvas, OUTPUT_MIME_TYPE, quality)
-  return blob
+  const blobWithExif = await preserveJpegExifMetadata({ originalFile: file, resizedBlob: blob })
+  return blobWithExif
 }
 
 export function getStandardizedImageDimensions(params: StandardizedImageDimensionsParams) {
@@ -154,3 +156,4 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) 
     }, type, quality)
   })
 }
+

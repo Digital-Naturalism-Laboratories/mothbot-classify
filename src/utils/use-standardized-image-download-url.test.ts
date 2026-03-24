@@ -79,7 +79,7 @@ describe('createStandardizedImageBlob', () => {
 
     getContext.mockReturnValue({ drawImage })
     toBlob.mockImplementation((callback: BlobCallback, type?: string) => {
-      callback?.(new Blob(['resized'], { type: type ?? 'image/jpeg' }))
+      callback?.(new Blob([createJfifJpeg().buffer], { type: type ?? 'image/jpeg' }))
     })
     createObjectURL.mockImplementation(() => `blob:mock-${++objectUrlCount}`)
 
@@ -176,7 +176,7 @@ describe('useStandardizedImageDownloadUrl', () => {
           width: 0,
           height: 0,
           getContext: () => ({ drawImage: vi.fn() }),
-          toBlob: (callback: BlobCallback, type?: string) => callback?.(new Blob(['resized'], { type: type ?? 'image/jpeg' })),
+          toBlob: (callback: BlobCallback, type?: string) => callback?.(new Blob([createJfifJpeg().buffer], { type: type ?? 'image/jpeg' })),
         } as unknown as HTMLCanvasElement
       }
 
@@ -226,3 +226,29 @@ describe('useStandardizedImageDownloadUrl', () => {
     unmount()
   })
 })
+
+function createJfifJpeg() {
+  const jfifSegment = new Uint8Array([
+    0xff, 0xe0, 0x00, 0x10,
+    0x4a, 0x46, 0x49, 0x46, 0x00,
+    0x01, 0x01, 0x00,
+    0x00, 0x01, 0x00, 0x01,
+    0x00, 0x00,
+  ])
+  const imageData = new Uint8Array([0xff, 0xda, 0x00, 0x08, 0x01, 0x02, 0x03, 0x00, 0xff, 0xd9])
+
+  return concatBytes(new Uint8Array([0xff, 0xd8]), jfifSegment, imageData)
+}
+
+function concatBytes(...chunks: Uint8Array[]) {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const merged = new Uint8Array(totalLength)
+  let offset = 0
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  return merged
+}
