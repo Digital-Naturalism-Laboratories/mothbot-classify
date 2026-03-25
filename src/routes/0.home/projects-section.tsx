@@ -5,6 +5,7 @@ import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { Loader } from '~/components/atomic/Loader'
 import { Button } from '~/components/ui/button'
 import { MorphoCatalogDialog } from '~/features/catalogues/morphospecies/morpho-catalog-dialog'
+import { SpeciesCatalogDialog } from '~/features/catalogues/species/species-catalog-dialog'
 import { exportingNightIdsStore } from '~/features/data-flow/4.export/export.state'
 import type { ProjectEntity } from '~/stores/entities/1.projects'
 import type { SiteEntity } from '~/stores/entities/2.sites'
@@ -99,12 +100,20 @@ type ProjectItemProps = HierarchyStores & {
 function ProjectItem(props: ProjectItemProps) {
   const { project, sites, deployments, nights, progressIndex } = props
   const prog = progressIndex.byProject[project.id] ?? { total: 0, identified: 0 }
+  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
 
   return (
     <li className='border bg-white p-8 group/project rounded-lg'>
       <div className='flex items-center gap-12'>
         <span className='font-medium text-neutral-900'>{project.name}</span>
+        <Button
+          variant='outline'
+          size='xxsm'
+          onClick={() => setIsSpeciesOpen(true)}
+        >
+          Species
+        </Button>
         <Button
           variant='outline'
           size='xxsm'
@@ -118,6 +127,12 @@ function ProjectItem(props: ProjectItemProps) {
           <ItemActions scope={'project'} id={project.id} nights={nights} />
         </div>
       </div>
+      <SpeciesCatalogDialog
+        open={isSpeciesOpen}
+        onOpenChange={setIsSpeciesOpen}
+        projectIdOverride={project.id}
+        initialScope='project'
+      />
       <MorphoCatalogDialog
         open={isMorphoOpen}
         onOpenChange={setIsMorphoOpen}

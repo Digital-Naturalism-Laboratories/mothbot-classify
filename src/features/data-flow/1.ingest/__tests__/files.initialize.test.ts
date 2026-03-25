@@ -150,6 +150,48 @@ describe('preloadNightSummariesFromIndexed', () => {
       morphospecies: 'netelia1',
     })
   })
+
+  it('backfills species taxonomy from identified json when older summaries do not include it', async () => {
+    preloadNightSummariesFromIndexed([
+      makeSummaryEntry({
+        path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/night_summary.json',
+        summary: {
+          nightId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
+          totalDetections: 12,
+          totalIdentified: 2,
+        },
+      }),
+      makeIdentifiedEntry({
+        path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/photo_identified.json',
+        shapes: [
+          {
+            patch_path: 'patches/culex_patch.jpg',
+            label: 'culex pipiens',
+            class: 'Insecta',
+            order: 'Diptera',
+            family: 'Culicidae',
+            genus: 'Culex',
+            species: 'pipiens',
+            identifier_human: 'BR',
+            timestamp_ID_human: 123,
+          },
+        ],
+      }),
+    ])
+
+    await waitForAsyncReads()
+
+    const summary = nightSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
+    expect(summary?.speciesCounts).toEqual({ pipiens: 1 })
+    expect(summary?.speciesPreviewPatchIds).toEqual({ pipiens: 'culex_patch.jpg' })
+    expect(summary?.speciesTaxonomyByName?.pipiens).toMatchObject({
+      class: 'Insecta',
+      order: 'Diptera',
+      family: 'Culicidae',
+      genus: 'Culex',
+      species: 'pipiens',
+    })
+  })
 })
 
 function makeSummaryEntry(params: { path: string; summary: Record<string, unknown> }) {

@@ -10,7 +10,8 @@ import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
-import { computeAllowedNightIds, extractRouteIds } from '~/features/catalogues/shared/catalog-utils'
+import { computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
+import { useCatalogScopeContext } from '~/features/catalogues/shared/catalog-scope-context'
 import { getLabelForMorphoKey } from '~/features/catalogues/shared/details-common'
 import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope-filters'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
@@ -67,19 +68,12 @@ type MorphoIndexedFallbackState = {
 export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
   const { open, onOpenChange, projectIdOverride, initialScope } = props
 
-  const route = useRouterState({ select: (s) => s.location })
-  const routeIds = useMemo(() => extractRouteIds(route?.pathname || ''), [route?.pathname])
-  const projectId = projectIdOverride || routeIds.projectId
-  const deploymentId = projectIdOverride ? undefined : routeIds.deploymentId
-  const nightId = projectIdOverride ? undefined : routeIds.nightId
-  const siteId = useMemo(() => (deploymentId ? deriveSiteFromDeploymentFolder(deploymentId) : undefined), [deploymentId])
-  const defaultScope = initialScope || (projectIdOverride ? 'project' : 'all')
-  const [usageScope, setUsageScope] = useState<ScopeType>(defaultScope)
-
-  useEffect(() => {
-    if (!open) return
-    setUsageScope(defaultScope)
-  }, [open, defaultScope])
+  const { projectId, siteId, deploymentId, nightId, usageScope, setUsageScope, hasProject, hasSite, hasDeployment, hasNight } =
+    useCatalogScopeContext({
+      open,
+      projectIdOverride,
+      initialScope,
+    })
 
   const summaries = useStore(nightSummariesStore)
   const allowedNightIds = useMemo(() => {
@@ -138,10 +132,10 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
             <ScopeFilters
               scope={usageScope}
               onScopeChange={setUsageScope}
-              hasProject={!!projectId}
-              hasSite={!!(projectId && siteId)}
-              hasDeployment={!!(projectId && deploymentId)}
-              hasNight={!!(projectId && deploymentId && nightId)}
+              hasProject={hasProject}
+              hasSite={hasSite}
+              hasDeployment={hasDeployment}
+              hasNight={hasNight}
               counts={scopeCounts}
             />
           </Row>

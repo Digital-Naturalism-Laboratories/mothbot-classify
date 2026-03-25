@@ -3,9 +3,13 @@ import { buildNightIndexes } from './files.index'
 import { ingestSpeciesListsFromFiles } from './species.ingest'
 import { loadProjectSpeciesSelection } from '~/stores/species/project-species-list'
 import {
+  buildSpeciesTaxonomySummary,
   buildMorphoTaxonomySummary,
+  mergeSpeciesTaxonomySummary,
   mergeMorphoTaxonomySummary,
   nightSummariesStore,
+  type NightSummaryEntity,
+  type SpeciesTaxonomySummary,
   type MorphoTaxonomySummary,
 } from '~/stores/entities/night-summaries'
 import { loadMorphoCovers } from '~/features/data-flow/3.persist/covers'
@@ -18,15 +22,7 @@ import { extractMorphospeciesFromShape, normalizeMorphoKey } from '~/models/taxo
 
 type IndexedEntry = { file?: File; handle?: unknown; path: string; name: string; size: number }
 
-type NightSummary = {
-  nightId: string
-  totalDetections: number
-  totalIdentified: number
-  updatedAt?: number
-  morphoCounts?: Record<string, number>
-  morphoPreviewPatchIds?: Record<string, string>
-  morphoTaxonomyByKey?: Record<string, MorphoTaxonomySummary>
-}
+type NightSummary = NightSummaryEntity
 
 type SummarySource = 'placeholder' | 'legacy' | 'canonical'
 
@@ -86,6 +82,16 @@ export function preloadNightSummariesFromIndexed(
             totalDetections: Number(json?.totalDetections) || 0,
             totalIdentified: Number(json?.totalIdentified) || 0,
             updatedAt: typeof json?.updatedAt === 'number' ? json.updatedAt : undefined,
+            speciesCounts:
+              typeof json?.speciesCounts === 'object' && json?.speciesCounts ? (json.speciesCounts as Record<string, number>) : undefined,
+            speciesPreviewPatchIds:
+              typeof json?.speciesPreviewPatchIds === 'object' && json?.speciesPreviewPatchIds
+                ? (json.speciesPreviewPatchIds as Record<string, string>)
+                : undefined,
+            speciesTaxonomyByName:
+              typeof json?.speciesTaxonomyByName === 'object' && json?.speciesTaxonomyByName
+                ? (json.speciesTaxonomyByName as Record<string, SpeciesTaxonomySummary>)
+                : undefined,
             morphoCounts:
               typeof json?.morphoCounts === 'object' && json?.morphoCounts ? (json.morphoCounts as Record<string, number>) : undefined,
             morphoPreviewPatchIds:
@@ -110,10 +116,10 @@ export function preloadNightSummariesFromIndexed(
           sourceByNightId[sourceNightId] = sourceType
           nightSummariesStore.set({ ...current, [sourceNightId]: s })
 
-          if (!hasMorphoTaxonomySummary(s)) {
+          if (shouldBackfillSummaryTaxonomy(s)) {
             const userEntries = userJsonEntriesByNightId[sourceNightId] || []
             if (userEntries.length > 0) {
-              void backfillMorphoTaxonomyForNight({ nightId: sourceNightId, entries: userEntries })
+              void backfillTaxonomySummariesForNight({ nightId: sourceNightId, entries: userEntries })
             }
           }
         })
@@ -144,15 +150,19 @@ function groupUserJsonEntriesByNightId(indexed: IndexedEntry[]) {
   return grouped
 }
 
-async function backfillMorphoTaxonomyForNight(params: {
+async function backfillTaxonomySummariesForNight(params: {
   nightId: string
   entries: IndexedEntry[]
 }) {
   const { nightId, entries } = params
 
+  const speciesCounts: Record<string, number> = {}
+  const speciesPreviewPatchIds: Record<string, string> = {}
+  const speciesTaxonomyByName: Record<string, SpeciesTaxonomySummary> = {}
   const morphoCounts: Record<string, number> = {}
   const morphoPreviewPatchIds: Record<string, string> = {}
   const morphoTaxonomyByKey: Record<string, MorphoTaxonomySummary> = {}
+
   for (const entry of entries) {
     const parsedUser = await parseUserDetectionJsonSafely({ file: entry as any })
     if (!parsedUser?.shapes?.length) continue
@@ -163,8 +173,20 @@ async function backfillMorphoTaxonomyForNight(params: {
       const taxon = buildTaxonFromShape({ shape, taxonomy, isError })
       const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError })
       const key = normalizeMorphoKey(morphospecies)
-      if (!key) continue
       const patchId = extractPatchIdFromShape(shape)
+
+      const speciesName = !key ? String(taxon?.species ?? '').trim() : ''
+      if (speciesName) {
+        speciesCounts[speciesName] = (speciesCounts[speciesName] || 0) + 1
+        if (!speciesPreviewPatchIds[speciesName] && patchId) speciesPreviewPatchIds[speciesName] = patchId
+
+        speciesTaxonomyByName[speciesName] = mergeSpeciesTaxonomySummary({
+          existing: speciesTaxonomyByName[speciesName],
+          candidate: buildSpeciesTaxonomySummary({ taxon }),
+        })
+      }
+
+      if (!key) continue
 
       morphoCounts[key] = (morphoCounts[key] || 0) + 1
       if (!morphoPreviewPatchIds[key] && patchId) morphoPreviewPatchIds[key] = patchId
@@ -176,20 +198,23 @@ async function backfillMorphoTaxonomyForNight(params: {
     }
   }
 
-  if (Object.keys(morphoCounts).length === 0) return
+  if (Object.keys(morphoCounts).length === 0 && Object.keys(speciesCounts).length === 0) return
 
   const current = nightSummariesStore.get() || {}
   const existing = current[nightId]
   if (!existing) return
-  if (hasCompleteMorphoSummary(existing)) return
+  if (hasCompleteMorphoSummary(existing) && hasCompleteSpeciesSummary(existing)) return
 
   nightSummariesStore.set({
     ...current,
     [nightId]: {
       ...existing,
+      speciesCounts: hasSpeciesCounts(existing) ? existing.speciesCounts : speciesCounts,
+      speciesPreviewPatchIds: hasSpeciesPreviewPatchIds(existing) ? existing.speciesPreviewPatchIds : speciesPreviewPatchIds,
+      speciesTaxonomyByName: hasSpeciesTaxonomySummary(existing) ? existing.speciesTaxonomyByName : speciesTaxonomyByName,
       morphoCounts: hasMorphoCounts(existing) ? existing.morphoCounts : morphoCounts,
       morphoPreviewPatchIds: hasMorphoPreviewPatchIds(existing) ? existing.morphoPreviewPatchIds : morphoPreviewPatchIds,
-      morphoTaxonomyByKey,
+      morphoTaxonomyByKey: hasMorphoTaxonomySummary(existing) ? existing.morphoTaxonomyByKey : morphoTaxonomyByKey,
     },
   })
 }
@@ -251,6 +276,26 @@ function shouldReplaceSummary(params: {
   if (incomingSource === existingSource) return true
   if (incomingSource === 'canonical') return true
   return existingSource === 'placeholder'
+}
+
+function shouldBackfillSummaryTaxonomy(summary?: NightSummary) {
+  return !hasCompleteMorphoSummary(summary) || !hasCompleteSpeciesSummary(summary)
+}
+
+function hasSpeciesTaxonomySummary(summary?: NightSummary) {
+  return !!summary?.speciesTaxonomyByName && Object.keys(summary.speciesTaxonomyByName).length > 0
+}
+
+function hasSpeciesCounts(summary?: NightSummary) {
+  return !!summary?.speciesCounts && Object.keys(summary.speciesCounts).length > 0
+}
+
+function hasSpeciesPreviewPatchIds(summary?: NightSummary) {
+  return !!summary?.speciesPreviewPatchIds && Object.keys(summary.speciesPreviewPatchIds).length > 0
+}
+
+function hasCompleteSpeciesSummary(summary?: NightSummary) {
+  return hasSpeciesCounts(summary) && hasSpeciesPreviewPatchIds(summary) && hasSpeciesTaxonomySummary(summary)
 }
 
 function hasMorphoTaxonomySummary(summary?: NightSummary) {

@@ -3,88 +3,45 @@ import { useStore } from '@nanostores/react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { nightsStore } from '~/stores/entities/4.nights'
-import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
+import { detectionsStore } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
-import { aggregateTaxonomyFromDetections } from '~/models/taxonomy/extract'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { TaxonomyDisplay, UsageStatsDisplay, ProjectsListDisplay, NightsListDisplay } from '~/features/catalogues/shared/details-common'
-import { parseNightIdParts } from '~/features/catalogues/shared/catalog-utils'
+import { buildSpeciesTaxonomyIndex, buildSpeciesUsageSummary } from './species-data'
 
 export type SpeciesDetailsDialogProps = PropsWithChildren<{
   speciesName: string
+  allowedNightIds?: Set<string>
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onNavigate?: () => void
 }> & { trigger?: ReactNode }
 
 export function SpeciesDetailsDialog(props: SpeciesDetailsDialogProps) {
-  const { speciesName, children, open, onOpenChange, onNavigate } = props
+  const { speciesName, allowedNightIds, children, open, onOpenChange, onNavigate } = props
   const summaries = useStore(nightSummariesStore)
   const nights = useStore(nightsStore)
   const allDetections = useStore(detectionsStore)
 
   const usage = useMemo(() => {
-    const nightIds: string[] = []
-    const projectIds = new Set<string>()
-    const previewPairs: Array<{ nightId: string; patchId: string }> = []
-
-    for (const det of Object.values(allDetections ?? {})) {
-      if (det?.detectedBy !== 'user') continue
-      if (det?.morphospecies) continue
-
-      const detSpecies = det?.taxon?.species
-      if (!detSpecies || String(detSpecies).trim() !== speciesName) continue
-
-      if (det?.nightId) {
-        if (!nightIds.includes(det.nightId)) {
-          nightIds.push(det.nightId)
-        }
-
-        const night = nights?.[det.nightId]
-        if (night?.projectId) {
-          projectIds.add(night.projectId)
-        }
-
-        if (det?.patchId && previewPairs.length === 0) {
-          previewPairs.push({ nightId: det.nightId, patchId: String(det.patchId) })
-        }
-      }
-    }
-
-    return { nightIds, projectIds: Array.from(projectIds), previewPairs }
-  }, [allDetections, nights, speciesName])
+    return buildSpeciesUsageSummary({
+      speciesName,
+      summaries,
+      nights,
+      allowedNightIds,
+      detections: allDetections,
+    })
+  }, [speciesName, summaries, nights, allowedNightIds, allDetections])
 
   const taxonomy = useMemo(() => {
-    const speciesDetections = Object.values(allDetections ?? {}).filter((det) => {
-      if (det?.detectedBy !== 'user') return false
-      if (det?.morphospecies) return false
-
-      const detSpecies = det?.taxon?.species
-      return detSpecies && String(detSpecies).trim() === speciesName
+    const taxonomyByName = buildSpeciesTaxonomyIndex({
+      summaries,
+      allowedNightIds,
+      detections: allDetections,
     })
-
-    if (!speciesDetections.length) return null
-
-    const aggregatedTaxonomy = aggregateTaxonomyFromDetections({ detections: speciesDetections })
-    return aggregatedTaxonomy
-  }, [allDetections, speciesName])
-
-  const instanceCount = useMemo(() => {
-    let count = 0
-
-    for (const det of Object.values(allDetections ?? {})) {
-      if (det?.detectedBy !== 'user') continue
-      if (det?.morphospecies) continue
-
-      const detSpecies = det?.taxon?.species
-      if (detSpecies && String(detSpecies).trim() === speciesName) {
-        count++
-      }
-    }
-
-    return count
-  }, [allDetections, speciesName])
+    return taxonomyByName.get(speciesName) || null
+  }, [summaries, allowedNightIds, allDetections, speciesName])
 
   const previewFile = usePreviewFile({ previewPairs: usage.previewPairs })
   const previewUrl = useObjectUrl(previewFile)
@@ -99,7 +56,7 @@ export function SpeciesDetailsDialog(props: SpeciesDetailsDialogProps) {
           <ImageWithDownloadName src={previewUrl} alt={speciesName} downloadName={speciesName} className='max-h-[240px] rounded border' />
         </div>
 
-        <UsageStatsDisplay projectCount={usage.projectIds.length} nightCount={usage.nightIds.length} instanceCount={instanceCount} />
+        <UsageStatsDisplay projectCount={usage.projectIds.length} nightCount={usage.nightIds.length} instanceCount={usage.instanceCount} />
 
         {taxonomy ? <TaxonomyDisplay taxonomy={taxonomy} /> : null}
 

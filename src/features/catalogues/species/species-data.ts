@@ -1,0 +1,336 @@
+import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
+import { computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
+import type { ScopeType } from '~/features/catalogues/shared/scope-filters'
+import {
+  buildSpeciesTaxonomySummary,
+  mergeSpeciesTaxonomySummary,
+  type NightSummaryEntity,
+  type SpeciesTaxonomySummary,
+} from '~/stores/entities/night-summaries'
+import type { DetectionEntity } from '~/stores/entities/detections'
+import type { NightEntity } from '~/stores/entities/4.nights'
+
+export type SpeciesCatalogItem = {
+  speciesName: string
+  count: number
+  previewPairs: SpeciesPreviewPair[]
+}
+
+export type SpeciesPreviewPair = {
+  nightId: string
+  patchId: string
+}
+
+export type SpeciesTaxonSelection = {
+  rank: 'class' | 'order' | 'family' | 'genus' | 'species'
+  name: string
+}
+
+export type SpeciesUsageSummary = {
+  instanceCount: number
+  nightIds: string[]
+  projectIds: string[]
+  previewPairs: SpeciesPreviewPair[]
+}
+
+export function buildSpeciesScopeCounts(params: {
+  summaries?: Record<string, NightSummaryEntity>
+  projectId?: string
+  siteId?: string
+  deploymentId?: string
+  nightId?: string
+}) {
+  const { summaries, projectId, siteId, deploymentId, nightId } = params
+
+  return {
+    all: countSpeciesForScope({ usageScope: 'all', summaries }),
+    project: projectId ? countSpeciesForScope({ usageScope: 'project', summaries, projectId }) : 0,
+    site: projectId && siteId ? countSpeciesForScope({ usageScope: 'site', summaries, projectId, siteId }) : 0,
+    deployment: projectId && deploymentId ? countSpeciesForScope({ usageScope: 'deployment', summaries, projectId, deploymentId }) : 0,
+    night: projectId && deploymentId && nightId ? countSpeciesForScope({ usageScope: 'night', summaries, projectId, deploymentId, nightId }) : 0,
+  } satisfies Record<ScopeType, number>
+}
+
+export function buildSpeciesCatalogItems(params: {
+  summaries?: Record<string, NightSummaryEntity>
+  allowedNightIds?: Set<string>
+  detections?: Record<string, DetectionEntity>
+}) {
+  const { summaries, allowedNightIds, detections } = params
+  const counts = buildSpeciesCountIndex({ summaries, allowedNightIds })
+  const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedNightIds, detections })
+
+  return Object.entries(counts)
+    .map(([speciesName, count]) => ({
+      speciesName,
+      count,
+      previewPairs: previewPairsByName.get(speciesName) || [],
+    }))
+    .sort((a, b) => b.count - a.count || a.speciesName.localeCompare(b.speciesName))
+}
+
+export function buildSpeciesTaxonomyIndex(params: {
+  summaries?: Record<string, NightSummaryEntity>
+  allowedNightIds?: Set<string>
+  detections?: Record<string, DetectionEntity>
+}) {
+  const { summaries, allowedNightIds, detections } = params
+  const taxonomyByName = new Map<string, SpeciesTaxonomySummary>()
+
+  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+
+    for (const [speciesName, taxonomy] of Object.entries(summary?.speciesTaxonomyByName ?? {})) {
+      taxonomyByName.set(
+        speciesName,
+        mergeSpeciesTaxonomySummary({
+          existing: taxonomyByName.get(speciesName),
+          candidate: taxonomy,
+        }),
+      )
+    }
+  }
+
+  for (const detection of Object.values(detections ?? {})) {
+    if (!isCatalogSpeciesDetection(detection)) continue
+    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+
+    const speciesName = normalizeSpeciesName(detection?.taxon?.species)
+    if (!speciesName) continue
+
+    taxonomyByName.set(
+      speciesName,
+      mergeSpeciesTaxonomySummary({
+        existing: taxonomyByName.get(speciesName),
+        candidate: buildSpeciesTaxonomySummary({ taxon: detection?.taxon }),
+      }),
+    )
+  }
+
+  return taxonomyByName
+}
+
+export function buildSpeciesTaxonomyTree(params: {
+  speciesList: SpeciesCatalogItem[]
+  taxonomyByName: Map<string, SpeciesTaxonomySummary>
+}): TaxonomyNode[] {
+  const { speciesList, taxonomyByName } = params
+  const roots: TaxonomyNode[] = []
+  const unassignedLabel = 'Unassigned'
+
+  for (const speciesItem of speciesList) {
+    const taxonomy = taxonomyByName.get(speciesItem.speciesName)
+    const path = buildSpeciesTaxonomyPath({ taxonomy, unassignedLabel })
+    if (!path.length) continue
+
+    let currentLevel = roots
+    for (const segment of path) {
+      const node = ensureTaxonomyChild({ nodes: currentLevel, rank: segment.rank, name: segment.name })
+      if (!node.children) node.children = []
+      currentLevel = node.children
+    }
+  }
+
+  sortTaxonomyTree(roots)
+  return roots
+}
+
+export function filterSpeciesByTaxon(params: {
+  speciesList: SpeciesCatalogItem[]
+  selectedTaxon?: SpeciesTaxonSelection
+  taxonomyByName: Map<string, SpeciesTaxonomySummary>
+}) {
+  const { speciesList, selectedTaxon, taxonomyByName } = params
+  if (!selectedTaxon) return speciesList
+
+  return speciesList.filter((speciesItem) => {
+    const taxonomy = taxonomyByName.get(speciesItem.speciesName)
+    if (!taxonomy) return false
+
+    if (selectedTaxon.rank === 'class') return taxonomy.class === selectedTaxon.name
+    if (selectedTaxon.rank === 'order') return taxonomy.order === selectedTaxon.name
+    if (selectedTaxon.rank === 'family') return taxonomy.family === selectedTaxon.name
+    if (selectedTaxon.rank === 'genus') return taxonomy.genus === selectedTaxon.name
+    return taxonomy.species === selectedTaxon.name
+  })
+}
+
+export function buildSpeciesUsageSummary(params: {
+  speciesName: string
+  summaries?: Record<string, NightSummaryEntity>
+  nights?: Record<string, NightEntity>
+  allowedNightIds?: Set<string>
+  detections?: Record<string, DetectionEntity>
+}) {
+  const { speciesName, summaries, nights, allowedNightIds, detections } = params
+  const nightIds: string[] = []
+  const projectIds = new Set<string>()
+  const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedNightIds, detections })
+  let instanceCount = 0
+
+  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+
+    const count = summary?.speciesCounts?.[speciesName]
+    if (!count) continue
+
+    nightIds.push(nightId)
+    instanceCount += count
+
+    const projectId = nights?.[nightId]?.projectId
+    if (projectId) projectIds.add(projectId)
+  }
+
+  return {
+    instanceCount,
+    nightIds,
+    projectIds: Array.from(projectIds),
+    previewPairs: previewPairsByName.get(speciesName) || [],
+  }
+}
+
+function countSpeciesForScope(params: {
+  usageScope: ScopeType
+  summaries?: Record<string, NightSummaryEntity>
+  projectId?: string
+  siteId?: string
+  deploymentId?: string
+  nightId?: string
+}) {
+  const { usageScope, summaries, projectId, siteId, deploymentId, nightId } = params
+  const allowedNightIds = computeAllowedNightIds({ usageScope, summaries: summaries || {}, projectId, siteId, deploymentId, nightId })
+  const countIndex = buildSpeciesCountIndex({ summaries, allowedNightIds })
+  return Object.keys(countIndex).length
+}
+
+function buildSpeciesCountIndex(params: {
+  summaries?: Record<string, NightSummaryEntity>
+  allowedNightIds?: Set<string>
+}) {
+  const { summaries, allowedNightIds } = params
+  const counts: Record<string, number> = {}
+
+  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+
+    for (const [speciesName, value] of Object.entries(summary?.speciesCounts ?? {})) {
+      counts[speciesName] = (counts[speciesName] || 0) + (typeof value === 'number' ? value : 0)
+    }
+  }
+
+  return counts
+}
+
+function buildSpeciesPreviewPairsByName(params: {
+  summaries?: Record<string, NightSummaryEntity>
+  allowedNightIds?: Set<string>
+  detections?: Record<string, DetectionEntity>
+}) {
+  const { summaries, allowedNightIds, detections } = params
+  const previewPairsByName = new Map<string, SpeciesPreviewPair[]>()
+
+  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+
+    for (const [speciesName, patchId] of Object.entries(summary?.speciesPreviewPatchIds ?? {})) {
+      if (!patchId) continue
+      appendPreviewPair({
+        previewPairsByName,
+        speciesName,
+        previewPair: { nightId, patchId },
+      })
+    }
+  }
+
+  for (const detection of Object.values(detections ?? {})) {
+    if (!isCatalogSpeciesDetection(detection)) continue
+    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+
+    const speciesName = normalizeSpeciesName(detection?.taxon?.species)
+    const nightId = detection?.nightId
+    const patchId = detection?.patchId ? String(detection.patchId) : ''
+    if (!speciesName || !nightId || !patchId) continue
+
+    appendPreviewPair({
+      previewPairsByName,
+      speciesName,
+      previewPair: { nightId, patchId },
+    })
+  }
+
+  return previewPairsByName
+}
+
+function buildSpeciesTaxonomyPath(params: {
+  taxonomy?: SpeciesTaxonomySummary
+  unassignedLabel: string
+}) {
+  const { taxonomy, unassignedLabel } = params
+  if (!taxonomy) return []
+
+  const path: Array<{ rank: TaxonomyNode['rank']; name: string }> = []
+  const hasSpecies = !!taxonomy.species
+  const hasGenus = !!taxonomy.genus
+  const hasFamily = !!taxonomy.family
+  const hasOrder = !!taxonomy.order
+  const hasAnyLowerThanClass = hasOrder || hasFamily || hasGenus || hasSpecies
+
+  if (taxonomy.class) path.push({ rank: 'class', name: taxonomy.class })
+
+  const orderName = hasAnyLowerThanClass ? taxonomy.order || unassignedLabel : undefined
+  const familyName = hasFamily || hasGenus || hasSpecies ? taxonomy.family || unassignedLabel : undefined
+  const genusName = hasGenus || hasSpecies ? taxonomy.genus || unassignedLabel : undefined
+
+  if (orderName) path.push({ rank: 'order', name: orderName })
+  if (familyName) path.push({ rank: 'family', name: familyName })
+  if (genusName) path.push({ rank: 'genus', name: genusName })
+  if (taxonomy.species) path.push({ rank: 'species', name: taxonomy.species })
+
+  return path
+}
+
+function ensureTaxonomyChild(params: {
+  nodes: TaxonomyNode[]
+  rank: TaxonomyNode['rank']
+  name: string
+}) {
+  const { nodes, rank, name } = params
+  let node = nodes.find((entry) => entry.rank === rank && entry.name === name)
+  if (!node) {
+    node = { rank, name, count: 0, children: [] }
+    nodes.push(node)
+  }
+
+  node.count++
+  return node
+}
+
+function appendPreviewPair(params: {
+  previewPairsByName: Map<string, SpeciesPreviewPair[]>
+  speciesName: string
+  previewPair: SpeciesPreviewPair
+}) {
+  const { previewPairsByName, speciesName, previewPair } = params
+  const existing = previewPairsByName.get(speciesName) || []
+  const alreadyIncluded = existing.some((entry) => entry.nightId === previewPair.nightId && entry.patchId === previewPair.patchId)
+  if (alreadyIncluded) return
+
+  previewPairsByName.set(speciesName, [...existing, previewPair])
+}
+
+function sortTaxonomyTree(nodes: TaxonomyNode[]) {
+  nodes.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+  for (const node of nodes) {
+    sortTaxonomyTree(node.children || [])
+  }
+}
+
+function isCatalogSpeciesDetection(detection?: DetectionEntity) {
+  return detection?.detectedBy === 'user' && !detection?.morphospecies && !!normalizeSpeciesName(detection?.taxon?.species)
+}
+
+function normalizeSpeciesName(value?: string) {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || ''
+}
