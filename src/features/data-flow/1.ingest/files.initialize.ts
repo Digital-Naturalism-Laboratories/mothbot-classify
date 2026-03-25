@@ -2,11 +2,19 @@ import { directoryFilesStore, indexedFilesStore } from './files.state'
 import { buildNightIndexes } from './files.index'
 import { ingestSpeciesListsFromFiles } from './species.ingest'
 import { loadProjectSpeciesSelection } from '~/stores/species/project-species-list'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import {
+  buildMorphoTaxonomySummary,
+  mergeMorphoTaxonomySummary,
+  nightSummariesStore,
+  type MorphoTaxonomySummary,
+} from '~/stores/entities/night-summaries'
 import { loadMorphoCovers } from '~/features/data-flow/3.persist/covers'
 import { loadMorphoLinks } from '~/features/data-flow/3.persist/links'
 import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
 import { normalizeLegacyNightId } from './ingest-paths'
+import { parseUserDetectionJsonSafely } from './ingest-json'
+import { buildTaxonFromShape, extractTaxonomyFromShape } from '~/models/taxonomy/extract'
+import { extractMorphospeciesFromShape, normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 
 type IndexedEntry = { file?: File; handle?: unknown; path: string; name: string; size: number }
 
@@ -17,6 +25,7 @@ type NightSummary = {
   updatedAt?: number
   morphoCounts?: Record<string, number>
   morphoPreviewPatchIds?: Record<string, string>
+  morphoTaxonomyByKey?: Record<string, MorphoTaxonomySummary>
 }
 
 type SummarySource = 'placeholder' | 'legacy' | 'canonical'
@@ -49,6 +58,8 @@ export function preloadNightSummariesFromIndexed(
     const initialStore = nightSummariesStore.get() || {}
     const placeholdersByNightId: Record<string, NightSummary> = {}
     const sourceByNightId: Record<string, SummarySource> = {}
+    const userJsonEntriesByNightId = groupUserJsonEntriesByNightId(indexed)
+
     for (const it of indexed) {
       const lower = (it?.name ?? '').toLowerCase()
       if (lower !== 'night_summary.json') continue
@@ -67,7 +78,8 @@ export function preloadNightSummariesFromIndexed(
         .then((txt) => JSON.parse(txt))
         .then((json) => {
           const rawNightId = typeof json?.nightId === 'string' ? json.nightId : nightId
-          const sourceNightId = normalizeLegacyNightId(rawNightId)
+          const normalizedRawNightId = normalizeLegacyNightId(rawNightId)
+          const sourceNightId = normalizedRawNightId === nightId ? normalizedRawNightId : nightId
           const sourceType: 'legacy' | 'canonical' = isCanonicalNightId(rawNightId) ? 'canonical' : 'legacy'
           const s: NightSummary = {
             nightId: sourceNightId,
@@ -79,6 +91,10 @@ export function preloadNightSummariesFromIndexed(
             morphoPreviewPatchIds:
               typeof json?.morphoPreviewPatchIds === 'object' && json?.morphoPreviewPatchIds
                 ? (json.morphoPreviewPatchIds as Record<string, string>)
+                : undefined,
+            morphoTaxonomyByKey:
+              typeof json?.morphoTaxonomyByKey === 'object' && json?.morphoTaxonomyByKey
+                ? (json.morphoTaxonomyByKey as Record<string, MorphoTaxonomySummary>)
                 : undefined,
           }
           const current = nightSummariesStore.get() || {}
@@ -93,6 +109,13 @@ export function preloadNightSummariesFromIndexed(
           if (!shouldReplace) return
           sourceByNightId[sourceNightId] = sourceType
           nightSummariesStore.set({ ...current, [sourceNightId]: s })
+
+          if (!hasMorphoTaxonomySummary(s)) {
+            const userEntries = userJsonEntriesByNightId[sourceNightId] || []
+            if (userEntries.length > 0) {
+              void backfillMorphoTaxonomyForNight({ nightId: sourceNightId, entries: userEntries })
+            }
+          }
         })
         .catch(() => {})
     }
@@ -103,6 +126,72 @@ export function preloadNightSummariesFromIndexed(
   } catch {
     return
   }
+}
+
+function groupUserJsonEntriesByNightId(indexed: IndexedEntry[]) {
+  const grouped: Record<string, IndexedEntry[]> = {}
+  for (const entry of indexed) {
+    const lower = (entry?.name ?? '').toLowerCase()
+    if (!lower.endsWith('_identified.json')) continue
+    const pathNorm = (entry?.path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
+    const parts = pathNorm.split('/').filter(Boolean)
+    if (parts.length < 4) continue
+    const nightId = normalizeLegacyNightId(parts.slice(0, -1).join('/'))
+    if (!nightId) continue
+    if (!grouped[nightId]) grouped[nightId] = []
+    grouped[nightId].push(entry)
+  }
+  return grouped
+}
+
+async function backfillMorphoTaxonomyForNight(params: {
+  nightId: string
+  entries: IndexedEntry[]
+}) {
+  const { nightId, entries } = params
+
+  const morphoCounts: Record<string, number> = {}
+  const morphoPreviewPatchIds: Record<string, string> = {}
+  const morphoTaxonomyByKey: Record<string, MorphoTaxonomySummary> = {}
+  for (const entry of entries) {
+    const parsedUser = await parseUserDetectionJsonSafely({ file: entry as any })
+    if (!parsedUser?.shapes?.length) continue
+
+    for (const shape of parsedUser.shapes) {
+      const isError = shape?.is_error === true || String(shape?.label || '').toUpperCase() === 'ERROR'
+      const taxonomy = extractTaxonomyFromShape({ shape })
+      const taxon = buildTaxonFromShape({ shape, taxonomy, isError })
+      const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError })
+      const key = normalizeMorphoKey(morphospecies)
+      if (!key) continue
+      const patchId = extractPatchIdFromShape(shape)
+
+      morphoCounts[key] = (morphoCounts[key] || 0) + 1
+      if (!morphoPreviewPatchIds[key] && patchId) morphoPreviewPatchIds[key] = patchId
+
+      morphoTaxonomyByKey[key] = mergeMorphoTaxonomySummary({
+        existing: morphoTaxonomyByKey[key],
+        candidate: buildMorphoTaxonomySummary({ taxon, morphospecies }),
+      })
+    }
+  }
+
+  if (Object.keys(morphoCounts).length === 0) return
+
+  const current = nightSummariesStore.get() || {}
+  const existing = current[nightId]
+  if (!existing) return
+  if (hasCompleteMorphoSummary(existing)) return
+
+  nightSummariesStore.set({
+    ...current,
+    [nightId]: {
+      ...existing,
+      morphoCounts: hasMorphoCounts(existing) ? existing.morphoCounts : morphoCounts,
+      morphoPreviewPatchIds: hasMorphoPreviewPatchIds(existing) ? existing.morphoPreviewPatchIds : morphoPreviewPatchIds,
+      morphoTaxonomyByKey,
+    },
+  })
 }
 
 export function preloadMorphoLinksFromIndexed(indexed: IndexedEntry[]) {
@@ -162,6 +251,30 @@ function shouldReplaceSummary(params: {
   if (incomingSource === existingSource) return true
   if (incomingSource === 'canonical') return true
   return existingSource === 'placeholder'
+}
+
+function hasMorphoTaxonomySummary(summary?: NightSummary) {
+  return !!summary?.morphoTaxonomyByKey && Object.keys(summary.morphoTaxonomyByKey).length > 0
+}
+
+function hasMorphoCounts(summary?: NightSummary) {
+  return !!summary?.morphoCounts && Object.keys(summary.morphoCounts).length > 0
+}
+
+function hasMorphoPreviewPatchIds(summary?: NightSummary) {
+  return !!summary?.morphoPreviewPatchIds && Object.keys(summary.morphoPreviewPatchIds).length > 0
+}
+
+function hasCompleteMorphoSummary(summary?: NightSummary) {
+  return hasMorphoCounts(summary) && hasMorphoPreviewPatchIds(summary) && hasMorphoTaxonomySummary(summary)
+}
+
+function extractPatchIdFromShape(shape: any) {
+  const patchPath = typeof shape?.patch_path === 'string' ? shape.patch_path : ''
+  const normalized = patchPath.replaceAll('\\', '/').trim()
+  if (!normalized) return ''
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? ''
 }
 
 function isCanonicalNightId(nightId: string) {

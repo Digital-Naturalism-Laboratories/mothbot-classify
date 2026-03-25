@@ -83,6 +83,73 @@ describe('preloadNightSummariesFromIndexed', () => {
     expect(summary?.totalDetections).toBe(15)
     expect(summary?.totalIdentified).toBe(6)
   })
+
+  it('prefers the summary file path when embedded nightId is mismatched', async () => {
+    preloadNightSummariesFromIndexed([
+      makeSummaryEntry({
+        path: 'Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-28/2025-01-27/night_summary.json',
+        summary: {
+          nightId: 'Projects/Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-26/2025-01-26',
+          totalDetections: 1100,
+          totalIdentified: 1100,
+          morphoCounts: { forcipomyia1: 264 },
+        },
+      }),
+    ])
+
+    await waitForAsyncReads()
+
+    const correctSummary =
+      nightSummariesStore.get()['Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-28/2025-01-27']
+    const wrongSummary =
+      nightSummariesStore.get()['Projects/Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-26/2025-01-26']
+
+    expect(correctSummary?.totalDetections).toBe(1100)
+    expect(correctSummary?.morphoCounts).toEqual({ forcipomyia1: 264 })
+    expect(wrongSummary).toBeUndefined()
+  })
+
+  it('backfills morpho taxonomy from identified json when older summaries do not include it', async () => {
+    preloadNightSummariesFromIndexed([
+      makeSummaryEntry({
+        path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/night_summary.json',
+        summary: {
+          nightId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
+          totalDetections: 12,
+          totalIdentified: 2,
+        },
+      }),
+      makeIdentifiedEntry({
+        path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/photo_identified.json',
+        shapes: [
+          {
+            patch_path: 'patches/netelia_patch.jpg',
+            label: 'netelia1',
+            morphospecies: 'netelia1',
+            class: 'Insecta',
+            order: 'Hymenoptera',
+            family: 'Ichneumonidae',
+            genus: 'Netelia',
+            identifier_human: 'BR',
+            timestamp_ID_human: 123,
+          },
+        ],
+      }),
+    ])
+
+    await waitForAsyncReads()
+
+    const summary = nightSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
+    expect(summary?.morphoCounts).toEqual({ netelia1: 1 })
+    expect(summary?.morphoPreviewPatchIds).toEqual({ netelia1: 'netelia_patch.jpg' })
+    expect(summary?.morphoTaxonomyByKey?.netelia1).toMatchObject({
+      class: 'Insecta',
+      order: 'Hymenoptera',
+      family: 'Ichneumonidae',
+      genus: 'Netelia',
+      morphospecies: 'netelia1',
+    })
+  })
 })
 
 function makeSummaryEntry(params: { path: string; summary: Record<string, unknown> }) {
@@ -94,6 +161,18 @@ function makeSummaryEntry(params: { path: string; summary: Record<string, unknow
     size: 1,
     file: {
       text: async () => JSON.stringify(summary),
+    } as any,
+  }
+}
+
+function makeIdentifiedEntry(params: { path: string; shapes: Record<string, unknown>[] }) {
+  const { path, shapes } = params
+  return {
+    path,
+    name: 'photo_identified.json',
+    size: 1,
+    file: {
+      text: async () => JSON.stringify({ version: '1', photoBase: 'photo', shapes }),
     } as any,
   }
 }

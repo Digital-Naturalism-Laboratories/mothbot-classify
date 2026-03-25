@@ -3,7 +3,7 @@ import { useStore } from '@nanostores/react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { nightsStore } from '~/stores/entities/4.nights'
-import { detectionsStore, findDetectionsByMorphoKey, bulkIdentifyMorphospecies } from '~/stores/entities/detections'
+import { bulkIdentifyMorphospecies, detectionsStore, findMorphoUsageByKey } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { TaxonomyDisplay, UsageStatsDisplay, ProjectsListDisplay, NightsListDisplay } from '~/features/catalogues/shared/details-common'
+import { buildMorphoBulkIdentifyConfirmText, buildMorphoBulkIdentifySuccessText } from './morpho-bulk-identify-copy'
 import { buildFallbackPreviewPairs, buildSummaryPreviewPairs, selectMorphoPreviewPairs } from './morpho-preview'
 
 export type MorphoSpeciesDetailsDialogProps = PropsWithChildren<{
@@ -31,9 +32,9 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
   const nights = useStore(nightsStore)
   const covers = useStore(morphoCoversStore)
   const allDetections = useStore(detectionsStore)
+  const normalizedMorphoKey = useMemo(() => normalizeMorphoKey(morphoKey), [morphoKey])
 
   const [identifyDialogOpen, setIdentifyDialogOpen] = useState(false)
-  const [pendingTaxon, setPendingTaxon] = useState<{ label: string; taxon?: TaxonRecord } | null>(null)
   const { setConfirmDialog } = useConfirmDialog()
 
   const usage = useMemo(() => {
@@ -43,35 +44,34 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     const fallbackPreviewPairs = buildFallbackPreviewPairs({ morphoKey, detections: allDetections })
     const previewPairs = selectMorphoPreviewPairs({ summaryPreviewPairs, fallbackPreviewPairs })
 
-    for (const [nightId, s] of Object.entries(summaries ?? {})) {
-      const count = (s as any)?.morphoCounts?.[morphoKey]
+    for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+      const count = summary?.morphoCounts?.[normalizedMorphoKey]
       if (!count) continue
       nightIds.push(nightId)
-      const projectId = (nights?.[nightId] as any)?.projectId
+      const projectId = nights?.[nightId]?.projectId
       if (projectId) projectIds.add(projectId)
     }
     return { nightIds, projectIds: Array.from(projectIds), previewPairs }
-  }, [summaries, nights, morphoKey, covers, allDetections])
+  }, [summaries, nights, morphoKey, normalizedMorphoKey, covers, allDetections])
 
   const taxonomy = useMemo(() => {
     const morphoDetections = Object.values(allDetections ?? {}).filter((d) => {
       const morpho = typeof d?.morphospecies === 'string' ? d.morphospecies : ''
-      return normalizeMorphoKey(morpho) === normalizeMorphoKey(morphoKey) && d?.detectedBy === 'user'
+      return normalizeMorphoKey(morpho) === normalizedMorphoKey && d?.detectedBy === 'user'
     })
 
     if (!morphoDetections.length) return null
 
     const aggregatedTaxonomy = aggregateTaxonomyFromDetections({ detections: morphoDetections })
     return aggregatedTaxonomy
-  }, [allDetections, morphoKey])
+  }, [allDetections, normalizedMorphoKey])
 
   const previewFile = usePreviewFile({ previewPairs: usage.previewPairs })
   const previewUrl = useObjectUrl(previewFile)
 
-  const matchingInfo = useMemo(() => {
-    const result = findDetectionsByMorphoKey({ morphoKey })
-    return result
-  }, [morphoKey, allDetections])
+  const usageSummary = useMemo(() => {
+    return findMorphoUsageByKey({ morphoKey })
+  }, [morphoKey, allDetections, summaries])
 
   const primaryProjectId = useMemo(() => {
     return usage.projectIds?.[0]
@@ -83,11 +83,9 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
       return
     }
 
-    setPendingTaxon({ label, taxon })
-
-    const { detectionIds, nightIds } = matchingInfo
-    const count = detectionIds.length
-    const nightCount = nightIds.size
+    const count = usageSummary.instanceCount
+    const nightCount = usageSummary.nightIds.size
+    const projectCount = usageSummary.projectIds.size
 
     if (count === 0) {
       toast.warning('No instances of this morphospecies found')
@@ -95,32 +93,26 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     }
 
     setConfirmDialog({
-      content: `Update ${count} instance${count !== 1 ? 's' : ''} across ${nightCount} night${nightCount !== 1 ? 's' : ''}?`,
+      content: buildMorphoBulkIdentifyConfirmText({ count, nightCount, projectCount }),
       confirmText: 'Update All',
       onConfirm: () => {
-        executeBulkIdentification({ taxon })
+        void executeBulkIdentification({ taxon })
       },
       closeAfterConfirm: true,
     })
   }
 
-  function executeBulkIdentification(params: { taxon: TaxonRecord }) {
+  async function executeBulkIdentification(params: { taxon: TaxonRecord }) {
     const { taxon } = params
 
-    const result = bulkIdentifyMorphospecies({ morphoKey, taxon })
+    const result = await bulkIdentifyMorphospecies({ morphoKey, taxon })
 
     if (result.updatedCount > 0) {
-      toast.success(
-        `✅ Updated ${result.updatedCount} instance${result.updatedCount !== 1 ? 's' : ''} across ${result.nightCount} night${
-          result.nightCount !== 1 ? 's' : ''
-        }`,
-      )
+      toast.success(buildMorphoBulkIdentifySuccessText({ count: result.updatedCount, nightCount: result.nightCount, projectCount: result.projectCount }))
       onOpenChange?.(false)
     } else {
       toast.warning('No instances were updated')
     }
-
-    setPendingTaxon(null)
   }
 
   return (
@@ -142,7 +134,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
         <UsageStatsDisplay
           projectCount={usage.projectIds.length}
           nightCount={usage.nightIds.length}
-          instanceCount={matchingInfo.detectionIds.length}
+          instanceCount={usageSummary.instanceCount}
         />
 
         {taxonomy ? <TaxonomyDisplay taxonomy={taxonomy} /> : null}

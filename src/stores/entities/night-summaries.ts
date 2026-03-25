@@ -1,6 +1,16 @@
 import { atom } from 'nanostores'
 import type { DetectionEntity } from './detections'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
+import type { TaxonRecord } from '~/models/taxonomy/types'
+
+export type MorphoTaxonomySummary = {
+  class?: string
+  order?: string
+  family?: string
+  genus?: string
+  species?: string
+  morphospecies?: string
+}
 
 export type NightSummaryEntity = {
   nightId: string
@@ -11,6 +21,8 @@ export type NightSummaryEntity = {
   morphoCounts?: Record<string, number>
   // Optional preview patch ids per morpho key for quick image lookup
   morphoPreviewPatchIds?: Record<string, string>
+  // Optional taxonomy context per morpho key for project-wide catalog filtering
+  morphoTaxonomyByKey?: Record<string, MorphoTaxonomySummary>
 }
 
 export const nightSummariesStore = atom<Record<string, NightSummaryEntity>>({})
@@ -27,6 +39,7 @@ export function buildNightSummary(params: { nightId: string; detections: Detecti
 
   const morphoCounts: Record<string, number> = {}
   const morphoPreviewPatchIds: Record<string, string> = {}
+  const morphoTaxonomyByKey: Record<string, MorphoTaxonomySummary> = {}
 
   for (const d of detections) {
     const isUser = d?.detectedBy === 'user'
@@ -35,6 +48,10 @@ export function buildNightSummary(params: { nightId: string; detections: Detecti
     if (!key) continue
     morphoCounts[key] = (morphoCounts[key] || 0) + 1
     if (!morphoPreviewPatchIds[key] && d?.patchId) morphoPreviewPatchIds[key] = String(d.patchId)
+    morphoTaxonomyByKey[key] = mergeMorphoTaxonomySummary({
+      existing: morphoTaxonomyByKey[key],
+      candidate: buildMorphoTaxonomySummary({ taxon: d?.taxon, morphospecies: morpho }),
+    })
   }
 
   return {
@@ -44,5 +61,43 @@ export function buildNightSummary(params: { nightId: string; detections: Detecti
     updatedAt: Date.now(),
     morphoCounts,
     morphoPreviewPatchIds,
+    morphoTaxonomyByKey,
   }
+}
+
+export function buildMorphoTaxonomySummary(params: {
+  taxon?: Partial<TaxonRecord>
+  morphospecies?: string
+}): MorphoTaxonomySummary {
+  const { taxon, morphospecies } = params
+
+  return {
+    class: cleanMorphoTaxonomyValue(taxon?.class),
+    order: cleanMorphoTaxonomyValue(taxon?.order),
+    family: cleanMorphoTaxonomyValue(taxon?.family),
+    genus: cleanMorphoTaxonomyValue(taxon?.genus),
+    species: cleanMorphoTaxonomyValue(taxon?.species),
+    morphospecies: cleanMorphoTaxonomyValue(morphospecies),
+  }
+}
+
+export function mergeMorphoTaxonomySummary(params: {
+  existing?: MorphoTaxonomySummary
+  candidate?: MorphoTaxonomySummary
+}): MorphoTaxonomySummary {
+  const { existing, candidate } = params
+
+  return {
+    class: existing?.class || candidate?.class,
+    order: existing?.order || candidate?.order,
+    family: existing?.family || candidate?.family,
+    genus: existing?.genus || candidate?.genus,
+    species: existing?.species || candidate?.species,
+    morphospecies: existing?.morphospecies || candidate?.morphospecies,
+  }
+}
+
+function cleanMorphoTaxonomyValue(value?: string) {
+  const trimmed = (value ?? '').trim()
+  return trimmed || undefined
 }

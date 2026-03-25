@@ -13,6 +13,9 @@ import {
 } from '~/models/detection-shapes'
 import { toast } from 'sonner'
 import { scheduleSaveForNight } from '~/features/data-flow/3.persist/detection-persistence'
+import { ensureDetectionsLoadedForNight } from '~/features/data-flow/1.ingest/night-detection-loader'
+import { clearMorphoCover } from '~/features/data-flow/3.persist/covers'
+import { setMorphoLink } from '~/features/data-flow/3.persist/links'
 import { buildNightSummary } from './night-summaries'
 import { hasTaxonFields } from '~/models/taxonomy/validate'
 import { getProjectIdFromNightId } from '~/utils/paths'
@@ -92,19 +95,13 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
   if (!hasTaxon && !trimmed && !isError) return
 
   const current = detectionsStore.get() || {}
-  const selectionByProject = projectSpeciesSelectionStore.get() || {}
-  const speciesLists = speciesListsStore.get() || {}
   const updated: Record<string, DetectionEntity> = { ...current }
 
   for (const id of detectionIds) {
     const existing = current?.[id]
     if (!existing) continue
 
-    const projectId = getProjectIdFromNightId(existing?.nightId)
-    const speciesListId = projectId ? selectionByProject?.[projectId] : undefined
-    const speciesListDOI = speciesListId ? (speciesLists?.[speciesListId]?.doi as string | undefined) : undefined
-
-    const context = { speciesListId, speciesListDOI }
+    const context = getSpeciesListContextForDetection({ detection: existing })
 
     if (isError) {
       updated[id] = updateDetectionAsError({ existing, ...context })
@@ -262,13 +259,11 @@ function updateNightSummariesInMemory(params: { nightIds: Set<string>; detection
   const { nightIds, detections } = params
 
   if (!nightIds || nightIds.size === 0) return
+  const detectionsByNight = groupDetectionsByNight({ detections })
 
   for (const nightId of nightIds) {
     if (!nightId) continue
-
-    const detectionsForNight = Object.values(detections || {}).filter((d) => d.nightId === nightId)
-
-    const summary = buildNightSummary({ nightId, detections: detectionsForNight })
+    const summary = buildNightSummary({ nightId, detections: detectionsByNight[nightId] || [] })
 
     const currentSummaries = nightSummariesStore.get() || {}
     nightSummariesStore.set({ ...currentSummaries, [nightId]: summary })
@@ -295,39 +290,83 @@ export function findDetectionsByMorphoKey(params: { morphoKey: string }) {
   return { detectionIds, nightIds }
 }
 
-export function bulkIdentifyMorphospecies(params: { morphoKey: string; taxon: TaxonRecord }) {
+export function findMorphoUsageByKey(params: { morphoKey: string }) {
+  const { morphoKey } = params
+  const normalizedKey = normalizeMorphoKey(morphoKey)
+  const summaries = nightSummariesStore.get() || {}
+  const detections = detectionsStore.get() || {}
+  const nightIds = new Set<string>()
+  const projectIds = new Set<string>()
+  const countedNightIds = new Set<string>()
+  let instanceCount = 0
+
+  for (const [nightId, summary] of Object.entries(summaries)) {
+    const count = summary?.morphoCounts?.[normalizedKey]
+    if (!count) continue
+    nightIds.add(nightId)
+    countedNightIds.add(nightId)
+    instanceCount += count
+
+    const projectId = getProjectIdFromNightId(nightId)
+    if (projectId) projectIds.add(projectId)
+  }
+
+  for (const detection of Object.values(detections)) {
+    if (detection?.detectedBy !== 'user') continue
+    if (normalizeMorphoKey(detection?.morphospecies ?? '') !== normalizedKey) continue
+
+    const nightId = detection?.nightId
+    if (!nightId) continue
+
+    nightIds.add(nightId)
+
+    const projectId = getProjectIdFromNightId(nightId)
+    if (projectId) projectIds.add(projectId)
+
+    if (countedNightIds.has(nightId)) continue
+    instanceCount += 1
+  }
+
+  return {
+    morphoKey: normalizedKey,
+    instanceCount,
+    nightIds,
+    projectIds,
+  }
+}
+
+export async function bulkIdentifyMorphospecies(params: { morphoKey: string; taxon: TaxonRecord }) {
   const { morphoKey, taxon } = params
-  const { detectionIds } = findDetectionsByMorphoKey({ morphoKey })
+  const usage = findMorphoUsageByKey({ morphoKey })
+  const nightIds = Array.from(usage.nightIds)
 
-  if (detectionIds.length === 0) {
-    return { updatedCount: 0, nightCount: 0 }
+  if (nightIds.length === 0) {
+    return { updatedCount: 0, nightCount: 0, projectCount: 0 }
   }
 
-  const current = detectionsStore.get() || {}
-  const selectionByProject = projectSpeciesSelectionStore.get() || {}
-  const speciesLists = speciesListsStore.get() || {}
-  const updated: Record<string, DetectionEntity> = { ...current }
-  const touchedNightIds = new Set<string>()
+  let updatedCount = 0
 
-  for (const id of detectionIds) {
-    const existing = current?.[id]
-    if (!existing) continue
+  for (const nightId of nightIds) {
+    await ensureDetectionsLoadedForNight({ nightId })
 
-    const projectId = getProjectIdFromNightId(existing?.nightId)
-    const speciesListId = projectId ? selectionByProject?.[projectId] : undefined
-    const speciesListDOI = speciesListId ? (speciesLists?.[speciesListId]?.doi as string | undefined) : undefined
+    const detectionIds = findDetectionIdsByMorphoKeyInNight({ morphoKey, nightId })
+    if (!detectionIds.length) continue
 
-    const context = { speciesListId, speciesListDOI }
-
-    updated[id] = updateDetectionWithTaxon({ existing, taxon, ...context })
-
-    if (existing?.nightId) touchedNightIds.add(existing.nightId)
+    const result = applyTaxonToDetectionIds({ detectionIds, taxon })
+    updatedCount += result.updatedCount
   }
 
-  detectionsStore.set(updated)
-  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+  const remainingUsage = findMorphoUsageByKey({ morphoKey })
+  if (remainingUsage.instanceCount === 0) {
+    await setMorphoLink({ morphoKey, url: '' })
+    await clearMorphoCover({ morphoKey })
+  }
 
-  return { updatedCount: detectionIds.length, nightCount: touchedNightIds.size }
+  return {
+    updatedCount,
+    nightCount: usage.nightIds.size,
+    projectCount: usage.projectIds.size,
+  }
 }
 
 function isMorphospeciesLabelWithTaxon(params: { label: string; taxon: TaxonRecord }) {
@@ -341,4 +380,65 @@ function isMorphospeciesLabelWithTaxon(params: { label: string; taxon: TaxonReco
   if (!normalizedTaxonLabel) return false
 
   return normalizedLabel !== normalizedTaxonLabel
+}
+
+function findDetectionIdsByMorphoKeyInNight(params: { morphoKey: string; nightId: string }) {
+  const { morphoKey, nightId } = params
+  const normalizedKey = normalizeMorphoKey(morphoKey)
+  const detections = detectionsStore.get() || {}
+  const detectionIds: string[] = []
+
+  for (const [id, detection] of Object.entries(detections)) {
+    if (detection?.nightId !== nightId) continue
+    if (detection?.detectedBy !== 'user') continue
+    if (normalizeMorphoKey(detection?.morphospecies ?? '') !== normalizedKey) continue
+    detectionIds.push(id)
+  }
+
+  return detectionIds
+}
+
+function applyTaxonToDetectionIds(params: { detectionIds: string[]; taxon: TaxonRecord }) {
+  const { detectionIds, taxon } = params
+  const current = detectionsStore.get() || {}
+  const updated: Record<string, DetectionEntity> = { ...current }
+  let updatedCount = 0
+
+  for (const id of detectionIds) {
+    const existing = current?.[id]
+    if (!existing) continue
+    const context = getSpeciesListContextForDetection({ detection: existing })
+    updated[id] = updateDetectionWithTaxon({ existing, taxon, ...context })
+    updatedCount += 1
+  }
+
+  detectionsStore.set(updated)
+  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+
+  return { updatedCount }
+}
+
+function groupDetectionsByNight(params: { detections: Record<string, DetectionEntity> }) {
+  const { detections } = params
+  const grouped: Record<string, DetectionEntity[]> = {}
+
+  for (const detection of Object.values(detections || {})) {
+    const nightId = detection?.nightId
+    if (!nightId) continue
+    if (!grouped[nightId]) grouped[nightId] = []
+    grouped[nightId].push(detection)
+  }
+
+  return grouped
+}
+
+function getSpeciesListContextForDetection(params: { detection: DetectionEntity }) {
+  const { detection } = params
+  const selectionByProject = projectSpeciesSelectionStore.get() || {}
+  const speciesLists = speciesListsStore.get() || {}
+  const projectId = getProjectIdFromNightId(detection?.nightId)
+  const speciesListId = projectId ? selectionByProject?.[projectId] : undefined
+  const speciesListDOI = speciesListId ? (speciesLists?.[speciesListId]?.doi as string | undefined) : undefined
+
+  return { speciesListId, speciesListDOI }
 }

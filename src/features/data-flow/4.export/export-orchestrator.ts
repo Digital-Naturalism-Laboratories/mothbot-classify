@@ -4,8 +4,7 @@ import type { NightEntity } from '~/stores/entities/4.nights'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
-import { ingestDetectionsForNight } from '~/features/data-flow/1.ingest/ingest'
-import { patchFileMapByNightStore, indexedFilesStore } from '~/features/data-flow/1.ingest/files.state'
+import { ensureDetectionsLoadedForNight } from '~/features/data-flow/1.ingest/night-detection-loader'
 import { setNightExporting, clearNightExporting } from './export.state'
 
 type ExportScope = 'project' | 'site' | 'deployment' | 'night'
@@ -97,24 +96,6 @@ async function processNightsForExport(params: {
 
   console.log(`✅ exportScope${label}: complete`, { scope, id, nightCount: nightIds.length, processedCount, failedCount })
   return { processedCount, failedCount }
-}
-
-async function ensureDetectionsLoadedForNight(params: { nightId: string }) {
-  const { nightId } = params
-  const detections = detectionsStore.get() || {}
-
-  const hasDetections = Object.values(detections).some((d: any) => d?.nightId === nightId)
-  if (hasDetections) return
-
-  console.log('🌀 ensureDetectionsLoadedForNight: loading', { nightId })
-
-  const indexedFiles = indexedFilesStore.get() || []
-  const patchMapByNight = patchFileMapByNightStore.get() || {}
-  const patchMap = patchMapByNight[nightId]
-
-  await ingestDetectionsForNight({ files: indexedFiles, nightId, patchMap })
-
-  console.log('✅ ensureDetectionsLoadedForNight: complete', { nightId })
 }
 
 function clearDetectionsForNight(params: { nightId: string }) {

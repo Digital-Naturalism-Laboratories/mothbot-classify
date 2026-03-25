@@ -61,6 +61,32 @@ export async function setMorphoCover(params: { morphoKey?: string; label?: strin
   }
 }
 
+export async function clearMorphoCover(params: { morphoKey?: string; label?: string }) {
+  const keySource = (params?.morphoKey || params?.label || '').trim()
+  const morphoKey = normalizeMorphoKey(keySource)
+
+  if (!morphoKey) return
+
+  const current = morphoCoversStore.get() || {}
+  if (!(morphoKey in current)) return
+
+  const next = { ...current }
+  delete next[morphoKey]
+  morphoCoversStore.set(next)
+
+  try {
+    if (!idbPut) {
+      const mod = await import('~/utils/index-db')
+      idbPut = mod.idbPut
+    }
+    if (!idbPut) return
+
+    await idbPut(DB_NAME, IDB_STORE, 'covers', next)
+  } catch {
+    console.error('Error clearing morpho cover')
+  }
+}
+
 function normalizeMorphoCovers(covers: Record<string, MorphoCover>) {
   const normalized: Record<string, MorphoCover> = {}
   for (const [key, value] of Object.entries(covers ?? {})) {
