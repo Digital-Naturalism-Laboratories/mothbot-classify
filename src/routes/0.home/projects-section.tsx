@@ -21,7 +21,7 @@ import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
 import classed from '~/styles/classed'
 import { InlineProgress } from './inline-progress'
-import { ItemActions } from './item-actions'
+import { ExportDwCDropdown, ItemActions } from './item-actions'
 import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
 
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
@@ -226,10 +226,10 @@ function ProjectItem(props: ProjectItemProps) {
         >
           Morphospecies
         </Button>
+        <ExportDwCDropdown scope='project' id={project.id} nights={nights} menuAlign='start' />
 
         <div className='ml-auto flex items-center gap-12'>
           <InlineProgress total={prog.total} identified={prog.identified} />
-          <ItemActions scope={'project'} id={project.id} nights={nights} />
         </div>
       </div>
       <SpeciesCatalogDialog
@@ -444,7 +444,7 @@ function NightsList(props: NightsListProps) {
         const isExporting = exportingNightIds.has(night.id)
         return (
           <Li key={night.id} className='group/night bg-stone-50 px-0 '>
-            <div className='flex items-center gap-12 '>
+            <div className='flex h-32 items-center gap-12 px-6'>
               <Link
                 to={'/projects/$projectId/deployments/$deploymentId/nights/$nightId'}
                 params={{
@@ -452,22 +452,21 @@ function NightsList(props: NightsListProps) {
                   deploymentId: lastPathSegment({ id: deploymentId }),
                   nightId: lastPathSegment({ id: night.id }),
                 }}
-                className='flex h-32 items-center gap-12 flex-1 px-6 hover:bg-blue-100 rounded-l-md cursor-pointer'
+                className='flex min-w-0 flex-1 cursor-pointer items-center gap-12 rounded-l-md py-0 hover:bg-blue-100'
               >
-                <span className='text-sm text-blue-700'>{night.name}</span>
-                {isExporting && (
-                  <div className='flex items-center gap-4 text-sm text-neutral-500'>
+                <span className='truncate text-sm text-blue-700'>{night.name}</span>
+                {isExporting ? (
+                  <div className='flex shrink-0 items-center gap-4 text-sm text-neutral-500'>
                     <Loader size={14} />
                     <span>exporting</span>
                   </div>
-                )}
-                <div className='ml-auto'>
-                  <InlineProgress total={prog.total} identified={prog.identified} />
-                </div>
+                ) : null}
               </Link>
-
-              <div onClick={(e) => e.stopPropagation()} className='flex items-center'>
-                <ItemActions scope={'night'} id={night.id} nights={nights} />
+              <div className='flex shrink-0 items-center gap-12'>
+                <InlineProgress total={prog.total} identified={prog.identified} />
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ItemActions scope={'night'} id={night.id} nights={nights} />
+                </div>
               </div>
             </div>
           </Li>
