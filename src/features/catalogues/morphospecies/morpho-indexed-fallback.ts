@@ -69,7 +69,7 @@ export function buildMorphoIndexedFallback(params: { shapesByNight: Record<strin
       const taxonomy = extractTaxonomyFromShape({ shape })
       const taxon = buildTaxonFromShape({ shape, taxonomy, isError })
       const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError })
-      const key = normalizeMorphoKey(morphospecies)
+      const key = normalizeMorphoKey(morphospecies ?? '')
       if (!key) continue
       const patchId = extractPatchIdFromShape(shape)
 

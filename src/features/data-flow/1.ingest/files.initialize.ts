@@ -172,7 +172,7 @@ async function backfillTaxonomySummariesForNight(params: {
       const taxonomy = extractTaxonomyFromShape({ shape })
       const taxon = buildTaxonFromShape({ shape, taxonomy, isError })
       const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError })
-      const key = normalizeMorphoKey(morphospecies)
+      const key = normalizeMorphoKey(morphospecies ?? '')
       const patchId = extractPatchIdFromShape(shape)
 
       const speciesName = !key ? String(taxon?.species ?? '').trim() : ''
