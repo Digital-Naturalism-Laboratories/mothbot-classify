@@ -38,10 +38,16 @@ export type BotDetectionJson = {
   }>
 }
 
+/** `_identified.json` shapes: bot-like row plus optional user / UI fields. */
+export type UserIdentifiedShape = BotDetectionJson['shapes'][number] & {
+  is_error?: boolean
+  morphospecies?: string
+}
+
 export type UserDetectionJson = {
   version?: string
   photoBase?: string
-  shapes?: BotDetectionJson['shapes']
+  shapes?: UserIdentifiedShape[]
 }
 
 export async function parseBotDetectionJsonSafely(params: { file: IndexedFile }): Promise<BotDetectionJson | null> {
