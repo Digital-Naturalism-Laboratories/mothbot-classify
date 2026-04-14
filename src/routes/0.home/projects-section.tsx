@@ -1,8 +1,13 @@
 import { useStore } from '@nanostores/react'
 import { Link } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { Loader } from '~/components/atomic/Loader'
+import {
+  expandDisclosurePanelId,
+  ExpandDisclosurePanel,
+  ExpandDisclosureTitleRow,
+} from '~/components/atomic/expand-disclosure'
 import { Button } from '~/components/ui/button'
 import { MorphoCatalogDialog } from '~/features/catalogues/morphospecies/morpho-catalog-dialog'
 import { SpeciesCatalogDialog } from '~/features/catalogues/species/species-catalog-dialog'
@@ -19,6 +24,10 @@ import { InlineProgress } from './inline-progress'
 import { ItemActions } from './item-actions'
 import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
 
+const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
+const projectsTreeRootRowTitleClass = 'font-medium text-neutral-900'
+const projectsTreeDeepRowTitleClass = 'text-neutral-900'
+
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
   deployments: Record<string, DeploymentEntity>
@@ -33,15 +42,65 @@ export type ProjectsSectionProps = HierarchyStores & {
   nightSummaries: Record<string, NightSummaryEntity>
 }
 
+type ProgressIndex = {
+  byProject: Record<string, { total: number; identified: number }>
+  bySite: Record<string, { total: number; identified: number }>
+  byDeployment: Record<string, { total: number; identified: number }>
+  byNight: Record<string, { total: number; identified: number }>
+}
+
+type CollapsedState = {
+  projects: Record<string, boolean>
+  sites: Record<string, boolean>
+  deployments: Record<string, boolean>
+}
+
 export function ProjectsSection(props: ProjectsSectionProps) {
   const { isLoading, projects, sites, deployments, nights, detections, nightSummaries } = props
+  const hasProjects = Object.keys(projects ?? {}).length > 0
+  const [collapsed, setCollapsed] = useState<CollapsedState>({ projects: {}, sites: {}, deployments: {} })
+
+  const expandAll = useCallback(() => {
+    setCollapsed({ projects: {}, sites: {}, deployments: {} })
+  }, [])
+
+  const collapseAll = useCallback(() => {
+    const ids = collectProjectsHierarchyIds({ projects, sites, deployments })
+    setCollapsed(buildAllCollapsedState(ids))
+  }, [projects, sites, deployments])
+
+  const onToggleProject = useCallback((projectId: string) => {
+    setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'projects', id: projectId }))
+  }, [])
+
+  const onToggleSite = useCallback((siteId: string) => {
+    setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'sites', id: siteId }))
+  }, [])
+
+  const onToggleDeployment = useCallback((deploymentId: string) => {
+    setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'deployments', id: deploymentId }))
+  }, [])
 
   return (
     <Column className='gap-8'>
-      <h2 className='mb-2 text-lg font-semibold'>Projects</h2>
+      <div className='flex items-center justify-between gap-12'>
+        <h2 id='home-projects-heading' className='text-lg font-semibold'>
+          Projects
+        </h2>
+        {!isLoading && hasProjects ? (
+          <div className='flex shrink-0 flex-wrap justify-end gap-8'>
+            <Button variant='outline' size='xxsm' type='button' onClick={expandAll}>
+              Expand all
+            </Button>
+            <Button variant='outline' size='xxsm' type='button' onClick={collapseAll}>
+              Collapse all
+            </Button>
+          </div>
+        ) : null}
+      </div>
       {isLoading ? (
         <CenteredLoader>🌀 Loading</CenteredLoader>
-      ) : Object.keys(projects ?? {}).length ? (
+      ) : hasProjects ? (
         <ProjectsList
           projects={projects}
           sites={sites}
@@ -49,6 +108,10 @@ export function ProjectsSection(props: ProjectsSectionProps) {
           nights={nights}
           detections={detections}
           nightSummaries={nightSummaries}
+          collapsed={collapsed}
+          onToggleProject={onToggleProject}
+          onToggleSite={onToggleSite}
+          onToggleDeployment={onToggleDeployment}
         />
       ) : (
         <p className='text-sm text-neutral-500'>Load a projects folder to see projects</p>
@@ -61,52 +124,94 @@ type ProjectsListProps = HierarchyStores & {
   projects: Record<string, ProjectEntity>
   detections: Record<string, DetectionEntity>
   nightSummaries: Record<string, NightSummaryEntity>
+  collapsed: CollapsedState
+  onToggleProject: (projectId: string) => void
+  onToggleSite: (siteId: string) => void
+  onToggleDeployment: (deploymentId: string) => void
 }
 
 function ProjectsList(props: ProjectsListProps) {
-  const { projects, sites, deployments, nights, detections, nightSummaries } = props
+  const {
+    projects,
+    sites,
+    deployments,
+    nights,
+    detections,
+    nightSummaries,
+    collapsed,
+    onToggleProject,
+    onToggleSite,
+    onToggleDeployment,
+  } = props
   const progressIndex = useMemo(() => buildProgressIndex({ nightSummaries, detections }), [nightSummaries, detections])
   const list = Object.values(projects ?? {})
   if (!list.length) return null
 
   return (
-    <ul className='space-y-8'>
-      {list.map((project) => (
-        <ProjectItem
-          key={project.id}
-          project={project}
-          sites={sites}
-          deployments={deployments}
-          nights={nights}
-          progressIndex={progressIndex}
-        />
-      ))}
-    </ul>
+    <section aria-labelledby='home-projects-heading'>
+      <ul className='space-y-8'>
+        {list.map((project) => (
+          <ProjectItem
+            key={project.id}
+            project={project}
+            sites={sites}
+            deployments={deployments}
+            nights={nights}
+            progressIndex={progressIndex}
+            collapsed={collapsed}
+            onToggleProject={onToggleProject}
+            onToggleSite={onToggleSite}
+            onToggleDeployment={onToggleDeployment}
+          />
+        ))}
+      </ul>
+    </section>
   )
-}
-
-type ProgressIndex = {
-  byProject: Record<string, { total: number; identified: number }>
-  bySite: Record<string, { total: number; identified: number }>
-  byDeployment: Record<string, { total: number; identified: number }>
-  byNight: Record<string, { total: number; identified: number }>
 }
 
 type ProjectItemProps = HierarchyStores & {
   project: ProjectEntity
   progressIndex: ProgressIndex
+  collapsed: CollapsedState
+  onToggleProject: (projectId: string) => void
+  onToggleSite: (siteId: string) => void
+  onToggleDeployment: (deploymentId: string) => void
 }
 
 function ProjectItem(props: ProjectItemProps) {
-  const { project, sites, deployments, nights, progressIndex } = props
+  const {
+    project,
+    sites,
+    deployments,
+    nights,
+    progressIndex,
+    collapsed,
+    onToggleProject,
+    onToggleSite,
+    onToggleDeployment,
+  } = props
   const prog = progressIndex.byProject[project.id] ?? { total: 0, identified: 0 }
   const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
+  const sitesForProject = useMemo(() => getSitesForProject({ sites, projectId: project.id }), [sites, project.id])
+  const hasSites = sitesForProject.length > 0
+  const isProjectExpanded = !collapsed.projects[project.id]
+  const projectPanelId = useMemo(() => projectsTreePanelId({ segment: 'project', entityId: project.id }), [project.id])
 
   return (
     <li className='border bg-white p-8 group/project rounded-lg'>
       <div className='flex items-center gap-12'>
-        <span className='font-medium text-neutral-900'>{project.name}</span>
+        <ProjectsTreeExpandTitle
+          hasBranch={hasSites}
+          expanded={isProjectExpanded}
+          panelId={projectPanelId}
+          onToggle={() => onToggleProject(project.id)}
+          expandAriaLabel={`Expand sites for ${project.name}`}
+          collapseAriaLabel={`Collapse sites for ${project.name}`}
+          titleClassName={projectsTreeRootRowTitleClass}
+        >
+          {project.name}
+        </ProjectsTreeExpandTitle>
         <Button
           variant='outline'
           size='xxsm'
@@ -139,7 +244,20 @@ function ProjectItem(props: ProjectItemProps) {
         projectIdOverride={project.id}
         initialScope='project'
       />
-      <SitesList projectId={project.id} sites={sites} deployments={deployments} nights={nights} progressIndex={progressIndex} />
+      {hasSites ? (
+        <ExpandDisclosurePanel id={projectPanelId} hidden={!isProjectExpanded}>
+          <SitesList
+            projectId={project.id}
+            sites={sites}
+            deployments={deployments}
+            nights={nights}
+            progressIndex={progressIndex}
+            collapsed={collapsed}
+            onToggleSite={onToggleSite}
+            onToggleDeployment={onToggleDeployment}
+          />
+        </ExpandDisclosurePanel>
+      ) : null}
     </li>
   )
 }
@@ -147,17 +265,30 @@ function ProjectItem(props: ProjectItemProps) {
 type SitesListProps = HierarchyStores & {
   projectId: string
   progressIndex: ProgressIndex
+  collapsed: CollapsedState
+  onToggleSite: (siteId: string) => void
+  onToggleDeployment: (deploymentId: string) => void
 }
 
 function SitesList(props: SitesListProps) {
-  const { projectId, sites, deployments, nights, progressIndex } = props
+  const { projectId, sites, deployments, nights, progressIndex, collapsed, onToggleSite, onToggleDeployment } = props
   const list = getSitesForProject({ sites, projectId })
   if (!list.length) return null
 
   return (
     <Ul className=''>
       {list.map((site) => (
-        <SiteItem key={site.id} site={site} projectId={projectId} deployments={deployments} nights={nights} progressIndex={progressIndex} />
+        <SiteItem
+          key={site.id}
+          site={site}
+          projectId={projectId}
+          deployments={deployments}
+          nights={nights}
+          progressIndex={progressIndex}
+          collapsed={collapsed}
+          onToggleSite={onToggleSite}
+          onToggleDeployment={onToggleDeployment}
+        />
       ))}
     </Ul>
   )
@@ -167,22 +298,51 @@ type SiteItemProps = ListStores & {
   site: SiteEntity
   projectId: string
   progressIndex: ProgressIndex
+  collapsed: CollapsedState
+  onToggleSite: (siteId: string) => void
+  onToggleDeployment: (deploymentId: string) => void
 }
 
 function SiteItem(props: SiteItemProps) {
-  const { site, projectId, deployments, nights, progressIndex } = props
+  const { site, projectId, deployments, nights, progressIndex, collapsed, onToggleSite, onToggleDeployment } = props
   const prog = progressIndex.bySite[site.id] ?? { total: 0, identified: 0 }
+  const depsForSite = useMemo(() => getDeploymentsForSite({ deployments, siteId: site.id }), [deployments, site.id])
+  const hasDeployments = depsForSite.length > 0
+  const isSiteExpanded = !collapsed.sites[site.id]
+  const sitePanelId = useMemo(() => projectsTreePanelId({ segment: 'site', entityId: site.id }), [site.id])
 
   return (
     <Li className='group/site'>
       <div className='flex items-center gap-12'>
-        <span className='text-neutral-900'>{site.name}</span>
+        <ProjectsTreeExpandTitle
+          hasBranch={hasDeployments}
+          expanded={isSiteExpanded}
+          panelId={sitePanelId}
+          onToggle={() => onToggleSite(site.id)}
+          expandAriaLabel={`Expand deployments for ${site.name}`}
+          collapseAriaLabel={`Collapse deployments for ${site.name}`}
+          titleClassName={projectsTreeDeepRowTitleClass}
+        >
+          {site.name}
+        </ProjectsTreeExpandTitle>
         <div className='ml-auto flex items-center gap-12'>
           <InlineProgress total={prog.total} identified={prog.identified} />
           <ItemActions scope={'site'} id={site.id} nights={nights} />
         </div>
       </div>
-      <DeploymentsList projectId={projectId} siteId={site.id} deployments={deployments} nights={nights} progressIndex={progressIndex} />
+      {hasDeployments ? (
+        <ExpandDisclosurePanel id={sitePanelId} hidden={!isSiteExpanded}>
+          <DeploymentsList
+            projectId={projectId}
+            siteId={site.id}
+            deployments={deployments}
+            nights={nights}
+            progressIndex={progressIndex}
+            collapsed={collapsed}
+            onToggleDeployment={onToggleDeployment}
+          />
+        </ExpandDisclosurePanel>
+      ) : null}
     </Li>
   )
 }
@@ -191,17 +351,27 @@ type DeploymentsListProps = ListStores & {
   projectId: string
   siteId: string
   progressIndex: ProgressIndex
+  collapsed: CollapsedState
+  onToggleDeployment: (deploymentId: string) => void
 }
 
 function DeploymentsList(props: DeploymentsListProps) {
-  const { projectId, siteId, deployments, nights, progressIndex } = props
+  const { projectId, siteId, deployments, nights, progressIndex, collapsed, onToggleDeployment } = props
   const list = getDeploymentsForSite({ deployments, siteId })
   if (!list.length) return null
 
   return (
     <Ul>
       {list.map((dep) => (
-        <DeploymentItem key={dep.id} projectId={projectId} deployment={dep} nights={nights} progressIndex={progressIndex} />
+        <DeploymentItem
+          key={dep.id}
+          projectId={projectId}
+          deployment={dep}
+          nights={nights}
+          progressIndex={progressIndex}
+          collapsed={collapsed}
+          onToggleDeployment={onToggleDeployment}
+        />
       ))}
     </Ul>
   )
@@ -211,23 +381,46 @@ type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
   projectId: string
   deployment: DeploymentEntity
   progressIndex: ProgressIndex
+  collapsed: CollapsedState
+  onToggleDeployment: (deploymentId: string) => void
 }
 
 function DeploymentItem(props: DeploymentItemProps) {
-  const { projectId, deployment, nights, progressIndex } = props
+  const { projectId, deployment, nights, progressIndex, collapsed, onToggleDeployment } = props
   const prog = progressIndex.byDeployment[deployment.id] ?? { total: 0, identified: 0 }
+  const nightsForDep = useMemo(() => getNightsForDeployment({ nights, deploymentId: deployment.id }), [nights, deployment.id])
+  const hasNights = nightsForDep.length > 0
+  const isDeploymentExpanded = !collapsed.deployments[deployment.id]
+  const deploymentPanelId = useMemo(
+    () => projectsTreePanelId({ segment: 'deployment', entityId: deployment.id }),
+    [deployment.id],
+  )
 
   return (
     <Li className='group/deployment'>
       <div className='flex items-center gap-12'>
-        <span className='text-neutral-900'>{deployment.name}</span>
+        <ProjectsTreeExpandTitle
+          hasBranch={hasNights}
+          expanded={isDeploymentExpanded}
+          panelId={deploymentPanelId}
+          onToggle={() => onToggleDeployment(deployment.id)}
+          expandAriaLabel={`Expand nights for ${deployment.name}`}
+          collapseAriaLabel={`Collapse nights for ${deployment.name}`}
+          titleClassName={projectsTreeDeepRowTitleClass}
+        >
+          {deployment.name}
+        </ProjectsTreeExpandTitle>
         <div className='ml-auto flex items-center gap-12'>
           <InlineProgress total={prog.total} identified={prog.identified} />
           <ItemActions scope={'deployment'} id={deployment.id} nights={nights} />
         </div>
       </div>
 
-      <NightsList projectId={projectId} deploymentId={deployment.id} nights={nights} progressIndex={progressIndex} />
+      {hasNights ? (
+        <ExpandDisclosurePanel id={deploymentPanelId} hidden={!isDeploymentExpanded}>
+          <NightsList projectId={projectId} deploymentId={deployment.id} nights={nights} progressIndex={progressIndex} />
+        </ExpandDisclosurePanel>
+      ) : null}
     </Li>
   )
 }
@@ -305,9 +498,100 @@ function getNightsForDeployment(params: { nights: Record<string, NightEntity>; d
 function lastPathSegment(params: { id: string }) {
   const { id } = params
   const parts = (id ?? '').split('/')
-  const last = parts[parts.length - 1] ?? ''
-  const res = last
-  return res
+  return parts[parts.length - 1] ?? ''
+}
+
+function collectProjectsHierarchyIds(params: {
+  projects: Record<string, ProjectEntity>
+  sites: Record<string, SiteEntity>
+  deployments: Record<string, DeploymentEntity>
+}) {
+  const { projects, sites, deployments } = params
+  const projectIds = Object.keys(projects ?? {})
+  const siteIds: string[] = []
+  const deploymentIds: string[] = []
+  for (const pid of projectIds) {
+    for (const site of Object.values(sites ?? {}).filter((s) => s.projectId === pid)) {
+      siteIds.push(site.id)
+      for (const dep of Object.values(deployments ?? {}).filter((d) => d.siteId === site.id)) {
+        deploymentIds.push(dep.id)
+      }
+    }
+  }
+  return { projectIds, siteIds, deploymentIds }
+}
+
+function buildAllCollapsedState(ids: ReturnType<typeof collectProjectsHierarchyIds>): CollapsedState {
+  const collapsed: CollapsedState = { projects: {}, sites: {}, deployments: {} }
+  for (const id of ids.projectIds) collapsed.projects[id] = true
+  for (const id of ids.siteIds) collapsed.sites[id] = true
+  for (const id of ids.deploymentIds) collapsed.deployments[id] = true
+  return collapsed
+}
+
+function withToggledCollapsedNode(params: {
+  prev: CollapsedState
+  bucket: keyof CollapsedState
+  id: string
+}): CollapsedState {
+  const { prev, bucket, id } = params
+  const map = prev[bucket]
+  return { ...prev, [bucket]: { ...map, [id]: !map[id] } }
+}
+
+function projectsTreePanelId(params: { segment: 'project' | 'site' | 'deployment'; entityId: string }) {
+  const { segment, entityId } = params
+  return expandDisclosurePanelId({
+    namespace: PROJECTS_TREE_DISCLOSURE_NS,
+    segment,
+    entityId,
+  })
+}
+
+type ProjectsTreeExpandTitleProps = {
+  hasBranch: boolean
+  expanded: boolean
+  panelId: string
+  onToggle: () => void
+  expandAriaLabel: string
+  collapseAriaLabel: string
+  titleClassName?: string
+  children: ReactNode
+}
+
+function ProjectsTreeExpandTitle(props: ProjectsTreeExpandTitleProps) {
+  const {
+    hasBranch,
+    expanded,
+    panelId,
+    onToggle,
+    expandAriaLabel,
+    collapseAriaLabel,
+    titleClassName,
+    children,
+  } = props
+
+  if (hasBranch) {
+    return (
+      <ExpandDisclosureTitleRow
+        collapsible
+        expanded={expanded}
+        panelId={panelId}
+        onToggle={onToggle}
+        expandAriaLabel={expandAriaLabel}
+        collapseAriaLabel={collapseAriaLabel}
+        titleClassName={titleClassName}
+      >
+        {children}
+      </ExpandDisclosureTitleRow>
+    )
+  }
+
+  return (
+    <ExpandDisclosureTitleRow collapsible={false} titleClassName={titleClassName}>
+      {children}
+    </ExpandDisclosureTitleRow>
+  )
 }
 
 function buildProgressIndex(params: {
