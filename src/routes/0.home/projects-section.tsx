@@ -20,6 +20,7 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
 import classed from '~/styles/classed'
+import { cn } from '~/utils/cn'
 import { InlineProgress } from './inline-progress'
 import { ExportDwCDropdown, ItemActions } from './item-actions'
 import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
@@ -27,6 +28,9 @@ import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/in
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
 const projectsTreeRootRowTitleClass = 'font-medium text-neutral-900'
 const projectsTreeDeepRowTitleClass = 'text-neutral-900'
+/** Fixed-width stats column so progress + actions line up across site / deployment / night rows. */
+const projectsTreeStatsColClass =
+  'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12'
 
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
@@ -312,8 +316,8 @@ function SiteItem(props: SiteItemProps) {
   const sitePanelId = useMemo(() => projectsTreePanelId({ segment: 'site', entityId: site.id }), [site.id])
 
   return (
-    <Li className='group/site'>
-      <div className='flex items-center gap-12'>
+    <Li className={cn('group/site', projectsTreeStatsColClass)}>
+      <div className='flex min-w-0 items-center pl-8'>
         <ProjectsTreeExpandTitle
           hasBranch={hasDeployments}
           expanded={isSiteExpanded}
@@ -325,10 +329,10 @@ function SiteItem(props: SiteItemProps) {
         >
           {site.name}
         </ProjectsTreeExpandTitle>
-        <div className='ml-auto flex items-center gap-12'>
-          <InlineProgress total={prog.total} identified={prog.identified} />
-          <ItemActions scope={'site'} id={site.id} nights={nights} />
-        </div>
+      </div>
+      <div className='flex min-w-0 items-center justify-end gap-12'>
+        <InlineProgress total={prog.total} identified={prog.identified} />
+        <ItemActions scope={'site'} id={site.id} nights={nights} />
       </div>
       {hasDeployments ? (
         <ExpandDisclosurePanel id={sitePanelId} hidden={!isSiteExpanded}>
@@ -397,8 +401,8 @@ function DeploymentItem(props: DeploymentItemProps) {
   )
 
   return (
-    <Li className='group/deployment'>
-      <div className='flex items-center gap-12'>
+    <Li className={cn('group/deployment', projectsTreeStatsColClass)}>
+      <div className='flex min-w-0 items-center pl-16'>
         <ProjectsTreeExpandTitle
           hasBranch={hasNights}
           expanded={isDeploymentExpanded}
@@ -410,10 +414,10 @@ function DeploymentItem(props: DeploymentItemProps) {
         >
           {deployment.name}
         </ProjectsTreeExpandTitle>
-        <div className='ml-auto flex items-center gap-12'>
-          <InlineProgress total={prog.total} identified={prog.identified} />
-          <ItemActions scope={'deployment'} id={deployment.id} nights={nights} />
-        </div>
+      </div>
+      <div className='flex min-w-0 items-center justify-end gap-12'>
+        <InlineProgress total={prog.total} identified={prog.identified} />
+        <ItemActions scope={'deployment'} id={deployment.id} nights={nights} />
       </div>
 
       {hasNights ? (
@@ -443,8 +447,11 @@ function NightsList(props: NightsListProps) {
         const prog = progressIndex.byNight[night.id] ?? { total: 0, identified: 0 }
         const isExporting = exportingNightIds.has(night.id)
         return (
-          <Li key={night.id} className='group/night bg-stone-50 px-0 '>
-            <div className='flex h-32 items-center gap-12 px-6'>
+          <Li
+            key={night.id}
+            className={cn('group/night h-32 bg-stone-50', projectsTreeStatsColClass)}
+          >
+            <div className='flex min-w-0 items-center pl-24'>
               <Link
                 to={'/projects/$projectId/deployments/$deploymentId/nights/$nightId'}
                 params={{
@@ -462,11 +469,11 @@ function NightsList(props: NightsListProps) {
                   </div>
                 ) : null}
               </Link>
-              <div className='flex shrink-0 items-center gap-12'>
-                <InlineProgress total={prog.total} identified={prog.identified} />
-                <div onClick={(e) => e.stopPropagation()}>
-                  <ItemActions scope={'night'} id={night.id} nights={nights} />
-                </div>
+            </div>
+            <div className='flex min-w-0 items-center justify-end gap-12'>
+              <InlineProgress total={prog.total} identified={prog.identified} />
+              <div onClick={(e) => e.stopPropagation()}>
+                <ItemActions scope={'night'} id={night.id} nights={nights} />
               </div>
             </div>
           </Li>
@@ -695,5 +702,5 @@ function buildProgressIndex(params: {
   return { byNight, byDeployment, bySite, byProject }
 }
 
-const Ul = classed('ul', 'ml-8 space-y-1')
-const Li = classed('li', 'relative px-6 rounded-md ')
+const Ul = classed('ul', 'w-full space-y-1')
+const Li = classed('li', 'relative rounded-md')
