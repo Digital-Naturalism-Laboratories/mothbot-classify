@@ -16,6 +16,8 @@ import { loadMorphoCovers } from '~/features/data-flow/3.persist/covers'
 import { loadMorphoLinks } from '~/features/data-flow/3.persist/links'
 import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
 import { normalizeLegacyNightId } from './ingest-paths'
+import type { IngestMode } from './ingest-mode'
+import { excludePackageArchiveIndexedFiles } from './reserved-paths'
 import { parseUserDetectionJsonSafely } from './ingest-json'
 import { buildTaxonFromShape, extractTaxonomyFromShape } from '~/models/taxonomy/extract'
 import { extractMorphospeciesFromShape, normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
@@ -28,20 +30,25 @@ type SummarySource = 'placeholder' | 'legacy' | 'canonical'
 
 export function applyIndexedFilesState(params: {
   indexed: IndexedEntry[]
+  ingestMode: IngestMode
 }) {
-  const { indexed } = params
+  const { indexed, ingestMode } = params
   if (!Array.isArray(indexed) || indexed.length === 0) return
 
-  directoryFilesStore.set(indexed.map((i) => i.file).filter((f): f is File => !!f))
-  indexedFilesStore.set(indexed)
+  const isPackage = ingestMode === 'mothbox-next'
+  const storedIndexed = isPackage ? excludePackageArchiveIndexedFiles(indexed) : indexed
 
-  buildNightIndexes({ files: indexed })
+  directoryFilesStore.set(storedIndexed.map((i) => i.file).filter((f): f is File => !!f))
+  indexedFilesStore.set(storedIndexed)
 
-  preloadNightSummariesFromIndexed(indexed)
-  preloadMorphoLinksFromIndexed(indexed)
+  buildNightIndexes({ files: storedIndexed })
 
-  // Ingest species lists from either File or Handle entries
-  void ingestSpeciesListsFromFiles({ files: indexed })
+  if (!isPackage) {
+    preloadNightSummariesFromIndexed(storedIndexed)
+    preloadMorphoLinksFromIndexed(storedIndexed)
+  }
+
+  void ingestSpeciesListsFromFiles({ files: storedIndexed })
   void loadProjectSpeciesSelection()
   void loadMorphoCovers()
   void loadMorphoLinks()

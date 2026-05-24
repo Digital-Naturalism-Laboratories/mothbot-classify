@@ -1,0 +1,42 @@
+{
+  "format": "mothbox-next-dataset",
+  "version": 2,
+  "dataset_id": "dinacon2025_lightweight_substrate",
+  "title": "Dinacon 2025 - lightweight substrate",
+  "description": "Portable classification-ready package with patch media, records, and classifications. Raw source folders are not included.",
+  "package_kind": "lightweight_substrate",
+  "classification_unit": "patch",
+  "source": {
+    "included": false,
+    "path": null,
+    "original_source_available_elsewhere": true,
+    "trace_fields": [
+      "02_records/patch-sources.ndjson"
+    ]
+  },
+  "cloud_upload_default": {
+    "include_source": false,
+    "include_patches": true
+  },
+  "folders": {
+    "records": "02_records/",
+    "classifications": "03_classifications/",
+    "patches": "01_patches/"
+  },
+  "records": {
+    "patches": "02_records/patches.ndjson",
+    "current_classifications": "02_records/current-classifications.ndjson",
+    "deployments": "02_records/deployments.ndjson",
+    "camera_days": "02_records/camera-days.ndjson",
+    "patch_sources": "02_records/patch-sources.ndjson"
+  },
+  "classification_sources": [
+    "03_classifications/_bot.ndjson",
+    "03_classifications/bf.ndjson"
+  ],
+  "patches": {
+    "included": true,
+    "path": "01_patches/",
+    "required_when_source_absent": true
+  }
+}

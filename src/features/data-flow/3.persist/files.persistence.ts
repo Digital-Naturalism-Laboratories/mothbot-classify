@@ -2,6 +2,8 @@ import { idbDelete, idbGet, idbPut } from '~/utils/index-db'
 
 const LOCAL_FLAG_KEY = 'mbl/pickedDir'
 const LOCAL_NAME_KEY = 'mbl/pickedDirName'
+const DATASETS_FLAG_KEY = 'mbl/datasetsDir'
+const DATASETS_NAME_KEY = 'mbl/datasetsDirName'
 const IDB_NAME = 'mothbox-local'
 const IDB_STORE = 'fs-handles'
 
@@ -36,6 +38,45 @@ export async function loadSavedDirectory(): Promise<FileSystemDirectoryHandleLik
     return saved
   } catch {
     return null
+  }
+}
+
+export async function persistDatasetsDirectory(handle: FileSystemDirectoryHandleLike) {
+  try {
+    await idbPut(IDB_NAME, IDB_STORE, 'datasetsRoot', handle)
+    try {
+      const name = (handle as unknown as { name?: string })?.name ?? ''
+      localStorage.setItem(DATASETS_FLAG_KEY, '1')
+      if (name) localStorage.setItem(DATASETS_NAME_KEY, name)
+    } catch {
+      // ignore localStorage errors
+    }
+  } catch {
+    // ignore idb errors
+  }
+}
+
+export async function loadDatasetsDirectory(): Promise<FileSystemDirectoryHandleLike | null> {
+  try {
+    const saved = (await idbGet(IDB_NAME, IDB_STORE, 'datasetsRoot')) as FileSystemDirectoryHandleLike | null
+    if (!saved) return null
+    return saved
+  } catch {
+    return null
+  }
+}
+
+export async function forgetDatasetsDirectory() {
+  try {
+    await idbDelete(IDB_NAME, IDB_STORE, 'datasetsRoot')
+  } catch {
+    // ignore idb errors
+  }
+  try {
+    localStorage.removeItem(DATASETS_FLAG_KEY)
+    localStorage.removeItem(DATASETS_NAME_KEY)
+  } catch {
+    // ignore localStorage errors
   }
 }
 
@@ -94,6 +135,8 @@ export async function ensureReadWritePermission(handle: FileSystemDirectoryHandl
 export const persistenceConstants = {
   LOCAL_FLAG_KEY,
   LOCAL_NAME_KEY,
+  DATASETS_FLAG_KEY,
+  DATASETS_NAME_KEY,
   IDB_NAME,
   IDB_STORE,
 }

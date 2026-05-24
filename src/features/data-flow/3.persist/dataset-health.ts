@@ -1,5 +1,8 @@
 import { indexedFilesStore, type IndexedFile } from '~/features/data-flow/1.ingest/files.state'
 import { normalizeLegacyNightId, parsePathParts } from '~/features/data-flow/1.ingest/ingest-paths'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
+import { auditMothboxNextPackageHealth, type PackageHealthReport } from '~/features/mothbox-next/package-health'
 import { ensureReadWritePermission, persistenceConstants } from './files.persistence'
 import { idbGet } from '~/utils/index-db'
 
@@ -57,7 +60,39 @@ export type NightSummaryHealReport = {
   failedWrites: number
 }
 
-export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }): Promise<DatasetHealthAuditReport> {
+export type DatasetHealthAuditResult =
+  | { mode: 'legacy'; report: DatasetHealthAuditReport }
+  | { mode: 'mothbox-next'; report: PackageHealthReport }
+
+export async function runMothboxNextPackageHealthAudit(): Promise<PackageHealthReport> {
+  const active = mothboxNextPackageStore.get()
+  const loaded = active?.loaded
+  if (!loaded) {
+    return {
+      patchCount: 0,
+      resolvedCount: 0,
+      missingAssets: [],
+      orphanClassifications: [],
+      unresolvedPatches: [],
+    }
+  }
+
+  const entries = indexedFilesStore.get() ?? []
+  return auditMothboxNextPackageHealth({
+    loaded,
+    fileExists: async (absolutePath) => {
+      const rel = absolutePath.replace(/^\/+/, '')
+      return entries.some((e) => e.path.replaceAll('\\', '/').replace(/^\/+/, '') === rel)
+    },
+  })
+}
+
+export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }): Promise<DatasetHealthAuditResult> {
+  if (isMothboxNextIngestMode()) {
+    const report = await runMothboxNextPackageHealthAudit()
+    return { mode: 'mothbox-next', report }
+  }
+
   const entries = params?.entries ?? indexedFilesStore.get() ?? []
   const report: DatasetHealthAuditReport = {
     scannedFiles: entries.length,
@@ -122,10 +157,14 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
   report.photoCollisionCount = photoCollisionKeys.size
   report.patchCollisionCount = patchCollisionKeys.size
 
-  return report
+  return { mode: 'legacy', report }
 }
 
 export async function healNightSummaryNightIds(params?: { entries?: IndexedFile[] }): Promise<NightSummaryHealReport> {
+  if (isMothboxNextIngestMode()) {
+    return emptyNightSummaryHealReport()
+  }
+
   const entries = params?.entries ?? indexedFilesStore.get() ?? []
   const summaryEntries = entries.filter((entry) => (entry?.name ?? '').toLowerCase() === 'night_summary.json')
   const root = (await idbGet(
@@ -349,11 +388,28 @@ async function writeJsonToIndexedPath(params: {
   return true
 }
 
-export function formatDatasetHealthAuditSummary(report: DatasetHealthAuditReport) {
+export function formatDatasetHealthAuditSummary(result: DatasetHealthAuditResult) {
+  if (result.mode === 'mothbox-next') {
+    const report = result.report
+    return `package: ${report.patchCount} patches, ${report.resolvedCount} resolved; missing assets: ${report.missingAssets.length}, orphan classifications: ${report.orphanClassifications.length}, unresolved patches: ${report.unresolvedPatches.length}`
+  }
+
+  const report = result.report
   const summaryIssueCount = report.summaryIssues.length
   return `scanned ${report.scannedFiles} files; summary issues: ${summaryIssueCount}, invalid identified JSON: ${report.invalidIdentifiedJsonCount}, photo collisions: ${report.photoCollisionCount}, patch collisions: ${report.patchCollisionCount}`
 }
 
 export function formatNightSummaryHealSummary(report: NightSummaryHealReport) {
   return `scanned ${report.scanned}, candidates ${report.candidates}, healed ${report.healed}, already canonical ${report.alreadyCanonical}, invalid JSON ${report.skippedInvalidJson}, failed writes ${report.failedWrites}`
+}
+
+function emptyNightSummaryHealReport(): NightSummaryHealReport {
+  return {
+    scanned: 0,
+    candidates: 0,
+    healed: 0,
+    alreadyCanonical: 0,
+    skippedInvalidJson: 0,
+    failedWrites: 0,
+  }
 }

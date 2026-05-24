@@ -62,7 +62,7 @@ export function computeAllowedNightIds(params: {
     if (usageScope === 'night') {
       if (projectId && deploymentId && nightId) {
         const exact = `${projectId}/${deploymentId}/${nightId}`
-        if (nid === exact) ids.add(nid)
+        if (nid === exact || nid === nightId) ids.add(nid)
       }
       continue
     }

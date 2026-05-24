@@ -38,6 +38,37 @@ export function normalizeLegacyNightId(nightId: string) {
   return `${project}/${deployment}/${night}`
 }
 
+export function buildLegacyNightIdFromRoute(params: {
+  projectId: string
+  deploymentId: string
+  nightId: string
+}): string {
+  const { projectId, deploymentId, nightId } = params
+  return `${projectId}/${deploymentId}/${nightId}`
+}
+
+/**
+ * Maps URL route params to the night entity id in the store.
+ * Legacy nights use project/deployment/night; mothbox-next packages use camera_day_id.
+ */
+export function resolveNightEntityIdFromRoute(params: {
+  nights: Record<string, { id: string } | undefined>
+  projectId: string
+  deploymentId: string
+  nightId: string
+}): string {
+  const { nights, projectId, deploymentId, nightId } = params
+  const legacyId = buildLegacyNightIdFromRoute({ projectId, deploymentId, nightId })
+
+  if (nights[legacyId]) return legacyId
+  if (nights[nightId]) return nightId
+
+  const cameraDayId = `${deploymentId}__${nightId}`
+  if (nights[cameraDayId]) return cameraDayId
+
+  return legacyId
+}
+
 export function parseNightId(params: { nightId: string }): ParsedNightId | null {
   const { nightId } = params
   const normalized = normalizeLegacyNightId(nightId)
@@ -59,9 +90,13 @@ export function parseNightId(params: { nightId: string }): ParsedNightId | null 
   }
 }
 
+import { isPackageArchiveRelativePath } from './reserved-paths'
+
 export function parsePathParts(params: { path: string }) {
   const { path } = params
   const normalized = (path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
+  if (isPackageArchiveRelativePath(normalized)) return null
+
   const segments = normalized.split('/').filter(Boolean)
   if (segments.length < 4) return null
   const [project, deployment, night, ...rest] = segments

@@ -2,7 +2,6 @@ import { Column, PanelHeading } from '~/styles'
 import { cn } from '~/utils/cn'
 import { Progress } from '~/components/ui/progress'
 import { Button } from '~/components/ui/button'
-import { useParams } from '@tanstack/react-router'
 import { useStore } from '@nanostores/react'
 import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
@@ -17,6 +16,7 @@ import { TaxonomySection } from './taxonomy-section'
 
 export function NightLeftPanel(props: NightLeftPanelProps) {
   const {
+    nightId,
     taxonomyAuto,
     taxonomyUser,
     totalPatches,
@@ -34,8 +34,6 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     className,
   } = props
 
-  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
-  const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
   const detections = useStore(detectionsStore)
   const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(

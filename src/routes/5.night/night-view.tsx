@@ -202,6 +202,7 @@ export function NightView(props: { nightId: string }) {
   return (
     <Row className='w-full h-full overflow-hidden gap-x-4'>
       <NightLeftPanel
+        nightId={nightId}
         taxonomyAuto={taxonomyAuto}
         taxonomyUser={taxonomyUser}
         totalPatches={totalPatches}
