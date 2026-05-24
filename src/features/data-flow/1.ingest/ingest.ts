@@ -7,6 +7,7 @@ import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { normalizeLegacyNightId, parsePathParts } from './ingest-paths'
 import { parseNightBotDetections, overlayNightUserDetections } from './ingest-night'
+import { isMothboxNextIngestMode } from './ingest-mode'
 
 export async function ingestFilesToStores(params: {
   files: IndexedFile[]
@@ -15,6 +16,10 @@ export async function ingestFilesToStores(params: {
 }) {
   const { files, parseDetectionsForNightId, patchMap } = params
   if (!files?.length) return
+  if (isMothboxNextIngestMode()) {
+    console.warn('🚨 ingestFilesToStores: skipped — mothbox-next package is active; use package reload instead.')
+    return
+  }
   const targetNightId =
     typeof parseDetectionsForNightId === 'string' ? normalizeLegacyNightId(parseDetectionsForNightId) : parseDetectionsForNightId
 

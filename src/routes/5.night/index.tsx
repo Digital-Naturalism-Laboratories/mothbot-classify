@@ -9,6 +9,7 @@ import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { useAppLoading } from '~/features/data-flow/1.ingest/files-queries'
 import { NightView } from './night-view'
 import { useNightIngest } from './use-night-ingest'
+import { resolveNightEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
 
 export function Night() {
   const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
@@ -18,7 +19,12 @@ export function Night() {
   const ingestProgress = useStore(nightIngestProgressStore)
   const [isNightIngesting, setIsNightIngesting] = useState(false)
 
-  const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
+  const nightId = resolveNightEntityIdFromRoute({
+    nights,
+    projectId: params.projectId,
+    deploymentId: params.deploymentId,
+    nightId: params.nightId,
+  })
   const night = nights[nightId]
 
   const ingestState = useNightIngest({ nightId })

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:run": "vitest run --reporter=dot",
     "test:watch": "vitest",
+    "verify:mothbox-next": "bun run scripts/verify-mothbox-next.ts",
     "species:search": "bun run scripts/species-search.ts",
     "generate-pwa-assets": "pwa-assets-generator --preset minimal public/mothbot.svg"
   },

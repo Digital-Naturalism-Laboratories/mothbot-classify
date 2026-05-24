@@ -1,4 +1,7 @@
 import { ensureReadWritePermission } from '~/features/data-flow/3.persist/files.persistence'
+import { isPackageIndexedFiles } from '~/features/mothbox-next/load-package-data'
+import { isPackageArchiveRelativePath } from './reserved-paths'
+import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/package-indexed-access'
 import { isLikelyNightFolderName, parsePathParts } from './ingest-paths'
 
 type FileSystemFileHandleLike = {
@@ -114,6 +117,21 @@ export function getFileWebkitRelativePath(file: File) {
   return rel
 }
 
+/**
+ * Normalizes indexed picker paths for ingest.
+ * Legacy trees use project/deployment/night discovery; mothbox-next packages use dataset.json + package-relative paths.
+ */
+export function normalizeIndexedFilesForIngest(params: { files: IndexedPickedFile[] }): NormalizePathsResult {
+  const { files } = params
+  if (!Array.isArray(files) || files.length === 0) return { ok: true, files: [] }
+
+  if (isPackageIndexedFiles(files)) {
+    return { ok: true, files: normalizeIndexedPathsToPackageRoot(files) as IndexedPickedFile[] }
+  }
+
+  return normalizePathsToRoot({ files })
+}
+
 export function normalizePathsToRoot(params: { files: IndexedPickedFile[] }): NormalizePathsResult {
   const { files } = params
   if (!Array.isArray(files) || files.length === 0) return { ok: true, files: [] }
@@ -174,20 +192,33 @@ export function normalizePathsToRoot(params: { files: IndexedPickedFile[] }): No
 
 function collectPatchesSamplePaths(params: { files: IndexedPickedFile[]; limit: number }) {
   const { files, limit } = params
-  const samplePaths: string[] = []
+  const packagePatchPaths: string[] = []
+  const legacyPatchPaths: string[] = []
 
   for (const entry of files) {
     const normalizedPath = (entry.path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
+    if (isPackageArchiveRelativePath(normalizedPath)) continue
+
     const segments = normalizedPath.split('/').filter(Boolean)
     const patchesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'patches')
     if (patchesIndex < 0) continue
     const next = segments[patchesIndex + 1] ?? ''
     if (!next.toLowerCase().endsWith('.jpg')) continue
-    samplePaths.push(normalizedPath)
-    if (samplePaths.length >= limit) break
+
+    const isCanonicalPackagePatch =
+      segments[patchesIndex - 1]?.toLowerCase() === '01_patches' ||
+      segments.slice(0, patchesIndex).some((segment) => segment.toLowerCase() === '01_patches')
+
+    if (isCanonicalPackagePatch) {
+      packagePatchPaths.push(normalizedPath)
+      continue
+    }
+
+    legacyPatchPaths.push(normalizedPath)
   }
 
-  return samplePaths
+  const samplePaths = packagePatchPaths.length > 0 ? packagePatchPaths : legacyPatchPaths
+  return samplePaths.slice(0, limit)
 }
 
 function selectBestStripCount(params: { candidateStripCounts: number[]; samplePaths: string[] }) {

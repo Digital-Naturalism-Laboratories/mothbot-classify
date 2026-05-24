@@ -1,5 +1,7 @@
 import type { TaxonRecord } from '~/models/taxonomy/types'
 
+export type DetectionClassificationType = 'accept' | 'taxon' | 'morphospecies' | 'error'
+
 /**
  * Core detection entity type.
  * Represents a single detection (patch) with its identification state.
@@ -33,5 +35,6 @@ export type DetectionEntity = {
   speciesListDOI?: string
   // Original label from bot detection JSON (e.g., "ORDER_Diptera")
   originalMothboxLabel?: string
+  classificationType?: DetectionClassificationType
 }
 

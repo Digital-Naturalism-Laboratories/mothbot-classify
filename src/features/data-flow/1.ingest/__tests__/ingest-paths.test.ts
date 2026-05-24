@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeLegacyNightId, parsePathParts } from '../ingest-paths'
+import { normalizeLegacyNightId, parsePathParts, resolveNightEntityIdFromRoute } from '../ingest-paths'
 
 describe('ingest-paths', () => {
   it('parses dataset/deployment/night patch paths', () => {
@@ -40,5 +40,45 @@ describe('ingest-paths', () => {
   it('keeps already canonical night ids unchanged', () => {
     const normalized = normalizeLegacyNightId('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21')
     expect(normalized).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21')
+  })
+
+  it('resolves mothbox-next camera_day_id from route params', () => {
+    const cameraDayId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-23'
+    const nights = {
+      [cameraDayId]: { id: cameraDayId },
+    }
+
+    const resolved = resolveNightEntityIdFromRoute({
+      nights,
+      projectId: 'Dinacon2025',
+      deploymentId: 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23',
+      nightId: cameraDayId,
+    })
+
+    expect(resolved).toBe(cameraDayId)
+  })
+
+  it('resolves legacy project/deployment/night from route params', () => {
+    const legacyId = 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21'
+    const nights = {
+      [legacyId]: { id: legacyId },
+    }
+
+    const resolved = resolveNightEntityIdFromRoute({
+      nights,
+      projectId: 'Dinacon2025',
+      deploymentId: 'Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20',
+      nightId: '2025-06-21',
+    })
+
+    expect(resolved).toBe(legacyId)
+  })
+
+  it('ignores archived package source tree paths', () => {
+    const parsed = parsePathParts({
+      path: '00_source/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/file.jpg',
+    })
+
+    expect(parsed).toBeNull()
   })
 })

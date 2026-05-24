@@ -52,14 +52,17 @@ describe('dataset-health', () => {
       }),
     ]
 
-    const report = await runDatasetHealthAudit({ entries })
+    const result = await runDatasetHealthAudit({ entries })
 
-    expect(report.nightSummaryFiles).toBe(1)
-    expect(report.identifiedFiles).toBe(1)
-    expect(report.summaryIssues.some((issue) => issue.type === 'legacy-night-id')).toBe(true)
-    expect(report.invalidIdentifiedJsonCount).toBe(1)
-    expect(report.photoCollisionCount).toBe(1)
-    expect(report.patchCollisionCount).toBe(1)
+    expect(result.mode).toBe('legacy')
+    if (result.mode !== 'legacy') return
+
+    expect(result.report.nightSummaryFiles).toBe(1)
+    expect(result.report.identifiedFiles).toBe(1)
+    expect(result.report.summaryIssues.some((issue) => issue.type === 'legacy-night-id')).toBe(true)
+    expect(result.report.invalidIdentifiedJsonCount).toBe(1)
+    expect(result.report.photoCollisionCount).toBe(1)
+    expect(result.report.patchCollisionCount).toBe(1)
   })
 
   it('heals legacy summary nightId values', async () => {
