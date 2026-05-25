@@ -43,7 +43,7 @@ export function scheduleSaveUserDetections(params: { nightId: string; delayMs?: 
 
   const t = window.setTimeout(() => {
     if (isMothboxNextIngestMode()) {
-      void exportUserDetectionsForMothboxNextPackage({ nightId })
+      void exportUserDetectionsForMothboxNextPackage()
       return
     }
     void exportUserDetectionsForNight({ nightId })

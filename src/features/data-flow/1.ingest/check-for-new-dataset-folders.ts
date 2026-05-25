@@ -20,7 +20,10 @@ export async function promptUntrackedPendingDatasetSetup(params?: {
     dismissedFolderNames: dismissedPendingMigrationFoldersStore.get(),
   })
 
-  if (shouldPromptContentIntegration({ policy, integrationInProgress: contentIntegrationInProgressStore.get() })) {
+  if (
+    policy &&
+    shouldPromptContentIntegration({ policy, integrationInProgress: contentIntegrationInProgressStore.get() })
+  ) {
     openNewDatasetMigrationDialog({ pending: policy.pending })
     return policy.pending
   }

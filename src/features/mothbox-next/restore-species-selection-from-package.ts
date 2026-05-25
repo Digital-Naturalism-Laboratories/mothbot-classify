@@ -13,7 +13,7 @@ export function restoreSpeciesListSelectionFromPackage(params: {
   const counts = new Map<string, number>()
   for (const row of classifications) {
     if (row.classifier_type !== 'human') continue
-    const raw = row.taxon?.species_list
+    const raw = readSpeciesListRef(row.taxon)
     if (typeof raw !== 'string' || !raw.trim()) continue
     const key = normalizeSpeciesListRef(raw)
     counts.set(key, (counts.get(key) ?? 0) + 1)
@@ -48,6 +48,14 @@ function matchSpeciesListId(params: { ref: string; speciesLists: Record<string, 
   }
 
   return undefined
+}
+
+function readSpeciesListRef(taxon: ClassificationRecord['taxon']) {
+  if (!taxon) return undefined
+  const extras = taxon.extras?.species_list
+  if (typeof extras === 'string') return extras
+  const direct = (taxon as { species_list?: unknown }).species_list
+  return typeof direct === 'string' ? direct : undefined
 }
 
 function normalizeSpeciesListRef(value: string) {
