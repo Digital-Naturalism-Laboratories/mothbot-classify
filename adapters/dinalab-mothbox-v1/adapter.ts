@@ -30,6 +30,9 @@ async function main() {
   const result = await runDinalabMothboxV1Adapter({
     datasetId,
     archiveSourceTree: false,
+    retainPatchesInSource: true,
+    packageRelativeSourcePrefix: '00_source',
+    packageSourceLayout: 'archive',
     io: createNodeDinalabAdapterIO({ sourceDir, packageDir: root }),
   })
 

@@ -28,13 +28,17 @@ import { nightsStore } from './entities/4.nights'
 import { patchesStore, clearFileObjectsForNight as clearPatchesForNight } from './entities/5.patches'
 import { photosStore, clearFileObjectsForNight as clearPhotosForNight } from './entities/photos'
 import { detectionsStore } from './entities/detections'
+import { nightSummariesStore } from './entities/night-summaries'
+import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
 import { clearMothboxNextPackage } from '~/features/mothbox-next/active-package'
+import { clearActiveHierarchy } from '~/features/mothbox-next/active-hierarchy'
 
 /**
  * Resets all entity stores to empty state.
  */
 export function resetAllEntityStores() {
   clearMothboxNextPackage()
+  clearActiveHierarchy()
   projectsStore.set({})
   sitesStore.set({})
   deploymentsStore.set({})
@@ -42,6 +46,8 @@ export function resetAllEntityStores() {
   photosStore.set({})
   patchesStore.set({})
   detectionsStore.set({})
+  nightSummariesStore.set({})
+  morphoLinksStore.set({})
 }
 
 /**

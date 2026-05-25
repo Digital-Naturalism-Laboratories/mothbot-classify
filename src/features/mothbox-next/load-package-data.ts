@@ -1,6 +1,12 @@
 import type { MothboxNextDatasetManifest } from './dataset-manifest'
 import { parseDatasetManifest } from './dataset-manifest'
-import { parseNdjsonLines } from './parse-ndjson'
+import {
+  parseCameraDayRecords,
+  parseClassificationRecords,
+  parseDeploymentRecords,
+  parsePatchRecords,
+  parsePatchSourceRecords,
+} from './parse-package-records'
 import type {
   CameraDayRecord,
   ClassificationRecord,
@@ -48,27 +54,27 @@ export async function loadMothboxNextPackageData(params: {
 
   const paths = resolveManifestPaths({ packageRoot, manifest })
 
-  const patches = await readNdjsonRequired<PatchRecord>({
+  const patches = await readPatchRecordsRequired({
     path: paths.patchesNdjson,
     label: 'patches.ndjson',
     access,
   })
 
   const patchSources = paths.patchSourcesNdjson
-    ? await readNdjsonOptional<PatchSourceRecord>({ path: paths.patchSourcesNdjson, access })
+    ? await readPatchSourceRecordsOptional({ path: paths.patchSourcesNdjson, access })
     : []
   const deployments = paths.deploymentsNdjson
-    ? await readNdjsonOptional<DeploymentRecord>({ path: paths.deploymentsNdjson, access })
+    ? await readDeploymentRecordsOptional({ path: paths.deploymentsNdjson, access })
     : []
   const cameraDays = paths.cameraDaysNdjson
-    ? await readNdjsonOptional<CameraDayRecord>({ path: paths.cameraDaysNdjson, access })
+    ? await readCameraDayRecordsOptional({ path: paths.cameraDaysNdjson, access })
     : []
 
   const classificationPaths = await access.listClassificationFiles(paths.classificationsDir)
   const classificationFiles: Array<{ path: string; rows: ClassificationRecord[] }> = []
 
   for (const filePath of classificationPaths) {
-    const rows = await readNdjsonRequired<ClassificationRecord>({
+    const rows = await readClassificationRecordsRequired({
       path: filePath,
       label: filePath,
       access,
@@ -92,30 +98,70 @@ export async function loadMothboxNextPackageData(params: {
   }
 }
 
-async function readNdjsonRequired<T>(params: {
+async function readPatchRecordsRequired(params: {
   path: string
   label: string
   access: PackageDataAccess
-}): Promise<T[]> {
+}): Promise<PatchRecord[]> {
   const { path, label, access } = params
   const text = await access.readPackageFile(path)
   try {
-    return await parseNdjsonLines<T>(text)
+    return parsePatchRecords(text)
   } catch (err) {
     throw new Error(`Invalid NDJSON in ${label}: ${String(err)}`)
   }
 }
 
-async function readNdjsonOptional<T>(params: {
+async function readPatchSourceRecordsOptional(params: {
   path: string
   access: PackageDataAccess
-}): Promise<T[]> {
+}): Promise<PatchSourceRecord[]> {
   const { path, access } = params
   try {
     const text = await access.readPackageFile(path)
-    return await parseNdjsonLines<T>(text)
+    return parsePatchSourceRecords(text)
   } catch {
     return []
+  }
+}
+
+async function readDeploymentRecordsOptional(params: {
+  path: string
+  access: PackageDataAccess
+}): Promise<DeploymentRecord[]> {
+  const { path, access } = params
+  try {
+    const text = await access.readPackageFile(path)
+    return parseDeploymentRecords(text)
+  } catch {
+    return []
+  }
+}
+
+async function readCameraDayRecordsOptional(params: {
+  path: string
+  access: PackageDataAccess
+}): Promise<CameraDayRecord[]> {
+  const { path, access } = params
+  try {
+    const text = await access.readPackageFile(path)
+    return parseCameraDayRecords(text)
+  } catch {
+    return []
+  }
+}
+
+async function readClassificationRecordsRequired(params: {
+  path: string
+  label: string
+  access: PackageDataAccess
+}): Promise<ClassificationRecord[]> {
+  const { path, label, access } = params
+  const text = await access.readPackageFile(path)
+  try {
+    return parseClassificationRecords(text)
+  } catch (err) {
+    throw new Error(`Invalid NDJSON in ${label}: ${String(err)}`)
   }
 }
 

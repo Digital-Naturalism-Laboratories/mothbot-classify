@@ -9,7 +9,21 @@ import type { IndexedFile } from '~/stores/entities/photos'
 import type { CameraDayRecord, DeploymentRecord, PatchRecord, PatchSourceRecord } from './records'
 import type { ClassificationRecord } from './records'
 import { detectionFromClassification } from './classification-to-detection'
-import { buildDeploymentAndCameraDayRecords } from './adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
+import {
+  buildDeploymentAndCameraDayRecords,
+  enrichPatchesFromPatchSources,
+  packageNeedsWrappedDeploymentHierarchyRepair,
+  parseDinalabDeploymentFolderName,
+  siteIdForDeployment,
+} from './adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
+import { defaultLeafCameraDayId } from './hierarchy-manifest'
+import { isPatchImagesOnlyPackage, FLAT_PATCH_IMAGES_LEAF_LABEL } from './normalize-flat-patch-images-records'
+import {
+  DEFAULT_SITE_SEGMENT,
+  deploymentRecordDisplayName,
+  isIsoDateOnly,
+  siteDisplayNameForDeployment,
+} from './hierarchy-display-labels'
 
 export type HydratedPackageEntities = {
   projects: Record<string, ProjectEntity>
@@ -45,12 +59,12 @@ function buildHierarchyFromRecords(params: {
   const nights: Record<string, NightEntity> = {}
 
   for (const d of deployments) {
-    const siteId = d.site_id ?? `${datasetId}/site`
-    const siteLabel = siteId.split('/').pop() ?? siteId
+    const siteId = resolveDeploymentSiteId({ datasetId, deployment: d })
+    const siteLabel = siteDisplayNameForDeployment({ siteId, deployment: d }) || datasetId
     sites[siteId] = sites[siteId] ?? { id: siteId, name: siteLabel, projectId: datasetId }
     deps[d.deployment_id] = {
       id: d.deployment_id,
-      name: d.deployment_id,
+      name: deploymentRecordDisplayName(d),
       projectId: datasetId,
       siteId,
     }
@@ -60,8 +74,15 @@ function buildHierarchyFromRecords(params: {
     const deploymentId = cd.deployment_id ?? `${datasetId}/deployment`
     const siteId = deps[deploymentId]?.siteId ?? `${datasetId}/site`
     if (!deps[deploymentId]) {
-      sites[siteId] = sites[siteId] ?? { id: siteId, name: siteId, projectId: datasetId }
-      deps[deploymentId] = { id: deploymentId, name: deploymentId, projectId: datasetId, siteId }
+      const fallbackDeployment: DeploymentRecord = { deployment_id: deploymentId, site_id: siteId }
+      const siteLabel = siteDisplayNameForDeployment({ siteId, deployment: fallbackDeployment }) || datasetId
+      sites[siteId] = sites[siteId] ?? { id: siteId, name: siteLabel, projectId: datasetId }
+      deps[deploymentId] = {
+        id: deploymentId,
+        name: deploymentRecordDisplayName(fallbackDeployment),
+        projectId: datasetId,
+        siteId,
+      }
     }
     nights[cd.camera_day_id] = {
       id: cd.camera_day_id,
@@ -101,32 +122,132 @@ function buildHierarchyFromRecords(params: {
   return { projects, sites, deployments: deps, nights, defaultNightId, defaultDeploymentId, defaultSiteId }
 }
 
+function shouldRebuildHierarchyRecordsFromPatches(params: {
+  patches: PatchRecord[]
+  deployments: DeploymentRecord[]
+}) {
+  const { patches, deployments } = params
+  if (deployments.length === 0) return true
+  if (packageNeedsWrappedDeploymentHierarchyRepair(patches)) return true
+  if (deployments.every((deployment) => isIsoDateOnly(deployment.deployment_id))) return true
+  return false
+}
+
+function resolveDeploymentSiteId(params: { datasetId: string; deployment: DeploymentRecord }) {
+  const { datasetId, deployment } = params
+  if (deployment.site_id) return deployment.site_id
+
+  const parsed = parseDinalabDeploymentFolderName(deployment.deployment_id)
+  const siteName =
+    deployment.site_name_from_folder ??
+    parsed.siteName ??
+    (isIsoDateOnly(deployment.deployment_id) ? DEFAULT_SITE_SEGMENT : deployment.deployment_id)
+
+  return siteIdForDeployment({ datasetId, siteName })
+}
+
+function buildFlatLeafHierarchyFromRecords(params: { datasetId: string; cameraDays: CameraDayRecord[] }) {
+  const { datasetId, cameraDays } = params
+  const leaf = cameraDays[0]
+  const leafId = leaf?.camera_day_id ?? defaultLeafCameraDayId(datasetId)
+  const leafName = leaf?.night_date ?? FLAT_PATCH_IMAGES_LEAF_LABEL
+
+  const projects: Record<string, ProjectEntity> = {
+    [datasetId]: { id: datasetId, name: datasetId },
+  }
+
+  const nights: Record<string, NightEntity> = {
+    [leafId]: {
+      id: leafId,
+      name: leafName,
+      projectId: datasetId,
+      siteId: `${datasetId}/site/default`,
+      deploymentId: `${datasetId}/deployment/default`,
+    },
+  }
+
+  return {
+    projects,
+    sites: {},
+    deployments: {},
+    nights,
+    defaultNightId: leafId,
+    defaultDeploymentId: `${datasetId}/deployment/default`,
+    defaultSiteId: `${datasetId}/site/default`,
+  }
+}
+
 export function hydratePackageEntities(params: {
   datasetId: string
+  manifest: import('./dataset-manifest').MothboxNextDatasetManifest
   patches: PatchRecord[]
   patchSources?: PatchSourceRecord[]
   deployments: DeploymentRecord[]
   cameraDays: CameraDayRecord[]
   resolvedClassifications: ClassificationRecord[]
   indexedByAssetPath: Record<string, IndexedFile>
+  legacySourceRootName?: string
+  indexedPaths?: string[]
 }): HydratedPackageEntities {
-  const { datasetId, patches, patchSources = [], deployments, cameraDays, resolvedClassifications, indexedByAssetPath } = params
+  const {
+    datasetId,
+    manifest,
+    patchSources = [],
+    resolvedClassifications,
+    indexedByAssetPath,
+    legacySourceRootName,
+    indexedPaths,
+  } = params
+
+  let patches = patchSources.length
+    ? enrichPatchesFromPatchSources({
+        patches: params.patches,
+        patchSources,
+        datasetId,
+        legacySourceRootName,
+        indexedPaths,
+      })
+    : params.patches
+
+  const flatPatchImages = isPatchImagesOnlyPackage({
+    manifest,
+    patchSources,
+    patches,
+    deployments: params.deployments,
+  })
+  if (flatPatchImages) {
+    const leafId = defaultLeafCameraDayId(datasetId)
+    patches = patches.map((patch) => ({
+      ...patch,
+      camera_day_id: leafId,
+      deployment_id: undefined,
+    }))
+  }
 
   const patchSourcesById: Record<string, PatchSourceRecord> = {}
   for (const source of patchSources) {
     if (source.patch_id) patchSourcesById[source.patch_id] = source
   }
 
-  const hierarchyRecords =
-    deployments.length || cameraDays.length
-      ? { deployments, cameraDays }
-      : buildDeploymentAndCameraDayRecords({ datasetId, patches })
+  const hierarchyRecords = flatPatchImages
+    ? {
+        deployments: [] as DeploymentRecord[],
+        cameraDays: [{ camera_day_id: defaultLeafCameraDayId(datasetId), night_date: FLAT_PATCH_IMAGES_LEAF_LABEL }],
+      }
+    : shouldRebuildHierarchyRecordsFromPatches({
+        patches,
+        deployments: params.deployments,
+      })
+      ? buildDeploymentAndCameraDayRecords({ datasetId, patches })
+      : { deployments: params.deployments, cameraDays: params.cameraDays }
 
-  const hierarchy = buildHierarchyFromRecords({
-    datasetId,
-    deployments: hierarchyRecords.deployments,
-    cameraDays: hierarchyRecords.cameraDays,
-  })
+  const hierarchy = flatPatchImages
+    ? buildFlatLeafHierarchyFromRecords({ datasetId, cameraDays: hierarchyRecords.cameraDays })
+    : buildHierarchyFromRecords({
+        datasetId,
+        deployments: hierarchyRecords.deployments,
+        cameraDays: hierarchyRecords.cameraDays,
+      })
   const photos: Record<string, PhotoEntity> = {}
   const patchesOut: Record<string, PatchEntity> = {}
   const detections: Record<string, DetectionEntity> = {}

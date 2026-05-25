@@ -41,6 +41,7 @@ describe('ingestMothboxNextPackage (L3)', () => {
 
     const hydrated = hydratePackageEntities({
       datasetId: loaded!.manifest.dataset_id,
+      manifest: loaded!.manifest,
       patches: loaded!.patches,
       patchSources: loaded!.patchSources,
       deployments: loaded!.deployments,

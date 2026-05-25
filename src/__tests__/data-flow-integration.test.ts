@@ -40,7 +40,7 @@ vi.mock('~/stores/species/project-species-list', async () => {
 import { detectionsStore, labelDetections, type DetectionEntity } from '~/stores/entities/detections'
 import { buildDarwinShapeFromDetection } from '~/features/data-flow/4.export/darwin-csv'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
-import { getSpeciesValue, getValidScientificName } from '~/models/taxonomy/morphospecies'
+import { getSpeciesValueForExport, getValidScientificNameForExport } from '~/models/taxonomy/morphospecies'
 import { buildIdentifiedJsonShapeFromDetection, buildDetectionFromIdentifiedJsonShape } from '~/models/detection-shapes'
 import type { TaxonRecord } from '~/features/data-flow/2.identify/species-list.store'
 
@@ -136,7 +136,11 @@ describe('Data Flow Integration Tests', () => {
         },
       }
 
-      const scientificName = getValidScientificName({ detection })
+      const scientificName = getValidScientificNameForExport({
+        taxon: detection.taxon,
+        morphospecies: detection.morphospecies,
+        label: detection.label,
+      })
 
       // Should return genus, not morphospecies
       expect(scientificName).toBe('Lispe')
@@ -153,7 +157,11 @@ describe('Data Flow Integration Tests', () => {
         },
       }
 
-      const scientificName = getValidScientificName({ detection: detectionWithNumber })
+      const scientificName = getValidScientificNameForExport({
+        taxon: detectionWithNumber.taxon,
+        morphospecies: detectionWithNumber.morphospecies,
+        label: detectionWithNumber.label,
+      })
       expect(scientificName).toBe('')
     })
   })
@@ -498,7 +506,7 @@ describe('Data Flow Integration Tests', () => {
     })
   })
 
-  describe('getSpeciesValue isolation', () => {
+  describe('getSpeciesValueForExport isolation', () => {
     it('returns empty when morphospecies exists', () => {
       const detection: DetectionEntity = {
         ...BASE_DETECTION,
@@ -511,7 +519,10 @@ describe('Data Flow Integration Tests', () => {
         },
       }
 
-      const species = getSpeciesValue({ detection })
+      const species = getSpeciesValueForExport({
+        taxon: detection.taxon,
+        morphospecies: detection.morphospecies,
+      })
       expect(species).toBe('')
     })
 
@@ -526,7 +537,10 @@ describe('Data Flow Integration Tests', () => {
         },
       }
 
-      const species = getSpeciesValue({ detection })
+      const species = getSpeciesValueForExport({
+        taxon: detection.taxon,
+        morphospecies: detection.morphospecies,
+      })
       expect(species).toBe('domestica')
     })
   })
@@ -590,7 +604,11 @@ describe('Data Flow Integration Tests', () => {
         },
       }
 
-      const scientificName = getValidScientificName({ detection })
+      const scientificName = getValidScientificNameForExport({
+        taxon: detection.taxon,
+        morphospecies: detection.morphospecies,
+        label: detection.label,
+      })
       expect(scientificName).toBe('')
     })
 
