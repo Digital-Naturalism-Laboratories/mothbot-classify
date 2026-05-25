@@ -11,6 +11,12 @@ import { setDetectionSaveScheduler } from './detection-persistence'
 import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
 import { exportUserDetectionsForMothboxNextPackage } from '~/features/mothbox-next/persist/package-fs-writer'
 import { buildNightSummary } from '~/stores/entities/night-summaries'
+import { writeTextFile } from '~/utils/fs-directory-handle'
+import {
+  morphoLinksMapToRecords,
+  PACKAGE_MORPHO_LINKS_RECORD,
+} from '~/features/mothbox-next/morpho-links-package'
+import { serializeNdjsonLines } from '~/features/mothbox-next/parse-ndjson'
 
 type FileSystemDirectoryHandleLike = {
   getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
@@ -130,7 +136,12 @@ export async function writeMorphoLinksToDisk() {
 
     const links = morphoLinksStore.get() || {}
 
-    // Persist a single file under the projects root
+    if (isMothboxNextIngestMode()) {
+      const rows = morphoLinksMapToRecords(links)
+      await writeTextFile(root, PACKAGE_MORPHO_LINKS_RECORD, serializeNdjsonLines(rows))
+      return
+    }
+
     await writeJson(root, ['morpho_links.json'], links)
   } catch {
     // ignore write errors

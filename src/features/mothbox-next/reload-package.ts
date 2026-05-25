@@ -108,7 +108,7 @@ export async function refreshActivePackageLoadedFromWriter(params: { writer: Pac
   })
 }
 
-function applyLoadedPackageToStores(params: {
+export function applyLoadedPackageToStores(params: {
   loaded: LoadedMothboxNextPackage
   indexedFiles: IndexedFile[]
 }) {

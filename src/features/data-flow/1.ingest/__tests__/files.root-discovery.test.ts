@@ -80,11 +80,9 @@ describe('normalizePathsToRoot', () => {
 
   it('skips legacy root discovery for mothbox-next packages with 00_source archive', () => {
     const files = [
-      makeEntry('Dinacon2025/dataset.json'),
-      makeEntry('Dinacon2025/01_patches/patch_a.jpg'),
-      makeEntry(
-        'Dinacon2025/00_source/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/patch_b.jpg',
-      ),
+      makeEntry('dataset.json'),
+      makeEntry('01_patches/patch_a.jpg'),
+      makeEntry('00_source/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/patch_b.jpg'),
     ]
 
     const result = normalizeIndexedFilesForIngest({ files })

@@ -5,6 +5,7 @@ const LOCAL_FLAG_KEY = 'mbl/pickedDir'
 const LOCAL_NAME_KEY = 'mbl/pickedDirName'
 const DATASETS_FLAG_KEY = 'mbl/datasetsDir'
 const DATASETS_NAME_KEY = 'mbl/datasetsDirName'
+const LAST_ACTIVE_DATASET_FOLDER_NAME_KEY = 'mbl/lastActiveDatasetFolderName'
 const IDB_NAME = 'mothbox-local'
 const IDB_STORE = 'fs-handles'
 
@@ -58,6 +59,36 @@ export async function loadDatasetsDirectory(): Promise<FileSystemDirectoryHandle
   }
 }
 
+export function loadLastActiveDatasetFolderName(): string | null {
+  return readLocalStorage(LAST_ACTIVE_DATASET_FOLDER_NAME_KEY) || null
+}
+
+export function saveLastActiveDatasetFolderName(folderName: string | null) {
+  const trimmed = folderName?.trim()
+  writeLocalStorage(LAST_ACTIVE_DATASET_FOLDER_NAME_KEY, trimmed ?? '')
+}
+
+export function clearLastActiveDatasetFolderName() {
+  writeLocalStorage(LAST_ACTIVE_DATASET_FOLDER_NAME_KEY, '')
+}
+
+function readLocalStorage(key: string) {
+  try {
+    return localStorage.getItem(key)?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function writeLocalStorage(key: string, value: string) {
+  try {
+    if (!value) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
+  } catch {
+    // ignore
+  }
+}
+
 export async function forgetDatasetsDirectory() {
   try {
     await idbDelete(IDB_NAME, IDB_STORE, 'datasetsRoot')
@@ -67,6 +98,7 @@ export async function forgetDatasetsDirectory() {
   try {
     localStorage.removeItem(DATASETS_FLAG_KEY)
     localStorage.removeItem(DATASETS_NAME_KEY)
+    clearLastActiveDatasetFolderName()
   } catch {
     // ignore localStorage errors
   }
@@ -129,6 +161,7 @@ export const persistenceConstants = {
   LOCAL_NAME_KEY,
   DATASETS_FLAG_KEY,
   DATASETS_NAME_KEY,
+  LAST_ACTIVE_DATASET_FOLDER_NAME_KEY,
   IDB_NAME,
   IDB_STORE,
 }

@@ -8,6 +8,7 @@ import {
   createPackageFileAccessFromIndexedFiles,
   readIndexedEntryText,
 } from '~/features/mothbox-next/package-indexed-access'
+import { formatFilesystemError } from '~/utils/fs-error'
 
 export async function validateFolderSelection(params: {
   files: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>
@@ -46,12 +47,36 @@ async function validateMothboxNextIndexedSelection(params: {
     return { ok: false, message: 'dataset.json is not readable.' }
   }
 
-  const result = await validateDatasetPackage({
-    packageRoot,
-    readManifestText: () => readIndexedEntryText(manifestEntry as any),
-    files: createPackageFileAccessFromIndexedFiles({ files: files as any, packageRoot }),
-  })
+  try {
+    const result = await validateDatasetPackage({
+      packageRoot,
+      readManifestText: () => readIndexedEntryText(manifestEntry as any),
+      files: createPackageFileAccessFromIndexedFiles({ files: files as any, packageRoot }),
+    })
 
-  if (!result.ok) return result
-  return { ok: true }
+    if (!result.ok) return enrichMissingPatchMessage({ files, result })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, message: formatFilesystemError(err) }
+  }
+}
+
+function enrichMissingPatchMessage(params: {
+  files: Array<{ path: string }>
+  result: { ok: false; message: string }
+}) {
+  const { files, result } = params
+  if (!result.message.includes('Missing patch image:')) return result
+
+  const indexedPatchSamples = files
+    .map((file) => file.path.replaceAll('\\', '/'))
+    .filter((path) => path.includes('/patches/') && /\.(jpg|jpeg|png)$/i.test(path))
+    .slice(0, 3)
+
+  if (!indexedPatchSamples.length) return result
+
+  return {
+    ok: false as const,
+    message: `${result.message} Indexed patch files on disk look like: ${indexedPatchSamples.join(', ')}. Run Set up or Refresh datasets to rebuild records.`,
+  }
 }
