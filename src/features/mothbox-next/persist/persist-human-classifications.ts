@@ -1,4 +1,4 @@
-import { detectionsStore, getIdentifiedDetectionsForNight } from '~/stores/entities/detections'
+import { detectionsStore, getIdentifiedDetectionsForLeafGroup } from '~/stores/entities/detections'
 import type { DetectionEntity } from '~/models/detection.types'
 import { classificationFromDetection } from '../classification-to-detection'
 import { mergeClassifierRowsByPatchId } from './merge-classifier-rows'
@@ -22,9 +22,9 @@ export type PackageTextWriter = {
 
 export async function persistPackageClassifications(params: {
   writer: PackageTextWriter
-  nightId?: string
+  leafGroupId?: string
 }) {
-  const { writer, nightId } = params
+  const { writer, leafGroupId } = params
   const active = mothboxNextPackageStore.get()
   if (!active) return
 
@@ -34,8 +34,8 @@ export async function persistPackageClassifications(params: {
     classifierFileName(classifierId),
   )
 
-  const updates = collectHumanClassificationUpdates({ nightId, classifierId })
-  if (!updates.length) return
+  const updates = collectHumanClassificationUpdates({ leafGroupId, classifierId })
+  const desiredPatchIds = new Set(updates.map((row) => row.patch_id).filter(Boolean))
 
   let existing: ClassificationRecord[] = []
   if (await writer.fileExists(relClassifierPath)) {
@@ -43,7 +43,11 @@ export async function persistPackageClassifications(params: {
     existing = parseClassificationRecords(text)
   }
 
-  const merged = mergeClassifierRowsByPatchId({ existing, updates })
+  const hasStaleHumanRows = existing.some((row) => row.patch_id && !desiredPatchIds.has(row.patch_id))
+  if (!updates.length && !hasStaleHumanRows) return
+
+  const prunedExisting = existing.filter((row) => !row.patch_id || desiredPatchIds.has(row.patch_id))
+  const merged = mergeClassifierRowsByPatchId({ existing: prunedExisting, updates })
   await writer.writeText(relClassifierPath, serializeNdjsonLines(merged))
   await rebuildCurrentClassificationsCacheFromDisk({ writer, activePackage: active })
   await refreshActivePackageLoadedFromWriter({ writer })
@@ -52,9 +56,9 @@ export async function persistPackageClassifications(params: {
   if (folderName) await savePackageSessionCacheFromStores({ folderName })
 }
 
-function collectHumanClassificationUpdates(params: { nightId?: string; classifierId: string }) {
-  const { nightId, classifierId } = params
-  const detections = nightId ? getIdentifiedDetectionsForNight(nightId) : getAllIdentifiedDetections()
+function collectHumanClassificationUpdates(params: { leafGroupId?: string; classifierId: string }) {
+  const { leafGroupId, classifierId } = params
+  const detections = leafGroupId ? getIdentifiedDetectionsForLeafGroup(leafGroupId) : getAllIdentifiedDetections()
 
   return detections.map((detection) =>
     classificationFromDetection({

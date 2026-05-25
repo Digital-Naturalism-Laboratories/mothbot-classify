@@ -58,6 +58,25 @@ export function resolveCurrentClassifications(params: {
   return resolved
 }
 
+export function findBotClassificationForPatch(params: {
+  patchId: string
+  classificationFiles?: Array<{ path: string; rows: ClassificationRecord[] }>
+}): ClassificationRecord | undefined {
+  const { patchId, classificationFiles } = params
+  if (!patchId) return undefined
+
+  let best: ClassificationRecord | null = null
+  for (const file of classificationFiles ?? []) {
+    for (const row of file.rows) {
+      if (row.patch_id !== patchId) continue
+      if (row.classifier_type !== 'bot') continue
+      if (isNewerCandidate({ candidate: row, current: best })) best = row
+    }
+  }
+
+  return best ?? undefined
+}
+
 export function flattenClassificationFiles(params: {
   files: Array<{ path: string; rows: ClassificationRecord[] }>
 }): ClassificationRowWithSource[] {
