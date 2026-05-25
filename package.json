@@ -32,6 +32,7 @@
     "@tanstack/react-router": "1",
     "@tanstack/react-virtual": "^3.10.8",
     "autoprefixer": "^10.4.21",
+    "baseline-browser-mapping": "^2.10.19",
     "chroma-js": "^3.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -54,6 +55,9 @@
     "tailwindcss-animate": "^1.0.7",
     "vite-plugin-pwa": "^1.2.0",
     "windy-radix-palette": "^2.0.0-beta.7"
+  },
+  "overrides": {
+    "caniuse-lite": "1.0.30001788"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
