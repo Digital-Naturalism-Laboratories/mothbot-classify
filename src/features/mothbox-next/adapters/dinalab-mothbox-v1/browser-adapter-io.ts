@@ -1,3 +1,4 @@
+import { findRelativeFilesUnderDirectory } from '~/features/data-flow/1.ingest/fs-find-files'
 import type { DinalabAdapterIO } from './adapter-io'
 import {
   fileExistsAt,
@@ -20,7 +21,7 @@ export function createBrowserDinalabAdapterIO(params: {
     source: {
       exists: (relativePath) => fileExistsAt(sourceHandle, relativePath),
       readText: (relativePath) => readTextFile(sourceHandle, relativePath),
-      findFiles: (predicate) => findRelativeFiles(sourceHandle, predicate),
+      findFiles: (predicate) => findRelativeFilesUnderDirectory(sourceHandle, predicate),
     },
     package: {
       writeText: (relativePath, text) => writeTextFile(packageHandle, relativePath, text),
@@ -30,26 +31,4 @@ export function createBrowserDinalabAdapterIO(params: {
       },
     },
   }
-}
-
-async function findRelativeFiles(
-  root: FileSystemDirectoryHandleLike,
-  predicate: (fileName: string) => boolean,
-): Promise<string[]> {
-  const out: string[] = []
-
-  async function walk(dir: FileSystemDirectoryHandleLike, prefix: string) {
-    if (!dir.entries) return
-    for await (const [name, handle] of dir.entries()) {
-      const rel = prefix ? `${prefix}/${name}` : name
-      if (handle?.kind === 'directory') {
-        await walk(handle as FileSystemDirectoryHandleLike, rel)
-        continue
-      }
-      if (handle?.kind === 'file' && predicate(name)) out.push(rel)
-    }
-  }
-
-  await walk(root, '')
-  return out
 }
