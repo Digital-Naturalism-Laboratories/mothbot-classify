@@ -10,13 +10,21 @@ import { formatFilesystemError, isFilesystemNotFoundError } from '~/utils/fs-err
 
 export { isPackageIndexedFiles }
 
+function basenameFromPath(path: string) {
+  const normalized = path.replaceAll('\\', '/').replace(/\/+$/, '')
+  const segments = normalized.split('/').filter(Boolean)
+  return segments[segments.length - 1] ?? ''
+}
+
 /**
  * When a package folder is indexed via the File System Access API, paths are often
  * prefixed with the picked directory name (e.g. my-dataset/dataset.json). Package
  * loaders expect paths relative to the package root (dataset.json at the top).
  */
 export function normalizeIndexedPathsToPackageRoot<T extends { path: string }>(files: T[]): T[] {
-  const manifestInfo = findPackageManifestInIndexedFiles(files)
+  const manifestInfo = findPackageManifestInIndexedFiles(
+    files.map((file) => ({ path: file.path, name: basenameFromPath(file.path) })),
+  )
   if (!manifestInfo?.packageRoot) return files
 
   const prefix = `${manifestInfo.packageRoot.replace(/\/+$/, '')}/`

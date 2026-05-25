@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { Link } from '@tanstack/react-router'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { Loader } from '~/components/atomic/Loader'
 import {
@@ -20,7 +20,7 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
 import { cn } from '~/utils/cn'
-import { DATASET_PROGRESS_BAR_WIDTH_PX, InlineProgress } from './inline-progress'
+import { InlineProgress } from './inline-progress'
 import { DatasetHeaderMenu, ProjectsTreeRowContextMenu } from './item-actions'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { buildProgressIndex, type ProgressIndex } from './projects-progress'
@@ -169,7 +169,6 @@ export function ProjectsSection(props: ProjectsSectionProps) {
             <InlineProgress
               total={datasetProgress.total}
               identified={datasetProgress.identified}
-              barWidthPx={DATASET_PROGRESS_BAR_WIDTH_PX}
             />
           </div>
         ) : null}

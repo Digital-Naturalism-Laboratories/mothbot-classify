@@ -11,9 +11,8 @@ import {
   buildMorphoTaxonomyIndex,
   mergeMorphoCountSources,
   type MorphoCatalogItem,
-  type MorphoTaxonomySummary,
 } from './morpho-taxonomy'
-import { mergeMorphoTaxonomySummary, type NightSummaryEntity } from '~/stores/entities/night-summaries'
+import { mergeMorphoTaxonomySummary, type MorphoTaxonomySummary, type NightSummaryEntity } from '~/stores/entities/night-summaries'
 
 export type MorphoCatalogIndexedFallback = {
   counts: Record<string, number>
