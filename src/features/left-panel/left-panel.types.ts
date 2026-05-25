@@ -13,6 +13,8 @@ export type TaxonomyNode = {
 
 export type NightLeftPanelProps = {
   nightId: string
+  hasMachineIdentification?: boolean
+  unassignedCount?: number
   taxonomyAuto?: TaxonomyNode[]
   taxonomyUser?: TaxonomyNode[]
   totalPatches: number

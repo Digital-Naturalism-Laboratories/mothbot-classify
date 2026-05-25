@@ -23,6 +23,7 @@ import { PatchGrid } from '~/features/patch-grid/patch-grid'
 import { SelectionBar } from './selection-bar'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { computeDetectionLongestDimension } from '~/features/patch-grid/grid-utils'
+import { countUnassignedDetectionsForNight, nightHasMachineIdentification } from '~/features/labeling/night-labeling-mode'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
 
@@ -155,6 +156,14 @@ export function NightView(props: { nightId: string }) {
     () => computeNightWarnings({ photos, detections, patches, nightId }),
     [photos, detections, patches, nightId],
   )
+  const hasMachineIdentification = useMemo(
+    () => nightHasMachineIdentification({ photos, detections, nightId }),
+    [photos, detections, nightId],
+  )
+  const unassignedCount = useMemo(
+    () => countUnassignedDetectionsForNight({ detections, nightId }),
+    [detections, nightId],
+  )
 
   function onIdentify() {
     if (selectedCount === 0) return
@@ -218,6 +227,8 @@ export function NightView(props: { nightId: string }) {
     <Row className='w-full h-full overflow-hidden gap-x-4'>
       <NightLeftPanel
         nightId={nightId}
+        hasMachineIdentification={hasMachineIdentification}
+        unassignedCount={unassignedCount}
         taxonomyAuto={taxonomyAuto}
         taxonomyUser={taxonomyUser}
         totalPatches={totalPatches}
@@ -247,6 +258,7 @@ export function NightView(props: { nightId: string }) {
           selectedTaxon={selectedTaxon as any}
           selectedBucket={selectedBucket}
           sortByClusters={sortByClusters}
+          hasMachineIdentification={hasMachineIdentification}
         />
         <SelectionBar
           selectedCount={selectedCount}

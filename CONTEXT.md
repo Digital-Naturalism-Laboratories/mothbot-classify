@@ -99,6 +99,10 @@ _Avoid_: "annotation" for the primary user-facing workflow unless a broader non-
 The portable base data needed to classify patches locally: patch images plus the minimum patch metadata needed to identify and load them.
 _Avoid_: assuming substrate always means the user's original source folder layout.
 
+**Patch-images-only dataset** (patches-only / images-only):
+A dataset whose incoming material is only patch image files (`.jpg`, `.jpeg`, `.png`) with no legacy `*_botdetection.json` and no bot classifications in the package. Each patch still gets a detection stub for labeling, but there is no machine taxonomy to review. The night UI shows an **Unassigned** bucket (not **Machine identified**) until a human identifies or accepts a patch.
+_Avoid_: calling these "auto identified" or showing machine taxonomy sidebars when no bot labels exist.
+
 ## Relationships
 - **Dataset** is the classification boundary; **patch** is the irreducible atom inside it.
 - **Source** preserves incoming reality; **adapter** translates it into normalized dataset records.
@@ -109,6 +113,7 @@ _Avoid_: assuming substrate always means the user's original source folder layou
 - Lightweight or cloud uploads should prefer derived substrate over raw photos; raw photos can be too large to transfer routinely.
 - **Deployment**, **site**, **night**, and **camera day** are optional for generic patch datasets and central for hardware-capture datasets.
 - **Patch** is the human work unit; **raw photo** and **legacy bot detection JSON** are optional patch sources.
+- **Patch-images-only** datasets have patches and detection stubs only; machine taxonomy UI appears only when legacy bot JSON or bot classifications supply labels.
 - **Classification** belongs to a **patch** and may be exchanged between collaborators independently of raw photos.
 - **Deployment** happens at a **site** and contributes one or more **nights** only for Mothbox-style acquisition datasets.
 - `03_classifications/{classifier}.ndjson` records per-classifier claims; `02_records/current-classifications.ndjson` records the current resolved classification per patch.

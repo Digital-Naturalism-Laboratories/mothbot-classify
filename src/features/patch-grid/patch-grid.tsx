@@ -22,6 +22,7 @@ import {
 import { useContainerWidth } from '~/utils/use-container-width'
 import { colorVariantsMap } from '~/utils/colors'
 import { mapRankToVariant } from '~/utils/ranks'
+import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
 
 const DEBUG = false
 
@@ -60,10 +61,22 @@ export type PatchGridProps = {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   sortByClusters?: boolean
+  hasMachineIdentification?: boolean
 }
 
 export function PatchGrid(props: PatchGridProps) {
-  const { patches, nightId, className, onOpenPatchDetail, loading, onImageProgress, selectedTaxon, selectedBucket, sortByClusters = false } = props
+  const {
+    patches,
+    nightId,
+    className,
+    onOpenPatchDetail,
+    loading,
+    onImageProgress,
+    selectedTaxon,
+    selectedBucket,
+    sortByClusters = false,
+    hasMachineIdentification = true,
+  } = props
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const desiredColumns = useStore(patchColumnsStore)
@@ -107,8 +120,8 @@ export function PatchGrid(props: PatchGridProps) {
   }, [itemWidth, gapPx])
 
   const blocks = useMemo(() => {
-    return buildGridBlocks({ orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters })
-  }, [orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters])
+    return buildGridBlocks({ orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification })
+  }, [orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification])
 
   const visualOrderIds = useMemo(() => {
     return flattenBlocksToVisualOrder({ blocks })
@@ -370,14 +383,15 @@ function buildGridBlocks(params: {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   sortByClusters?: boolean
+  hasMachineIdentification?: boolean
 }) {
-  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters = false } = params
+  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters = false, hasMachineIdentification = true } = params
   const UNASSIGNED_LABEL = 'Unassigned'
   const out: GridBlock[] = []
   if (!orderedIds.length) return out
 
   if (sortByClusters) {
-    const header = getFlatHeaderForClusterSort({ selectedTaxon, selectedBucket, count: orderedIds.length })
+    const header = getFlatHeaderForClusterSort({ selectedTaxon, selectedBucket, count: orderedIds.length, hasMachineIdentification })
     out.push(header)
     addRowBlocks({ itemIds: orderedIds, columns, keyPrefix: `row:cluster:${header.title}`, out })
     return out
@@ -486,8 +500,9 @@ function getFlatHeaderForClusterSort(params: {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   count: number
+  hasMachineIdentification?: boolean
 }): GridBlockHeader {
-  const { selectedTaxon, selectedBucket, count } = params
+  const { selectedTaxon, selectedBucket, count, hasMachineIdentification = true } = params
 
   if (selectedBucket === 'user' && selectedTaxon?.name === 'ERROR') {
     return { kind: 'header', key: 'hdr:cluster:errors', title: 'Errors', rank: 'species', count }
@@ -504,7 +519,9 @@ function getFlatHeaderForClusterSort(params: {
   }
 
   if (selectedBucket === 'auto') {
-    return { kind: 'header', key: 'hdr:cluster:all-unapproved', title: 'All unapproved', count }
+    const title = hasMachineIdentification ? UNAPPROVED_AGGREGATE_LABEL : UNASSIGNED_AGGREGATE_LABEL
+    const key = hasMachineIdentification ? 'hdr:cluster:all-unapproved' : 'hdr:cluster:all-unassigned'
+    return { kind: 'header', key, title, count }
   }
 
   if (selectedBucket === 'user') {

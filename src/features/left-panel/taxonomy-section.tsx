@@ -32,6 +32,9 @@ export type TaxonomySectionProps = {
   emptyText: string
   className?: string
   errorsCount?: number
+  aggregateLabel?: string
+  aggregateCount?: number
+  alwaysShowAggregate?: boolean
 }
 
 export function TaxonomySection(props: TaxonomySectionProps) {
@@ -47,11 +50,15 @@ export function TaxonomySection(props: TaxonomySectionProps) {
     emptyText,
     className,
     errorsCount = 0,
+    aggregateLabel = 'All unapproved',
+    aggregateCount,
+    alwaysShowAggregate = false,
   } = props
 
   const hasNodes = Array.isArray(nodes) && nodes.length > 0
   const hasErrors = bucket === 'user' && (errorsCount || 0) > 0
-  if (!hasNodes && !hasErrors) {
+  const showAggregate = bucket === 'auto' && (alwaysShowAggregate || hasNodes)
+  if (!hasNodes && !hasErrors && !showAggregate) {
     return (
       <div className={className}>
         <PanelHeading className='mb-6'>{title}</PanelHeading>
@@ -60,7 +67,7 @@ export function TaxonomySection(props: TaxonomySectionProps) {
     )
   }
 
-  const allCount = (nodes || []).reduce((acc, n) => acc + (n?.count || 0), 0)
+  const allCount = aggregateCount ?? (nodes || []).reduce((acc, n) => acc + (n?.count || 0), 0)
   const isAllSelected = !selectedTaxon && selectedBucket === bucket
   const isErrorsSelected = selectedBucket === 'user' && selectedTaxon?.name === 'ERROR'
 
@@ -75,9 +82,9 @@ export function TaxonomySection(props: TaxonomySectionProps) {
       />
 
       <div>
-        {bucket === 'auto' ? (
+        {showAggregate ? (
           <CountsRow
-            label='All unapproved'
+            label={aggregateLabel}
             count={allCount}
             selected={isAllSelected}
             onSelect={() => {

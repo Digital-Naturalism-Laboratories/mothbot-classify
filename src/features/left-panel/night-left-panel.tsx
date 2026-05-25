@@ -13,10 +13,13 @@ import { PatchSizeControl } from '~/components/atomic/patch-size-control'
 import type { NightLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
 import { TaxonomySection } from './taxonomy-section'
+import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
 
 export function NightLeftPanel(props: NightLeftPanelProps) {
   const {
     nightId,
+    hasMachineIdentification = true,
+    unassignedCount = 0,
     taxonomyAuto,
     taxonomyUser,
     totalPatches,
@@ -73,17 +76,33 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
       </LayoutOptionsSection>
 
-      <TaxonomySection
-        title='Machine identified'
-        nodes={taxonomyAuto}
-        bucket='auto'
-        sortByClusters={sortByClusters}
-        onSortByClustersChange={onSortByClustersChange}
-        selectedTaxon={selectedTaxon}
-        selectedBucket={selectedBucket}
-        onSelectTaxon={onSelectTaxon}
-        emptyText='No detections'
-      />
+      {hasMachineIdentification ? (
+        <TaxonomySection
+          title='Machine identified'
+          nodes={taxonomyAuto}
+          bucket='auto'
+          sortByClusters={sortByClusters}
+          onSortByClustersChange={onSortByClustersChange}
+          selectedTaxon={selectedTaxon}
+          selectedBucket={selectedBucket}
+          onSelectTaxon={onSelectTaxon}
+          emptyText='No detections'
+          aggregateLabel={UNAPPROVED_AGGREGATE_LABEL}
+        />
+      ) : (
+        <TaxonomySection
+          title='Unassigned'
+          nodes={[]}
+          bucket='auto'
+          selectedTaxon={selectedTaxon}
+          selectedBucket={selectedBucket}
+          onSelectTaxon={onSelectTaxon}
+          emptyText='No unassigned patches'
+          aggregateLabel={UNASSIGNED_AGGREGATE_LABEL}
+          aggregateCount={unassignedCount}
+          alwaysShowAggregate
+        />
+      )}
 
       <TaxonomySection
         className='mt-16'
