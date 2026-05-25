@@ -30,7 +30,7 @@ export const leafGroupRoute = createRoute({
   path: '/datasets/$folderName/groups/$leafGroupId',
   beforeLoad: ({ params }) => {
     const resolved = activeHierarchyStore.get()
-    if (!isSingleLeafHierarchy(resolved)) return
+    if (!resolved || !isSingleLeafHierarchy(resolved)) return
     if (resolved.leafGroupIds[0] !== params.leafGroupId) return
 
     throw redirect({

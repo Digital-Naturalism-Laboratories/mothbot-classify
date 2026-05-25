@@ -57,7 +57,10 @@ async function moveDirectoryTreeIntoSource(params: {
   const { sourceDir, destinationDir } = params
   let movedCount = 0
 
-  for await (const [name, child] of sourceDir.entries()) {
+  const entriesIterable = sourceDir.entries?.()
+  if (!entriesIterable) return movedCount
+
+  for await (const [name, child] of entriesIterable) {
     if (name === PACKAGE_ARCHIVE_DIR || isReservedDatasetsChildFolderName(name)) continue
 
     if (isFileHandle(child)) {
