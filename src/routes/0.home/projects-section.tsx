@@ -19,18 +19,31 @@ import type { NightEntity } from '~/stores/entities/4.nights'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
-import classed from '~/styles/classed'
 import { cn } from '~/utils/cn'
 import { InlineProgress } from './inline-progress'
-import { ExportDwCDropdown, ItemActions } from './item-actions'
-import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
+import { DatasetHeaderMenu, ProjectsTreeRowContextMenu } from './item-actions'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
+import { buildProgressIndex, type ProgressIndex } from './projects-progress'
+import {
+  buildLeafGroupLinkParams,
+  isSingleLeafHierarchy,
+  resolveHomeTreeMode,
+} from '~/features/mothbox-next/hierarchy-routes'
+import { shouldSkipSiteLevelInProjectsTree } from '~/features/mothbox-next/hierarchy-display-labels'
+import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { ManifestHierarchyTree } from './hierarchy-tree'
+import { speciesListsStore, speciesListsLoadingStore } from '~/features/data-flow/2.identify/species-list.store'
+import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
+import { $isSpeciesPickerOpen, $speciesPickerProjectId } from '~/features/data-flow/2.identify/species-picker.state'
 
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
-const projectsTreeRootRowTitleClass = 'font-medium text-neutral-900'
 const projectsTreeDeepRowTitleClass = 'text-neutral-900'
-/** Fixed-width stats column so progress + actions line up across site / deployment / night rows. */
-const projectsTreeStatsColClass =
+const projectsTreeRowClass =
   'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12'
+const projectsTreeRowTitleClass = 'flex min-w-0 items-center'
+const projectsTreeIndentDeploymentClass = 'pl-8'
+/** Deployment pl-8 + expand chevron (w-28) + gap-2 — nights have no chevron; margin keeps row bg full width. */
+const projectsTreeIndentNightClass = 'ml-[38px]'
 
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
@@ -46,15 +59,7 @@ export type ProjectsSectionProps = HierarchyStores & {
   nightSummaries: Record<string, NightSummaryEntity>
 }
 
-type ProgressIndex = {
-  byProject: Record<string, { total: number; identified: number }>
-  bySite: Record<string, { total: number; identified: number }>
-  byDeployment: Record<string, { total: number; identified: number }>
-  byNight: Record<string, { total: number; identified: number }>
-}
-
 type CollapsedState = {
-  projects: Record<string, boolean>
   sites: Record<string, boolean>
   deployments: Record<string, boolean>
 }
@@ -62,20 +67,37 @@ type CollapsedState = {
 export function ProjectsSection(props: ProjectsSectionProps) {
   const { isLoading, projects, sites, deployments, nights, detections, nightSummaries } = props
   const hasProjects = Object.keys(projects ?? {}).length > 0
-  const [collapsed, setCollapsed] = useState<CollapsedState>({ projects: {}, sites: {}, deployments: {} })
+  const activeFolderName = useStore(activeDatasetFolderNameStore)
+  const datasetProjectId = useMemo(() => Object.keys(projects ?? {})[0], [projects])
+  const speciesSelection = useStore(projectSpeciesSelectionStore)
+  const speciesLists = useStore(speciesListsStore)
+  const isSpeciesListsLoading = useStore(speciesListsLoadingStore)
+  const datasetSpeciesListName = useMemo(() => {
+    if (!datasetProjectId) return undefined
+    const listId = speciesSelection?.[datasetProjectId]
+    if (!listId) return undefined
+    return speciesLists?.[listId]?.name
+  }, [datasetProjectId, speciesSelection, speciesLists])
+  const [collapsed, setCollapsed] = useState<CollapsedState>({ sites: {}, deployments: {} })
+  const datasetProgress = useMemo(
+    () =>
+      buildProgressIndex({ nights, nightSummaries, detections }).byProject[datasetProjectId ?? ''] ?? {
+        total: 0,
+        identified: 0,
+      },
+    [nights, nightSummaries, detections, datasetProjectId],
+  )
+  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
+  const [isMorphoOpen, setIsMorphoOpen] = useState(false)
 
   const expandAll = useCallback(() => {
-    setCollapsed({ projects: {}, sites: {}, deployments: {} })
+    setCollapsed({ sites: {}, deployments: {} })
   }, [])
 
   const collapseAll = useCallback(() => {
     const ids = collectProjectsHierarchyIds({ projects, sites, deployments })
     setCollapsed(buildAllCollapsedState(ids))
   }, [projects, sites, deployments])
-
-  const onToggleProject = useCallback((projectId: string) => {
-    setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'projects', id: projectId }))
-  }, [])
 
   const onToggleSite = useCallback((siteId: string) => {
     setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'sites', id: siteId }))
@@ -85,20 +107,66 @@ export function ProjectsSection(props: ProjectsSectionProps) {
     setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'deployments', id: deploymentId }))
   }, [])
 
+  const onChooseSpeciesList = useCallback(() => {
+    if (!datasetProjectId) return
+    $speciesPickerProjectId.set(datasetProjectId)
+    $isSpeciesPickerOpen.set(true)
+  }, [datasetProjectId])
+
   return (
     <Column className='gap-8'>
-      <div className='flex items-center justify-between gap-12'>
-        <h2 id='home-projects-heading' className='text-lg font-semibold'>
-          Projects
-        </h2>
+      <div className='flex items-start justify-between gap-12'>
+        <div className='flex min-w-0 flex-1 flex-wrap items-center gap-12'>
+          <h2 id='home-projects-heading' className='text-lg font-semibold text-balance'>
+            {activeFolderName ?? 'Projects'}
+          </h2>
+          {datasetProjectId ? (
+            <DatasetHeaderMenu
+              projectId={datasetProjectId}
+              nights={nights}
+              onExpandAll={expandAll}
+              onCollapseAll={collapseAll}
+              menuAlign='start'
+            />
+          ) : null}
+          {hasProjects && datasetProjectId ? (
+            <>
+              <Button variant='outline' size='xxsm' type='button' onClick={() => setIsSpeciesOpen(true)}>
+                Species
+              </Button>
+              <Button variant='outline' size='xxsm' type='button' onClick={() => setIsMorphoOpen(true)}>
+                Morphospecies
+              </Button>
+              <button
+                type='button'
+                onClick={onChooseSpeciesList}
+                disabled={isSpeciesListsLoading}
+                className='text-left text-13 text-neutral-500 underline-offset-2 hover:text-neutral-800 hover:underline disabled:cursor-wait disabled:opacity-70'
+              >
+                {isSpeciesListsLoading
+                  ? 'Loading species lists…'
+                  : datasetSpeciesListName
+                    ? `Species list: ${datasetSpeciesListName}`
+                    : 'species list not selected — click to choose'}
+              </button>
+              <SpeciesCatalogDialog
+                open={isSpeciesOpen}
+                onOpenChange={setIsSpeciesOpen}
+                projectIdOverride={datasetProjectId}
+                initialScope='all'
+              />
+              <MorphoCatalogDialog
+                open={isMorphoOpen}
+                onOpenChange={setIsMorphoOpen}
+                projectIdOverride={datasetProjectId}
+                initialScope='all'
+              />
+            </>
+          ) : null}
+        </div>
         {!isLoading && hasProjects ? (
-          <div className='flex shrink-0 flex-wrap justify-end gap-8'>
-            <Button variant='outline' size='xxsm' type='button' onClick={expandAll}>
-              Expand all
-            </Button>
-            <Button variant='outline' size='xxsm' type='button' onClick={collapseAll}>
-              Collapse all
-            </Button>
+          <div className='flex shrink-0 flex-col items-end'>
+            <InlineProgress total={datasetProgress.total} identified={datasetProgress.identified} />
           </div>
         ) : null}
       </div>
@@ -113,12 +181,11 @@ export function ProjectsSection(props: ProjectsSectionProps) {
           detections={detections}
           nightSummaries={nightSummaries}
           collapsed={collapsed}
-          onToggleProject={onToggleProject}
           onToggleSite={onToggleSite}
           onToggleDeployment={onToggleDeployment}
         />
       ) : (
-        <p className='text-sm text-neutral-500'>Load a projects folder to see projects</p>
+        <p className='text-sm text-neutral-500 text-pretty'>Select a dataset on the left, or add a new one below the list.</p>
       )}
     </Column>
   )
@@ -129,7 +196,6 @@ type ProjectsListProps = HierarchyStores & {
   detections: Record<string, DetectionEntity>
   nightSummaries: Record<string, NightSummaryEntity>
   collapsed: CollapsedState
-  onToggleProject: (projectId: string) => void
   onToggleSite: (siteId: string) => void
   onToggleDeployment: (deploymentId: string) => void
 }
@@ -143,126 +209,168 @@ function ProjectsList(props: ProjectsListProps) {
     detections,
     nightSummaries,
     collapsed,
-    onToggleProject,
     onToggleSite,
     onToggleDeployment,
   } = props
-  const progressIndex = useMemo(() => buildProgressIndex({ nightSummaries, detections }), [nightSummaries, detections])
+  const progressIndex = useMemo(
+    () => buildProgressIndex({ nights, nightSummaries, detections }),
+    [nights, nightSummaries, detections],
+  )
+  const resolvedHierarchy = useStore(activeHierarchyStore)
   const list = Object.values(projects ?? {})
   if (!list.length) return null
 
   return (
     <section aria-labelledby='home-projects-heading'>
-      <ul className='space-y-8'>
-        {list.map((project) => (
-          <ProjectItem
-            key={project.id}
-            project={project}
-            sites={sites}
-            deployments={deployments}
-            nights={nights}
-            progressIndex={progressIndex}
-            collapsed={collapsed}
-            onToggleProject={onToggleProject}
-            onToggleSite={onToggleSite}
-            onToggleDeployment={onToggleDeployment}
-          />
-        ))}
-      </ul>
+      <div className='flex flex-col gap-8'>
+        {list.map((project) => {
+          const homeTreeMode = resolveHomeTreeMode({
+            resolved: resolvedHierarchy,
+            sites,
+            deployments,
+            projectId: project.id,
+          })
+
+          if (homeTreeMode === 'manifest') {
+            return (
+              <ManifestHierarchyTree
+                key={project.id}
+                projectId={project.id}
+                nights={nights}
+                progressIndex={progressIndex}
+              />
+            )
+          }
+
+          if (homeTreeMode === 'legacy') {
+            const hasLegacyRows =
+              getSitesForProject({ sites, projectId: project.id }).length > 0 ||
+              getDeploymentsForProject({ deployments, projectId: project.id }).length > 0
+
+            if (hasLegacyRows) {
+              return (
+                <LegacySitesDeploymentsTree
+                  key={project.id}
+                  projectId={project.id}
+                  sites={sites}
+                  deployments={deployments}
+                  nights={nights}
+                  progressIndex={progressIndex}
+                  collapsed={collapsed}
+                  onToggleSite={onToggleSite}
+                  onToggleDeployment={onToggleDeployment}
+                />
+              )
+            }
+
+            if (resolvedHierarchy?.leafGroupIds.length) {
+              return (
+                <ManifestHierarchyTree
+                  key={project.id}
+                  projectId={project.id}
+                  nights={nights}
+                  progressIndex={progressIndex}
+                />
+              )
+            }
+          }
+
+          if (resolvedHierarchy?.leafGroupIds.length) {
+            return (
+              <ManifestHierarchyTree
+                key={project.id}
+                projectId={project.id}
+                nights={nights}
+                progressIndex={progressIndex}
+              />
+            )
+          }
+
+          return (
+            <ProjectsTreeEmptyState key={project.id} projectName={project.name ?? project.id} />
+          )
+        })}
+      </div>
     </section>
   )
 }
 
-type ProjectItemProps = HierarchyStores & {
-  project: ProjectEntity
+function ProjectsTreeEmptyState(props: { projectName: string }) {
+  const { projectName } = props
+
+  return (
+    <div className='shadow-border rounded-xl bg-white p-8 text-sm text-neutral-600'>
+      No nights or hierarchy data for {projectName} yet. Open a dataset folder or wait for ingest to finish.
+    </div>
+  )
+}
+
+/** Site → deployment → night tree for legacy ingest and Dinalab packages with hydrated entity stores. */
+type LegacySitesDeploymentsTreeProps = HierarchyStores & {
+  projectId: string
   progressIndex: ProgressIndex
   collapsed: CollapsedState
-  onToggleProject: (projectId: string) => void
   onToggleSite: (siteId: string) => void
   onToggleDeployment: (deploymentId: string) => void
 }
 
-function ProjectItem(props: ProjectItemProps) {
-  const {
-    project,
-    sites,
-    deployments,
-    nights,
-    progressIndex,
-    collapsed,
-    onToggleProject,
-    onToggleSite,
-    onToggleDeployment,
-  } = props
-  const prog = progressIndex.byProject[project.id] ?? { total: 0, identified: 0 }
-  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
-  const [isMorphoOpen, setIsMorphoOpen] = useState(false)
-  const sitesForProject = useMemo(() => getSitesForProject({ sites, projectId: project.id }), [sites, project.id])
-  const hasSites = sitesForProject.length > 0
-  const isProjectExpanded = !collapsed.projects[project.id]
-  const projectPanelId = useMemo(() => projectsTreePanelId({ segment: 'project', entityId: project.id }), [project.id])
+function LegacySitesDeploymentsTree(props: LegacySitesDeploymentsTreeProps) {
+  const { projectId, sites, deployments, nights, progressIndex, collapsed, onToggleSite, onToggleDeployment } = props
+  const sitesForProject = useMemo(() => getSitesForProject({ sites, projectId }), [sites, projectId])
+  const deploymentsForProject = useMemo(
+    () => getDeploymentsForProject({ deployments, projectId }),
+    [deployments, projectId],
+  )
+
+  if (!sitesForProject.length && !deploymentsForProject.length) return null
+
+  const skipSiteLevel = shouldSkipSiteLevelInProjectsTree(sitesForProject)
+
+  if (!sitesForProject.length) {
+    return (
+      <div className='shadow-border rounded-xl bg-white p-8'>
+        <DeploymentsList
+          projectId={projectId}
+          siteId=''
+          deployments={deployments}
+          nights={nights}
+          progressIndex={progressIndex}
+          collapsed={collapsed}
+          onToggleDeployment={onToggleDeployment}
+          isTopLevel
+          deploymentFilter='project'
+        />
+      </div>
+    )
+  }
 
   return (
-    <li className='border bg-white p-8 group/project rounded-lg'>
-      <div className='flex items-center gap-12'>
-        <ProjectsTreeExpandTitle
-          hasBranch={hasSites}
-          expanded={isProjectExpanded}
-          panelId={projectPanelId}
-          onToggle={() => onToggleProject(project.id)}
-          expandAriaLabel={`Expand sites for ${project.name}`}
-          collapseAriaLabel={`Collapse sites for ${project.name}`}
-          titleClassName={projectsTreeRootRowTitleClass}
-        >
-          {project.name}
-        </ProjectsTreeExpandTitle>
-        <Button
-          variant='outline'
-          size='xxsm'
-          onClick={() => setIsSpeciesOpen(true)}
-        >
-          Species
-        </Button>
-        <Button
-          variant='outline'
-          size='xxsm'
-          onClick={() => setIsMorphoOpen(true)}
-        >
-          Morphospecies
-        </Button>
-        <ExportDwCDropdown scope='project' id={project.id} nights={nights} menuAlign='start' />
-
-        <div className='ml-auto flex items-center gap-12'>
-          <InlineProgress total={prog.total} identified={prog.identified} />
-        </div>
-      </div>
-      <SpeciesCatalogDialog
-        open={isSpeciesOpen}
-        onOpenChange={setIsSpeciesOpen}
-        projectIdOverride={project.id}
-        initialScope='project'
-      />
-      <MorphoCatalogDialog
-        open={isMorphoOpen}
-        onOpenChange={setIsMorphoOpen}
-        projectIdOverride={project.id}
-        initialScope='project'
-      />
-      {hasSites ? (
-        <ExpandDisclosurePanel id={projectPanelId} hidden={!isProjectExpanded}>
-          <SitesList
-            projectId={project.id}
-            sites={sites}
-            deployments={deployments}
-            nights={nights}
-            progressIndex={progressIndex}
-            collapsed={collapsed}
-            onToggleSite={onToggleSite}
-            onToggleDeployment={onToggleDeployment}
-          />
-        </ExpandDisclosurePanel>
-      ) : null}
-    </li>
+    <div className='shadow-border rounded-xl bg-white p-8'>
+      {skipSiteLevel ? (
+        <DeploymentsList
+          projectId={projectId}
+          siteId={sitesForProject[0]?.id ?? ''}
+          deployments={deployments}
+          nights={nights}
+          progressIndex={progressIndex}
+          collapsed={collapsed}
+          onToggleDeployment={onToggleDeployment}
+          isTopLevel
+          deploymentFilter='project'
+        />
+      ) : (
+        <SitesList
+          projectId={projectId}
+          sites={sites}
+          deployments={deployments}
+          nights={nights}
+          progressIndex={progressIndex}
+          collapsed={collapsed}
+          onToggleSite={onToggleSite}
+          onToggleDeployment={onToggleDeployment}
+        />
+      )}
+    </div>
   )
 }
 
@@ -280,7 +388,7 @@ function SitesList(props: SitesListProps) {
   if (!list.length) return null
 
   return (
-    <Ul className=''>
+    <div className='flex w-full flex-col gap-1'>
       {list.map((site) => (
         <SiteItem
           key={site.id}
@@ -294,7 +402,7 @@ function SitesList(props: SitesListProps) {
           onToggleDeployment={onToggleDeployment}
         />
       ))}
-    </Ul>
+    </div>
   )
 }
 
@@ -316,26 +424,29 @@ function SiteItem(props: SiteItemProps) {
   const sitePanelId = useMemo(() => projectsTreePanelId({ segment: 'site', entityId: site.id }), [site.id])
 
   return (
-    <Li className={cn('group/site', projectsTreeStatsColClass)}>
-      <div className='flex min-w-0 items-center pl-8'>
-        <ProjectsTreeExpandTitle
-          hasBranch={hasDeployments}
-          expanded={isSiteExpanded}
-          panelId={sitePanelId}
-          onToggle={() => onToggleSite(site.id)}
-          expandAriaLabel={`Expand deployments for ${site.name}`}
-          collapseAriaLabel={`Collapse deployments for ${site.name}`}
-          titleClassName={projectsTreeDeepRowTitleClass}
-        >
-          {site.name}
-        </ProjectsTreeExpandTitle>
-      </div>
-      <div className='flex min-w-0 items-center justify-end gap-12'>
-        <InlineProgress total={prog.total} identified={prog.identified} />
-        <ItemActions scope={'site'} id={site.id} nights={nights} />
-      </div>
+    <div className='group/site w-full'>
+      <ProjectsTreeRowContextMenu scope='site' id={site.id} nights={nights}>
+        <div className={projectsTreeRowClass}>
+          <div className={projectsTreeRowTitleClass}>
+            <div className='min-w-0'>
+              <ProjectsTreeExpandTitle
+                hasBranch={hasDeployments}
+                expanded={isSiteExpanded}
+                panelId={sitePanelId}
+                onToggle={() => onToggleSite(site.id)}
+                expandAriaLabel={`Expand deployments for ${site.name}`}
+                collapseAriaLabel={`Collapse deployments for ${site.name}`}
+                titleClassName={projectsTreeDeepRowTitleClass}
+              >
+                {site.name}
+              </ProjectsTreeExpandTitle>
+            </div>
+          </div>
+          <InlineProgress total={prog.total} identified={prog.identified} />
+        </div>
+      </ProjectsTreeRowContextMenu>
       {hasDeployments ? (
-        <ExpandDisclosurePanel id={sitePanelId} hidden={!isSiteExpanded}>
+        <ExpandDisclosurePanel id={sitePanelId} hidden={!isSiteExpanded} className='w-full'>
           <DeploymentsList
             projectId={projectId}
             siteId={site.id}
@@ -347,7 +458,7 @@ function SiteItem(props: SiteItemProps) {
           />
         </ExpandDisclosurePanel>
       ) : null}
-    </Li>
+    </div>
   )
 }
 
@@ -357,15 +468,30 @@ type DeploymentsListProps = ListStores & {
   progressIndex: ProgressIndex
   collapsed: CollapsedState
   onToggleDeployment: (deploymentId: string) => void
+  isTopLevel?: boolean
+  deploymentFilter?: 'site' | 'project'
 }
 
 function DeploymentsList(props: DeploymentsListProps) {
-  const { projectId, siteId, deployments, nights, progressIndex, collapsed, onToggleDeployment } = props
-  const list = getDeploymentsForSite({ deployments, siteId })
+  const {
+    projectId,
+    siteId,
+    deployments,
+    nights,
+    progressIndex,
+    collapsed,
+    onToggleDeployment,
+    isTopLevel = false,
+    deploymentFilter = 'site',
+  } = props
+  const list = useMemo(() => {
+    if (deploymentFilter === 'project') return getDeploymentsForProject({ deployments, projectId })
+    return getDeploymentsForSite({ deployments, siteId })
+  }, [deploymentFilter, deployments, projectId, siteId])
   if (!list.length) return null
 
   return (
-    <Ul>
+    <div className='flex w-full flex-col gap-1'>
       {list.map((dep) => (
         <DeploymentItem
           key={dep.id}
@@ -375,9 +501,10 @@ function DeploymentsList(props: DeploymentsListProps) {
           progressIndex={progressIndex}
           collapsed={collapsed}
           onToggleDeployment={onToggleDeployment}
+          isTopLevel={isTopLevel}
         />
       ))}
-    </Ul>
+    </div>
   )
 }
 
@@ -387,10 +514,11 @@ type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
   progressIndex: ProgressIndex
   collapsed: CollapsedState
   onToggleDeployment: (deploymentId: string) => void
+  isTopLevel?: boolean
 }
 
 function DeploymentItem(props: DeploymentItemProps) {
-  const { projectId, deployment, nights, progressIndex, collapsed, onToggleDeployment } = props
+  const { projectId, deployment, nights, progressIndex, collapsed, onToggleDeployment, isTopLevel = false } = props
   const prog = progressIndex.byDeployment[deployment.id] ?? { total: 0, identified: 0 }
   const nightsForDep = useMemo(() => getNightsForDeployment({ nights, deploymentId: deployment.id }), [nights, deployment.id])
   const hasNights = nightsForDep.length > 0
@@ -401,31 +529,36 @@ function DeploymentItem(props: DeploymentItemProps) {
   )
 
   return (
-    <Li className={cn('group/deployment', projectsTreeStatsColClass)}>
-      <div className='flex min-w-0 items-center pl-16'>
-        <ProjectsTreeExpandTitle
-          hasBranch={hasNights}
-          expanded={isDeploymentExpanded}
-          panelId={deploymentPanelId}
-          onToggle={() => onToggleDeployment(deployment.id)}
-          expandAriaLabel={`Expand nights for ${deployment.name}`}
-          collapseAriaLabel={`Collapse nights for ${deployment.name}`}
-          titleClassName={projectsTreeDeepRowTitleClass}
-        >
-          {deployment.name}
-        </ProjectsTreeExpandTitle>
-      </div>
-      <div className='flex min-w-0 items-center justify-end gap-12'>
-        <InlineProgress total={prog.total} identified={prog.identified} />
-        <ItemActions scope={'deployment'} id={deployment.id} nights={nights} />
-      </div>
+    <div className='group/deployment w-full'>
+      <ProjectsTreeRowContextMenu scope='deployment' id={deployment.id} nights={nights}>
+        <div className={projectsTreeRowClass}>
+          <div
+            className={cn(projectsTreeRowTitleClass, !isTopLevel && projectsTreeIndentDeploymentClass)}
+          >
+            <div className='min-w-0'>
+              <ProjectsTreeExpandTitle
+                hasBranch={hasNights}
+                expanded={isDeploymentExpanded}
+                panelId={deploymentPanelId}
+                onToggle={() => onToggleDeployment(deployment.id)}
+                expandAriaLabel={`Expand nights for ${deployment.name}`}
+                collapseAriaLabel={`Collapse nights for ${deployment.name}`}
+                titleClassName={projectsTreeDeepRowTitleClass}
+              >
+                {deployment.name}
+              </ProjectsTreeExpandTitle>
+            </div>
+          </div>
+          <InlineProgress total={prog.total} identified={prog.identified} />
+        </div>
+      </ProjectsTreeRowContextMenu>
 
       {hasNights ? (
-        <ExpandDisclosurePanel id={deploymentPanelId} hidden={!isDeploymentExpanded}>
+        <ExpandDisclosurePanel id={deploymentPanelId} hidden={!isDeploymentExpanded} className='w-full'>
           <NightsList projectId={projectId} deploymentId={deployment.id} nights={nights} progressIndex={progressIndex} />
         </ExpandDisclosurePanel>
       ) : null}
-    </Li>
+    </div>
   )
 }
 
@@ -437,49 +570,53 @@ type NightsListProps = Pick<HierarchyStores, 'nights'> & {
 
 function NightsList(props: NightsListProps) {
   const { projectId, deploymentId, nights, progressIndex } = props
+  const folderName = useStore(activeDatasetFolderNameStore)
+  const resolvedHierarchy = useStore(activeHierarchyStore)
+  const singleLeafDataset = isSingleLeafHierarchy(resolvedHierarchy)
   const list = getNightsForDeployment({ nights, deploymentId })
   const exportingNightIds = useStore(exportingNightIdsStore)
   if (!list.length) return null
 
   return (
-    <Ul>
+    <div className='flex w-full flex-col gap-1'>
       {list.map((night) => {
         const prog = progressIndex.byNight[night.id] ?? { total: 0, identified: 0 }
         const isExporting = exportingNightIds.has(night.id)
+        const link = buildLeafGroupLinkParams({
+          folderName,
+          projectId,
+          deploymentId,
+          night,
+          singleLeafDataset,
+        })
         return (
-          <Li
-            key={night.id}
-            className={cn('group/night h-32 bg-stone-50', projectsTreeStatsColClass)}
-          >
-            <div className='flex min-w-0 items-center pl-24'>
-              <Link
-                to={'/projects/$projectId/deployments/$deploymentId/nights/$nightId'}
-                params={{
-                  projectId,
-                  deploymentId: lastPathSegment({ id: deploymentId }),
-                  nightId: lastPathSegment({ id: night.id }),
-                }}
-                className='flex min-w-0 flex-1 cursor-pointer items-center gap-12 rounded-l-md py-0 hover:bg-blue-100'
-              >
-                <span className='truncate text-sm text-blue-700'>{night.name}</span>
-                {isExporting ? (
-                  <div className='flex shrink-0 items-center gap-4 text-sm text-neutral-500'>
-                    <Loader size={14} />
-                    <span>exporting</span>
-                  </div>
-                ) : null}
-              </Link>
-            </div>
-            <div className='flex min-w-0 items-center justify-end gap-12'>
-              <InlineProgress total={prog.total} identified={prog.identified} />
-              <div onClick={(e) => e.stopPropagation()}>
-                <ItemActions scope={'night'} id={night.id} nights={nights} />
+          <ProjectsTreeRowContextMenu key={night.id} scope='night' id={night.id} nights={nights}>
+            <Link
+              to={link.to}
+              params={link.params}
+              aria-label={`Open night ${night.name}`}
+              className={cn(
+                'group/night block h-32 w-full cursor-pointer rounded-md bg-stone-50 hover:bg-blue-100',
+                'transition-[background-color] duration-150 ease-out',
+              )}
+            >
+              <div className={cn(projectsTreeRowClass, 'h-full')}>
+                <div className={cn(projectsTreeRowTitleClass, 'h-full gap-8', projectsTreeIndentNightClass)}>
+                  <span className='min-w-0 truncate text-13 leading-none text-blue-700'>{night.name}</span>
+                  {isExporting ? (
+                    <div className='flex shrink-0 items-center gap-4 text-13 text-neutral-500'>
+                      <Loader size={14} />
+                      <span>exporting</span>
+                    </div>
+                  ) : null}
+                </div>
+                <InlineProgress total={prog.total} identified={prog.identified} />
               </div>
-            </div>
-          </Li>
+            </Link>
+          </ProjectsTreeRowContextMenu>
         )
       })}
-    </Ul>
+    </div>
   )
 }
 
@@ -495,16 +632,16 @@ function getDeploymentsForSite(params: { deployments: Record<string, DeploymentE
   return list
 }
 
+function getDeploymentsForProject(params: { deployments: Record<string, DeploymentEntity>; projectId: string }) {
+  const { deployments, projectId } = params
+  const list = Object.values(deployments ?? {}).filter((d) => d.projectId === projectId)
+  return list.sort((a, b) => a.name.localeCompare(b.name))
+}
+
 function getNightsForDeployment(params: { nights: Record<string, NightEntity>; deploymentId: string }) {
   const { nights, deploymentId } = params
   const list = Object.values(nights ?? {}).filter((n) => n.deploymentId === deploymentId)
   return list
-}
-
-function lastPathSegment(params: { id: string }) {
-  const { id } = params
-  const parts = (id ?? '').split('/')
-  return parts[parts.length - 1] ?? ''
 }
 
 function collectProjectsHierarchyIds(params: {
@@ -513,10 +650,9 @@ function collectProjectsHierarchyIds(params: {
   deployments: Record<string, DeploymentEntity>
 }) {
   const { projects, sites, deployments } = params
-  const projectIds = Object.keys(projects ?? {})
   const siteIds: string[] = []
   const deploymentIds: string[] = []
-  for (const pid of projectIds) {
+  for (const pid of Object.keys(projects ?? {})) {
     for (const site of Object.values(sites ?? {}).filter((s) => s.projectId === pid)) {
       siteIds.push(site.id)
       for (const dep of Object.values(deployments ?? {}).filter((d) => d.siteId === site.id)) {
@@ -524,12 +660,11 @@ function collectProjectsHierarchyIds(params: {
       }
     }
   }
-  return { projectIds, siteIds, deploymentIds }
+  return { siteIds, deploymentIds }
 }
 
 function buildAllCollapsedState(ids: ReturnType<typeof collectProjectsHierarchyIds>): CollapsedState {
-  const collapsed: CollapsedState = { projects: {}, sites: {}, deployments: {} }
-  for (const id of ids.projectIds) collapsed.projects[id] = true
+  const collapsed: CollapsedState = { sites: {}, deployments: {} }
   for (const id of ids.siteIds) collapsed.sites[id] = true
   for (const id of ids.deploymentIds) collapsed.deployments[id] = true
   return collapsed
@@ -545,7 +680,7 @@ function withToggledCollapsedNode(params: {
   return { ...prev, [bucket]: { ...map, [id]: !map[id] } }
 }
 
-function projectsTreePanelId(params: { segment: 'project' | 'site' | 'deployment'; entityId: string }) {
+function projectsTreePanelId(params: { segment: 'site' | 'deployment'; entityId: string }) {
   const { segment, entityId } = params
   return expandDisclosurePanelId({
     namespace: PROJECTS_TREE_DISCLOSURE_NS,
@@ -599,108 +734,3 @@ function ProjectsTreeExpandTitle(props: ProjectsTreeExpandTitleProps) {
     </ExpandDisclosureTitleRow>
   )
 }
-
-function buildProgressIndex(params: {
-  nightSummaries: Record<string, NightSummaryEntity>
-  detections: Record<string, DetectionEntity>
-}): ProgressIndex {
-  const { nightSummaries, detections } = params
-
-  const byNight: Record<string, { total: number; identified: number }> = {}
-  const byDeployment: Record<string, { total: number; identified: number }> = {}
-  const bySite: Record<string, { total: number; identified: number }> = {}
-  const byProject: Record<string, { total: number; identified: number }> = {}
-
-  const hasSummaries = nightSummaries && Object.keys(nightSummaries).length > 0
-
-  if (hasSummaries) {
-    for (const [nightId, summary] of Object.entries(nightSummaries)) {
-      if (!nightId || !summary) continue
-
-      const total = summary.totalDetections || 0
-      const identified = summary.totalIdentified || 0
-
-      byNight[nightId] = { total, identified }
-
-      const parts = nightId.split('/').filter(Boolean)
-      if (parts.length >= 3) {
-        const [projectId, deploymentId] = parts
-
-        if (deploymentId) {
-          const deploymentIdFull = `${projectId}/${deploymentId}`
-          const existing = byDeployment[deploymentIdFull] ?? { total: 0, identified: 0 }
-          byDeployment[deploymentIdFull] = {
-            total: existing.total + total,
-            identified: existing.identified + identified,
-          }
-        }
-
-        const site = deriveSiteFromDeploymentFolder(deploymentId)
-        if (site) {
-          const siteId = `${projectId}/${site}`
-          const existing = bySite[siteId] ?? { total: 0, identified: 0 }
-          bySite[siteId] = {
-            total: existing.total + total,
-            identified: existing.identified + identified,
-          }
-        }
-
-        if (projectId) {
-          const existing = byProject[projectId] ?? { total: 0, identified: 0 }
-          byProject[projectId] = {
-            total: existing.total + total,
-            identified: existing.identified + identified,
-          }
-        }
-      }
-    }
-  } else {
-    for (const detection of Object.values(detections ?? {})) {
-      const nightId = (detection as any)?.nightId
-      if (!nightId) continue
-
-      const existing = byNight[nightId] ?? { total: 0, identified: 0 }
-      byNight[nightId] = {
-        total: existing.total + 1,
-        identified: existing.identified + ((detection as any)?.detectedBy === 'user' ? 1 : 0),
-      }
-
-      const parts = nightId.split('/').filter(Boolean)
-      if (parts.length >= 3) {
-        const [projectId, deploymentId] = parts
-
-        if (deploymentId) {
-          const deploymentIdFull = `${projectId}/${deploymentId}`
-          const existing = byDeployment[deploymentIdFull] ?? { total: 0, identified: 0 }
-          byDeployment[deploymentIdFull] = {
-            total: existing.total + 1,
-            identified: existing.identified + ((detection as any)?.detectedBy === 'user' ? 1 : 0),
-          }
-        }
-
-        const site = deriveSiteFromDeploymentFolder(deploymentId)
-        if (site) {
-          const siteId = `${projectId}/${site}`
-          const existing = bySite[siteId] ?? { total: 0, identified: 0 }
-          bySite[siteId] = {
-            total: existing.total + 1,
-            identified: existing.identified + ((detection as any)?.detectedBy === 'user' ? 1 : 0),
-          }
-        }
-
-        if (projectId) {
-          const existing = byProject[projectId] ?? { total: 0, identified: 0 }
-          byProject[projectId] = {
-            total: existing.total + 1,
-            identified: existing.identified + ((detection as any)?.detectedBy === 'user' ? 1 : 0),
-          }
-        }
-      }
-    }
-  }
-
-  return { byNight, byDeployment, bySite, byProject }
-}
-
-const Ul = classed('ul', 'w-full space-y-1')
-const Li = classed('li', 'relative rounded-md')

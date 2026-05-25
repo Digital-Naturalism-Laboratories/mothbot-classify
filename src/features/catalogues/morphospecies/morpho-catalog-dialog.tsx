@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
-import { useRouter, useRouterState } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { EllipsisVertical } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { INaturalistLogo } from '~/assets/iNaturalist-logo'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
@@ -10,7 +10,9 @@ import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
-import { computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
+import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { buildLeafGroupLinkParams, isSingleLeafHierarchy } from '~/features/mothbox-next/hierarchy-routes'
 import { useCatalogScopeContext } from '~/features/catalogues/shared/catalog-scope-context'
 import { getLabelForMorphoKey } from '~/features/catalogues/shared/details-common'
 import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope-filters'
@@ -18,51 +20,27 @@ import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
 import { morphoLinksStore, setMorphoLink } from '~/features/data-flow/3.persist/links'
 import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
-import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
-import { filesByNightIdStore } from '~/features/data-flow/1.ingest/files.state'
 import { CountsRow } from '~/features/left-panel/counts-row'
 import { TaxonomySection } from '~/features/left-panel/taxonomy-section'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import { nightsStore, type NightEntity } from '~/stores/entities/4.nights'
 import { bulkIdentifyMorphospecies, detectionsStore, findMorphoUsageByKey } from '~/stores/entities/detections'
-import {
-  mergeMorphoTaxonomySummary,
-  nightSummariesStore,
-  type MorphoTaxonomySummary,
-  type NightSummaryEntity,
-} from '~/stores/entities/night-summaries'
+import { nightSummariesStore, type NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column, Row } from '~/styles'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { buildMorphoBulkIdentifyConfirmText, buildMorphoBulkIdentifySuccessText } from './morpho-bulk-identify-copy'
 import { MorphoSpeciesDetailsDialog } from './morpho-details-dialog'
-import {
-  buildMorphoIndexedFallback,
-  getRelevantNightIdsForMorphoFallback,
-  loadMorphoShapesByNight,
-  shouldLoadMorphoIndexedFallback,
-} from './morpho-indexed-fallback'
 import { buildFallbackPreviewPairs, buildSummaryPreviewPairs, selectMorphoPreviewPairs, type MorphoPreviewPair } from './morpho-preview'
-import {
-  buildMorphoCountIndex,
-  buildMorphoContextByKey,
-  buildMorphoTaxonomyIndex,
-  buildMorphoTaxonomyTree,
-  filterMorphospeciesByTaxon,
-  type MorphoTaxonSelection,
-} from './morpho-taxonomy'
+import { buildMorphoCatalogView } from './morpho-catalog-model'
+import { buildMorphoTaxonomyTree, filterMorphospeciesByTaxon, type MorphoTaxonSelection } from './morpho-taxonomy'
+import { useMorphoIndexedFallback } from './use-morpho-indexed-fallback'
 
 export type MorphoCatalogDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectIdOverride?: string
   initialScope?: ScopeType
-}
-
-type MorphoIndexedFallbackState = {
-  counts: Record<string, number>
-  taxonomyByKey: Map<string, MorphoTaxonomySummary>
-  previewPairsByKey: Record<string, MorphoPreviewPair[]>
 }
 
 export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
@@ -76,42 +54,46 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
     })
 
   const summaries = useStore(nightSummariesStore)
-  const allowedNightIds = useMemo(() => {
-    return computeAllowedNightIds({ usageScope, summaries, projectId, siteId, deploymentId, nightId })
-  }, [usageScope, summaries, projectId, siteId, deploymentId, nightId])
-
-  const indexedFallbackForScope = useMorphoIndexedFallback({ open, allowedNightIds, summaries })
-  const scopeCounts = useMemo(() => {
-    return buildMorphoScopeCounts({
-      summaries,
-      projectId,
-      siteId,
-      deploymentId,
-      nightId,
-      usageScope,
-      indexedFallbackCount: Object.keys(indexedFallbackForScope.counts).length,
-    })
-  }, [summaries, projectId, siteId, deploymentId, nightId, usageScope, indexedFallbackForScope])
-
   const detections = useStore(detectionsStore)
-  const taxonomyByKey = useMemo(() => {
-    const base = buildMorphoTaxonomyIndex({ summaries, allowedNightIds, detections })
-    for (const [key, taxonomy] of indexedFallbackForScope.taxonomyByKey.entries()) {
-      base.set(
-        key,
-        mergeMorphoTaxonomySummary({
-          existing: base.get(key),
-          candidate: taxonomy,
-        }),
-      )
-    }
-    return base
-  }, [summaries, allowedNightIds, detections, indexedFallbackForScope])
-  const list = useMorphoIndexWithContext({
-    allowedNightIds,
-    taxonomyByKey,
-    indexedFallbackCounts: indexedFallbackForScope.counts,
+  const nights = useStore(nightsStore)
+
+  const nightIds = useMemo(() => Object.keys(nights ?? {}), [nights])
+  const indexedFallbackForScope = useMorphoIndexedFallback({
+    open,
+    summaries,
+    nightIds,
+    usageScope,
+    projectId,
+    siteId,
+    deploymentId,
+    nightId,
   })
+
+  const catalogView = useMemo(() => {
+    return buildMorphoCatalogView({
+      summaries,
+      detections,
+      nights,
+      usageScope,
+      scope: { projectId, siteId, deploymentId, nightId },
+      indexedFallback: {
+        counts: indexedFallbackForScope.counts,
+        taxonomyByKey: indexedFallbackForScope.taxonomyByKey,
+      },
+    })
+  }, [
+    summaries,
+    detections,
+    nights,
+    usageScope,
+    projectId,
+    siteId,
+    deploymentId,
+    nightId,
+    indexedFallbackForScope,
+  ])
+
+  const { scopeCounts, list, taxonomyByKey } = catalogView
 
   const [selectedTaxon, setSelectedTaxon] = useState<MorphoTaxonSelection | undefined>(undefined)
 
@@ -145,7 +127,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
           <Column className='w-[300px] border-r overflow-y-auto px-16 py-20'>
             <CountsRow
               label='All morphospecies'
-              count={list.length}
+              count={scopeCounts[usageScope]}
               selected={!selectedTaxon}
               onSelect={() => {
                 setSelectedTaxon(undefined)
@@ -281,7 +263,6 @@ function MorphoCard(props: MorphoCardProps) {
 function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
   const { morphoKey, onClose } = props
   const router = useRouter()
-  const route = useRouterState({ select: (s) => s.location })
   const summaries = useStore(nightSummariesStore)
   const detections = useStore(detectionsStore)
   const nights = useStore(nightsStore)
@@ -405,45 +386,27 @@ function handleLoadInNight(params: {
     return
   }
 
-  const parsed = parseNightIdParts({ nightId: firstNightId })
-  if (!parsed) {
+  const nightEntity = nightsStore.get()?.[firstNightId]
+  if (!nightEntity) {
     toast.warning('Could not navigate to night')
     return
   }
 
+  const link = buildLeafGroupLinkParams({
+    folderName: activeDatasetFolderNameStore.get(),
+    projectId: nightEntity.projectId,
+    deploymentId: nightEntity.deploymentId,
+    night: nightEntity,
+    singleLeafDataset: isSingleLeafHierarchy(activeHierarchyStore.get()),
+  })
+
   router.navigate({
-    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
-    params: { projectId: parsed.projectId, deploymentId: parsed.deploymentId, nightId: parsed.nightId },
+    to: link.to,
+    params: link.params,
     search,
   })
 
   onClose?.()
-}
-
-function useMorphoIndexWithContext(params: {
-  allowedNightIds?: Set<string>
-  taxonomyByKey: ReturnType<typeof buildMorphoTaxonomyIndex>
-  indexedFallbackCounts: Record<string, number>
-}) {
-  const { allowedNightIds, taxonomyByKey, indexedFallbackCounts } = params
-  const summaries = useStore(nightSummariesStore)
-  const contextByKey = useMemo(() => buildMorphoContextByKey({ taxonomyByKey }), [taxonomyByKey])
-
-  const list = useMemo(() => {
-    const counts = {
-      ...buildMorphoCountIndex({ summaries, allowedNightIds }),
-      ...indexedFallbackCounts,
-    }
-    const arr = Object.entries(counts)
-      .map(([key, count]) => {
-        const ctx = contextByKey.get(key) || { hasOrder: false, hasFamily: false, hasGenus: false }
-        return { key, count, ...ctx }
-      })
-      .sort((a, b) => b.count - a.count)
-    return arr
-  }, [summaries, contextByKey, allowedNightIds, indexedFallbackCounts])
-
-  return list as Array<{ key: string; count: number; hasOrder: boolean; hasFamily: boolean; hasGenus: boolean }>
 }
 
 function useMorphoPreviewUrl(params: { morphoKey: string; indexedPreviewPairs?: MorphoPreviewPair[] }) {
@@ -471,77 +434,6 @@ function useMorphoPreviewUrl(params: { morphoKey: string; indexedPreviewPairs?: 
   const previewUrl = useObjectUrl(previewFile)
 
   return previewUrl
-}
-
-function useMorphoIndexedFallback(params: {
-  open: boolean
-  allowedNightIds?: Set<string>
-  summaries?: Record<string, NightSummaryEntity>
-}) {
-  const { open, allowedNightIds, summaries } = params
-  const filesByNightId = useStore(filesByNightIdStore)
-  const [indexedFallback, setIndexedFallback] = useState<MorphoIndexedFallbackState>(createEmptyMorphoIndexedFallbackState)
-
-  useEffect(() => {
-    if (!open) return
-
-    const relevantNightIds = getRelevantNightIdsForMorphoFallback({ allowedNightIds, summaries })
-    if (relevantNightIds.length === 0) {
-      setIndexedFallback(createEmptyMorphoIndexedFallbackState())
-      return
-    }
-
-    const shouldLoadFallback = shouldLoadMorphoIndexedFallback({ nightIds: relevantNightIds, summaries })
-    if (!shouldLoadFallback) {
-      setIndexedFallback(createEmptyMorphoIndexedFallbackState())
-      return
-    }
-
-    let cancelled = false
-
-    async function loadIndexedFallback() {
-      const shapesByNight = await loadMorphoShapesByNight({
-        relevantNightIds,
-        filesByNightId,
-      })
-      const fallback = buildMorphoIndexedFallback({ shapesByNight })
-      if (cancelled) return
-
-      setIndexedFallback({
-        counts: fallback.counts,
-        taxonomyByKey: new Map(Object.entries(fallback.taxonomyByKey)),
-        previewPairsByKey: fallback.previewPairsByKey,
-      })
-    }
-
-    void loadIndexedFallback()
-
-    return () => {
-      cancelled = true
-    }
-  }, [open, allowedNightIds, summaries, filesByNightId])
-
-  return indexedFallback
-}
-
-function createEmptyMorphoIndexedFallbackState(): MorphoIndexedFallbackState {
-  return {
-    counts: {},
-    taxonomyByKey: new Map(),
-    previewPairsByKey: {},
-  }
-}
-
-function parseNightIdParts(params: { nightId: string }) {
-  const { nightId } = params
-  const parts = nightId.split('/')
-  const projectId = parts?.[0]
-  const deploymentId = parts?.[1]
-  const nightIdPart = parts?.[2]
-
-  if (!projectId || !deploymentId || !nightIdPart) return null
-
-  return { projectId, deploymentId, nightId: nightIdPart }
 }
 
 function computePrimaryProjectIdForMorphoKey(params: {
@@ -575,63 +467,5 @@ function findFirstNightForMorphoKey(params: { summaries?: Record<string, NightSu
 
   out.sort()
   return out[0]
-}
-
-function countMorphoKeysForNightIds(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  startsWith?: string
-  equals?: string
-  projectId?: string
-  siteId?: string
-}) {
-  const { summaries, startsWith, equals, projectId, siteId } = params
-  const keys = new Set<string>()
-  for (const [nid, summary] of Object.entries(summaries || {})) {
-    if (equals && nid !== equals) continue
-    if (startsWith && !nid.startsWith(startsWith)) continue
-
-    if (projectId && siteId) {
-      const parts = nid.split('/').filter(Boolean)
-      const deployment = parts[1] ?? ''
-      const derivedSite = deriveSiteFromDeploymentFolder(deployment)
-      if (parts[0] !== projectId || derivedSite !== siteId) continue
-    }
-
-    const morphoCounts = summary?.morphoCounts
-    if (!morphoCounts) continue
-
-    for (const key of Object.keys(morphoCounts)) keys.add(key)
-  }
-
-  return keys.size
-}
-
-function buildMorphoScopeCounts(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  projectId?: string
-  siteId?: string
-  deploymentId?: string
-  nightId?: string
-  usageScope: ScopeType
-  indexedFallbackCount: number
-}) {
-  const { summaries, projectId, siteId, deploymentId, nightId, usageScope, indexedFallbackCount } = params
-  const counts: Record<ScopeType, number> = {
-    all: countMorphoKeysForNightIds({ summaries }),
-    project: projectId ? countMorphoKeysForNightIds({ summaries, startsWith: `${projectId}/` }) : 0,
-    site: projectId && siteId ? countMorphoKeysForNightIds({ summaries, projectId, siteId }) : 0,
-    deployment:
-      projectId && deploymentId ? countMorphoKeysForNightIds({ summaries, startsWith: `${projectId}/${deploymentId}/` }) : 0,
-    night:
-      projectId && deploymentId && nightId
-        ? countMorphoKeysForNightIds({ summaries, equals: `${projectId}/${deploymentId}/${nightId}` })
-        : 0,
-  }
-
-  if (projectId && usageScope === 'project' && counts.project === 0 && indexedFallbackCount > 0) {
-    counts.project = indexedFallbackCount
-  }
-
-  return counts
 }
 

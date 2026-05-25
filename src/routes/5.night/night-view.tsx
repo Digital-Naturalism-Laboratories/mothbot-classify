@@ -1,8 +1,11 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useParams } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { expandMany, makeKey } from '~/features/left-panel/collapse.store'
 import { ensureSpeciesListSelection } from '~/features/data-flow/2.identify/species-picker.state'
+import { buildLeafGroupLinkParams, isSingleLeafHierarchy } from '~/features/mothbox-next/hierarchy-routes'
+import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { nightsStore } from '~/stores/entities/4.nights'
 import type { PatchEntity } from '~/stores/entities/5.patches'
 import { patchesStore } from '~/stores/entities/5.patches'
@@ -27,7 +30,9 @@ export function NightView(props: { nightId: string }) {
   const { nightId } = props
 
   const router = useRouter()
-  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
+  const folderName = useStore(activeDatasetFolderNameStore)
+  const resolvedHierarchy = useStore(activeHierarchyStore)
+  const singleLeafDataset = isSingleLeafHierarchy(resolvedHierarchy)
   const nights = useStore(nightsStore)
   const patches = useStore(patchesStore)
   const detections = useStore(detectionsStore)
@@ -44,6 +49,16 @@ export function NightView(props: { nightId: string }) {
   const { setConfirmDialog } = useConfirmDialog()
 
   const night = nights[nightId]
+  const routeContext = useMemo(
+    () => ({
+      folderName,
+      projectId: night?.projectId ?? '',
+      deploymentId: night?.deploymentId ?? '',
+      nightId,
+      nightName: night?.name ?? nightId,
+    }),
+    [folderName, night?.projectId, night?.deploymentId, night?.name, nightId],
+  )
 
   useEffect(() => {
     markNightAsActive({ nightId })
@@ -110,8 +125,8 @@ export function NightView(props: { nightId: string }) {
     const fallbackTaxon = fallbackSnapshot.hasUserInsecta ? ({ rank: 'class', name: 'Insecta' } as const) : undefined
     setSelectedBucket('user')
     setSelectedTaxon(fallbackTaxon)
-    navigateToTaxonSelection({ router, params, taxon: fallbackTaxon, bucket: 'user' })
-  }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, params])
+    navigateToTaxonSelection({ router, routeContext, taxon: fallbackTaxon, bucket: 'user', singleLeafDataset })
+  }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, routeContext, singleLeafDataset])
 
   const list = useMemo(() => {
     return Object.values(patches).filter((patch) => patch.nightId === nightId)
@@ -202,6 +217,7 @@ export function NightView(props: { nightId: string }) {
   return (
     <Row className='w-full h-full overflow-hidden gap-x-4'>
       <NightLeftPanel
+        nightId={nightId}
         taxonomyAuto={taxonomyAuto}
         taxonomyUser={taxonomyUser}
         totalPatches={totalPatches}
@@ -218,7 +234,7 @@ export function NightView(props: { nightId: string }) {
         onSelectTaxon={({ taxon, bucket }) => {
           setSelectedTaxon(taxon as any)
           setSelectedBucket(bucket)
-          navigateToTaxonSelection({ router, params, taxon, bucket })
+          navigateToTaxonSelection({ router, routeContext, taxon, bucket, singleLeafDataset })
         }}
         className='w-[300px] overflow-y-auto'
       />
@@ -503,11 +519,18 @@ function parseTaxonFromSearch(params: { search?: { bucket?: 'auto' | 'user'; ran
 
 function navigateToTaxonSelection(params: {
   router: ReturnType<typeof useRouter>
-  params: { projectId: string; deploymentId: string; nightId: string }
+  routeContext: {
+    folderName?: string | null
+    projectId: string
+    deploymentId: string
+    nightId: string
+    nightName: string
+  }
   taxon?: TaxonSelection
   bucket: 'auto' | 'user'
+  singleLeafDataset?: boolean
 }) {
-  const { router, params: routeParams, taxon, bucket } = params
+  const { router, routeContext, taxon, bucket, singleLeafDataset } = params
   const search: { bucket?: 'auto' | 'user'; rank?: 'class' | 'order' | 'family' | 'genus' | 'species'; name?: string } = {
     bucket,
   }
@@ -517,13 +540,17 @@ function navigateToTaxonSelection(params: {
     search.name = taxon.name
   }
 
+  const link = buildLeafGroupLinkParams({
+    folderName: routeContext.folderName,
+    projectId: routeContext.projectId,
+    deploymentId: routeContext.deploymentId,
+    night: { id: routeContext.nightId, name: routeContext.nightName },
+    singleLeafDataset,
+  })
+
   router.navigate({
-    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
-    params: {
-      projectId: routeParams.projectId,
-      deploymentId: routeParams.deploymentId,
-      nightId: routeParams.nightId,
-    },
+    to: link.to,
+    params: link.params,
     search,
   })
 }

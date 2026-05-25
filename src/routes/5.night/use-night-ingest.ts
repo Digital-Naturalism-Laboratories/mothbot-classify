@@ -3,6 +3,7 @@ import { useStore } from '@nanostores/react'
 import { filesByNightIdStore, patchFileMapByNightStore, indexedFilesStore } from '~/features/data-flow/1.ingest/files.state'
 import { detectionsStore } from '~/stores/entities/detections'
 import { ingestDetectionsForNight } from '~/features/data-flow/1.ingest/ingest'
+import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
 import { resetNightIngestProgress, setNightIngestTotal, getActiveNightIds } from '~/stores/ui'
 import { clearFileObjectsForInactiveNights } from '~/stores/entities'
 
@@ -19,6 +20,8 @@ export function useNightIngest(params: { nightId: string }) {
   const ingestRunRef = useRef(0)
 
   useEffect(() => {
+    if (isMothboxNextIngestMode()) return
+
     const hasAnyForNight = Object.values(detectionsStore.get() || {}).some((d: any) => d?.nightId === nightId)
     if (hasAnyForNight) return
     if (!indexedFiles?.length) return

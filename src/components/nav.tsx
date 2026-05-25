@@ -4,15 +4,23 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { Logo } from '~/components/logo'
 import { Breadcrumbs } from '~/components/ui/breadcrumb'
 import { deploymentsStore, nightsStore, projectsStore, sitesStore } from '~/stores/entities'
-import { useOpenDirectoryMutation, useRestoreDirectoryQuery } from '~/features/data-flow/1.ingest/files-queries'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import {
+  useChooseDatasetsFolderMutation,
+  useOpenDirectoryMutation,
+  useRestoreDirectoryQuery,
+  useScanDatasetsFolderMutation,
+} from '~/features/data-flow/1.ingest/files-queries'
+import { isDirectoryPickerAvailable } from '~/features/data-flow/1.ingest/directory-picker'
+import { datasetsWorkspaceStore } from '~/stores/datasets-workspace'
 import { Loader } from '~/components/atomic/Loader'
 import { Button } from '~/components/ui/button'
 import { clearSelections } from '~/features/data-flow/1.ingest/files.service'
 import { useMemo, useState } from 'react'
-import { MorphoCatalogDialog } from '~/features/catalogues/morphospecies/morpho-catalog-dialog'
-import { SpeciesCatalogDialog } from '~/features/catalogues/species/species-catalog-dialog'
 import { speciesListsStore, speciesListsLoadingStore } from '~/features/data-flow/2.identify/species-list.store'
 import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
+import { MorphoCatalogDialog } from '~/features/catalogues/morphospecies/morpho-catalog-dialog'
+import { SpeciesCatalogDialog } from '~/features/catalogues/species/species-catalog-dialog'
 import { SpeciesPicker } from '~/features/data-flow/2.identify/species-picker'
 import { $isSpeciesPickerOpen, $speciesPickerProjectId } from '~/features/data-flow/2.identify/species-picker.state'
 import { userSessionStore, clearUserSession } from '~/stores/ui'
@@ -24,7 +32,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
+import { deriveSiteFromDeploymentFolder, resolveNightEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
+import { buildHierarchyBreadcrumbs } from '~/features/mothbox-next/build-hierarchy-breadcrumbs'
+import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { toast } from 'sonner'
 import {
   formatDatasetHealthAuditSummary,
@@ -40,33 +51,60 @@ export function Nav() {
   const deployments = useStore(deploymentsStore)
   const nights = useStore(nightsStore)
   const { pathname } = useRouterState({ select: (s) => s.location })
-  const breadcrumbs = getBreadcrumbs({ pathname, projects, sites, deployments, nights })
+  const resolvedHierarchy = useStore(activeHierarchyStore)
+  const folderName = useStore(activeDatasetFolderNameStore)
+  const breadcrumbs =
+    resolvedHierarchy && (pathname.startsWith('/projects/') || pathname.startsWith('/datasets/'))
+      ? buildHierarchyBreadcrumbs({
+          pathname,
+          resolved: resolvedHierarchy,
+          folderName,
+          nights,
+        })
+      : getBreadcrumbs({ pathname, projects, sites, deployments, nights })
   const selection = useStore(projectSpeciesSelectionStore)
   const speciesLists = useStore(speciesListsStore)
   const isSpeciesLoading = useStore(speciesListsLoadingStore)
   const session = useStore(userSessionStore)
-  const [isMorphoOpen, setIsMorphoOpen] = useState(false)
-  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isAuditingDataset, setIsAuditingDataset] = useState(false)
   const [isHealingSummaries, setIsHealingSummaries] = useState(false)
-  const activeProjectId = useMemo(() => (pathname.startsWith('/projects/') ? pathname.split('/')[2] : ''), [pathname])
+  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
+  const [isMorphoOpen, setIsMorphoOpen] = useState(false)
+  const activeProjectId = useMemo(() => {
+    if (pathname.startsWith('/projects/')) return pathname.split('/')[2] ?? ''
+    if (pathname.startsWith('/datasets/')) return Object.keys(projects ?? {})[0] ?? ''
+    return ''
+  }, [pathname, projects])
+  const catalogInitialScope = activeProjectId ? 'project' : 'all'
   const activeSpeciesName = useMemo(() => {
     const listId = selection?.[activeProjectId]
     return listId ? speciesLists?.[listId]?.name : undefined
   }, [selection, activeProjectId, speciesLists])
 
   const restoreQuery = useRestoreDirectoryQuery()
+  const workspace = useStore(datasetsWorkspaceStore)
+  const activePackage = useStore(mothboxNextPackageStore)
 
   const isOpening = useIsMutating({ mutationKey: ['fs', 'open'] }) > 0
+  const isScanningDatasets = useIsMutating({ mutationKey: ['fs', 'scan-datasets'] }) > 0
+  const folderStatus = getFolderStatusMessage({
+    restoring: restoreQuery.isLoading,
+    scanning: isScanningDatasets,
+    opening: isOpening,
+  })
 
   return (
     <header className='border-b bg-white'>
-      <div className='flex flex-row items-center gap-4 px-20 py-3'>
+      <div className='flex h-[54px] flex-row items-center gap-4 px-20'>
         <Link to='/' className='text-xl font-semibold hover:opacity-80 mr-40'>
           <Logo size={30} />
         </Link>
 
-        {breadcrumbs.length === 0 ? <FolderPicking /> : null}
+        {breadcrumbs.length === 0 && workspace?.folderName ? (
+          <span className='text-12 text-neutral-600'>
+            Datasets folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
+          </span>
+        ) : null}
 
         <div className='justify-self-center relative top-4 flex items-center gap-12'>
           {breadcrumbs.length ? <Breadcrumbs breadcrumbs={breadcrumbs} /> : null}
@@ -90,33 +128,33 @@ export function Nav() {
           ) : null}
         </div>
 
-        {restoreQuery.isLoading || isOpening ? (
-          <div className='flex items-center gap-8 px-12 py-8 text-12 text-neutral-600 '>
-            <Loader size={14} className='inline-block' />
-            <span>{restoreQuery.isLoading ? '🌀 Restoring previously picked folder…' : '🌀 Processing selected folder…'}</span>
+        {folderStatus ? (
+          <div className='flex min-w-0 items-center gap-8 text-12 text-neutral-600' aria-live='polite' aria-busy>
+            <Loader size={14} className='inline-block shrink-0' />
+            <span className='truncate whitespace-nowrap'>{folderStatus}</span>
           </div>
         ) : null}
         <SpeciesPicker />
 
         <div className='ml-12 flex gap-8'>
-          <Button
-            variant='outline'
-            onClick={() => {
-              setIsSpeciesOpen(true)
-            }}
-          >
+          <Button variant='outline' onClick={() => setIsSpeciesOpen(true)}>
             Species
           </Button>
-          <Button
-            variant='outline'
-            onClick={() => {
-              setIsMorphoOpen(true)
-            }}
-          >
+          <Button variant='outline' onClick={() => setIsMorphoOpen(true)}>
             Morphospecies
           </Button>
-          <SpeciesCatalogDialog open={isSpeciesOpen} onOpenChange={setIsSpeciesOpen} />
-          <MorphoCatalogDialog open={isMorphoOpen} onOpenChange={setIsMorphoOpen} />
+          <SpeciesCatalogDialog
+            open={isSpeciesOpen}
+            onOpenChange={setIsSpeciesOpen}
+            projectIdOverride={activeProjectId || undefined}
+            initialScope={catalogInitialScope}
+          />
+          <MorphoCatalogDialog
+            open={isMorphoOpen}
+            onOpenChange={setIsMorphoOpen}
+            projectIdOverride={activeProjectId || undefined}
+            initialScope={catalogInitialScope}
+          />
         </div>
 
         <div className='ml-auto'>
@@ -135,7 +173,10 @@ export function Nav() {
               <DropdownMenuItem disabled={isAuditingDataset} onClick={onAuditDataset}>
                 {isAuditingDataset ? 'Auditing Dataset…' : 'Audit Dataset'}
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={isHealingSummaries} onClick={onHealSummaries}>
+              <DropdownMenuItem
+                disabled={isHealingSummaries || !!activePackage}
+                onClick={onHealSummaries}
+              >
                 {isHealingSummaries ? 'Healing Summaries…' : 'Heal Summaries'}
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -162,6 +203,12 @@ export function Nav() {
 
   function onHealSummaries() {
     if (isHealingSummaries) return
+    if (activePackage) {
+      toast.message('Not available for Mothbox Next packages', {
+        description: 'night_summary.json heal applies to legacy folder layouts only.',
+      })
+      return
+    }
     const shouldProceed = window.confirm(
       'Heal all night_summary.json files to canonical nightId format? This only updates summary nightId fields.',
     )
@@ -181,27 +228,107 @@ export function Nav() {
   }
 }
 
-function FolderPicking() {
+export function FolderPicking() {
   const openMutation = useOpenDirectoryMutation()
+  const datasetsMutation = useChooseDatasetsFolderMutation()
+  const scanMutation = useScanDatasetsFolderMutation()
+  const workspace = useStore(datasetsWorkspaceStore)
+  const canPick = isDirectoryPickerAvailable()
+  const busy = openMutation.isPending || datasetsMutation.isPending || scanMutation.isPending
+  const hasDatasetsFolder = !!workspace?.folderName
 
-  function onPick() {
-    if (openMutation.isPending) return
+  function onPickLegacy() {
+    if (busy) return
     void openMutation.mutateAsync()
   }
 
+  function onChooseDatasets() {
+    if (busy) return
+    void datasetsMutation.mutateAsync()
+  }
+
+  function onRefreshDatasets() {
+    if (busy) return
+    void scanMutation.mutateAsync()
+  }
+
   return (
-    <section className='flex flex-wrap items-center gap-3'>
-      <Button onClick={onPick} disabled={openMutation.isPending}>
-        {openMutation.isPending ? (
-          <span className='inline-flex items-center gap-6'>
-            <Loader size={14} /> Processing…
-          </span>
-        ) : (
-          'Pick projects folder'
-        )}
-      </Button>
+    <section className='flex max-w-[720px] flex-col gap-12'>
+      <div className='rounded-md border border-neutral-200 bg-neutral-50 px-16 py-12 text-13 text-neutral-700'>
+        <p className='font-medium text-neutral-900'>Migrate to Mothbox Next (recommended)</p>
+        <ol className='mt-8 list-decimal space-y-6 pl-20'>
+          <li>
+            <span className='font-medium'>Datasets folder</span> — parent folder that will contain{' '}
+            <span className='font-medium'>all</span> datasets (e.g. <code className='text-12'>~/Mothbox/datasets/</code>
+            ).
+          </li>
+          <li>
+            <span className='font-medium'>Add a dataset</span> — drag a legacy folder (bot JSON +{' '}
+            <code className='text-12'>patches/</code>) or an existing package into your datasets folder in Finder.
+          </li>
+          <li>
+            Reload the app or click <span className='font-medium'>Refresh datasets</span> after dropping new dataset
+            folders in.
+          </li>
+        </ol>
+      </div>
+
+      <div className='flex flex-wrap items-center gap-12'>
+        <Button onClick={onChooseDatasets} disabled={busy || !canPick}>
+          {datasetsMutation.isPending ? (
+            <span className='inline-flex items-center gap-6'>
+              <Loader size={14} /> Choosing…
+            </span>
+          ) : (
+            '1. Choose datasets folder…'
+          )}
+        </Button>
+        <Button variant='outline' onClick={onRefreshDatasets} disabled={busy || !canPick || !hasDatasetsFolder}>
+          {scanMutation.isPending ? (
+            <span className='inline-flex items-center gap-6'>
+              <Loader size={14} /> Scanning…
+            </span>
+          ) : (
+            '2. Refresh datasets'
+          )}
+        </Button>
+        <span className='text-12 text-neutral-600'>
+          {hasDatasetsFolder ? (
+            <>
+              Datasets folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
+            </>
+          ) : (
+            'Set the datasets folder, then drop dataset folders into it.'
+          )}
+        </span>
+      </div>
+
+      <div className='flex flex-wrap items-center gap-12 border-t border-neutral-100 pt-12'>
+        <Button variant='ghost' size='sm' onClick={onPickLegacy} disabled={busy || !canPick}>
+          {openMutation.isPending ? (
+            <span className='inline-flex items-center gap-6'>
+              <Loader size={14} /> Opening…
+            </span>
+          ) : (
+            'Open legacy folder (old mode)'
+          )}
+        </Button>
+        <span className='text-12 text-neutral-500'>For datasets outside your datasets folder. Prefer drag-and-drop + refresh.</span>
+      </div>
     </section>
   )
+}
+
+function getFolderStatusMessage(params: {
+  restoring: boolean
+  scanning: boolean
+  opening: boolean
+}): string | null {
+  const { restoring, scanning, opening } = params
+  if (restoring) return '🌀 Restoring previously picked folder…'
+  if (scanning) return '🌀 Scanning datasets folder…'
+  if (opening) return '🌀 Processing selected folder…'
+  return null
 }
 
 function getBreadcrumbs(params: {
@@ -240,7 +367,12 @@ function getBreadcrumbs(params: {
   const nightId = parts[5]
 
   if (!nightId) return items
-  const nightKey = `${projectId}/${deploymentId}/${nightId}`
+  const nightKey = resolveNightEntityIdFromRoute({
+    nights,
+    projectId,
+    deploymentId,
+    nightId,
+  })
   const nightName = nights?.[nightKey]?.name ?? nightId
   items.push({
     label: nightName,
