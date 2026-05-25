@@ -166,10 +166,7 @@ export function ProjectsSection(props: ProjectsSectionProps) {
         </div>
         {!isLoading && hasProjects ? (
           <div className='flex shrink-0 flex-col items-end'>
-            <InlineProgress
-              total={datasetProgress.total}
-              identified={datasetProgress.identified}
-            />
+            <InlineProgress total={datasetProgress.total} identified={datasetProgress.identified} />
           </div>
         ) : null}
       </div>

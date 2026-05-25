@@ -7,7 +7,7 @@ The app opens **finished** Mothbox Next packages only. Legacy Dinalab trees (`da
 | Path | Role |
 |------|------|
 | `dataset.json` | Manifest (`format: mothbox-next-dataset`) |
-| `00_source/` | Optional raw photos + bot JSON (adapter input) |
+| `00_source/` | Optional — user can put legacy source here for a tidier folder |
 | `01_patches/` | Canonical patch images (`asset_path` in records) |
 | `02_records/` | NDJSON: `patches`, `patch-sources`, `deployments`, `camera-days`, derived `current-classifications` |
 | `03_classifications/` | Per-classifier claim files (`_bot.ndjson`, `{id}.ndjson`) |
@@ -19,10 +19,12 @@ On open, the app **always resolves** `current-classifications` from every file i
 
 ## Convert legacy data
 
-**In the app (recommended):** Home nav, two steps:
+**In the app (recommended):**
 
-1. **Choose datasets folder…** — parent that will hold **all** packages (e.g. `~/Mothbox/datasets/`). Saved for later migrations.
-2. **Migrate legacy dataset…** — pick **one** old dataset folder (bot JSON + `patches/` per night). The app creates `datasets/<legacy-folder-name>/` with `00_source/` (archive of the legacy tree), `01_patches/`, records, classifications, and `dataset.json`, then opens that package. The original folder is left in place.
+1. **Choose datasets folder…** — parent that will hold **all** packages (e.g. `~/Mothbox/datasets/`).
+2. **Drag and drop** a legacy dataset folder (or an existing package) into that folder in Finder.
+3. **Reload** the app or click **Refresh datasets**. Folders without `dataset.json` are set up in place (legacy files stay where you dropped them; paths are written into `02_records/`). Optionally move legacy into `00_source/` yourself first for a neater layout.
+4. Drop new deployment folders into an open package later — when you return to the app, you are prompted to merge them.
 
 **CLI (optional):**
 
@@ -48,7 +50,15 @@ Results are written to `verify-report.json` at the repo root.
 | `patch_id` | `DetectionEntity.id` / `PatchEntity.id` |
 | `camera_day_id` | `nightId` |
 | `patch-sources.source_photo_id` | synthetic `photoId` (`{id}.jpg`) |
-| `deployments` / `camera-days` | project / site / deployment / night hierarchy |
+| `deployments` / `camera-days` | project / site / deployment / night hierarchy (legacy stores) |
+
+## Hierarchy manifest (v3)
+
+`dataset.json` may include a `hierarchy` block declaring in-package grouping levels (dataset itself is implicit). Adapters write v3 manifests with `hierarchy`; v2 packages infer Dinalab deployment + night on load.
+
+Patch-image-only datasets use one synthetic leaf: `camera_day_id = "{dataset_id}__default"`.
+
+Navigation (breadcrumbs, home tree) reads resolved hierarchy nodes from the manifest. Classification still keys off the leaf id (`camera_day_id` / `nightId`).
 
 ## Collaboration
 
