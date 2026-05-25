@@ -21,9 +21,9 @@ On open, the app **always resolves** `current-classifications` from every file i
 
 **In the app (recommended):**
 
-1. **Choose datasets folder…** — parent that will hold **all** packages (e.g. `~/Mothbox/datasets/`).
-2. **Drag and drop** a legacy dataset folder (or an existing package) into that folder in Finder.
-3. **Reload** the app or click **Refresh datasets**. Folders without `dataset.json` are set up in place (legacy files stay where you dropped them; paths are written into `02_records/`). Optionally move legacy into `00_source/` yourself first for a neater layout.
+1. **Choose datasets folder…** — parent that will hold **all** packages (e.g. `~/Mothbox/datasets/` on macOS/Linux, `C:\Users\You\Mothbox\datasets\` on Windows).
+2. **Copy or move** a legacy dataset folder (or an existing package) into that folder using your file manager (File Explorer, Finder, Files, etc.).
+3. **Reload** the app or click **Refresh datasets**. Folders without `dataset.json` are set up in place (legacy files stay where you added them; paths are written into `02_records/`). Optionally move legacy into `00_source/` yourself first for a neater layout.
 4. Drop new deployment folders into an open package later — when you return to the app, you are prompted to merge them.
 
 **CLI (optional):**
@@ -62,7 +62,9 @@ Navigation (breadcrumbs, home tree) reads resolved hierarchy nodes from the mani
 
 ## Collaboration
 
-Drop or import a classifier file into `03_classifications/{id}.ndjson`. Import replaces that file, re-runs the resolver, and refreshes stores.
+Operator steps (zip, unzip, which files to send back): [`collaboration-handoff.md`](./collaboration-handoff.md).
+
+In the app, dropping a classifier file into `03_classifications/{id}.ndjson` and reopening the dataset reloads classifications. Programmatic import: `importClassifierNdjsonFile` in `src/features/mothbox-next/import-classifications.ts`.
 
 ## Legacy ingest flag
 

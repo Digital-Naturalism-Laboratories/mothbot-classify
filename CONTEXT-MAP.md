@@ -12,6 +12,7 @@
 | Open/restore pipeline | `src/features/data-flow/1.ingest/ingest-folder-pipeline.ts` | Single path after folder pick: normalize → validate → index → ingest |
 | Mothbox Next package | `src/features/mothbox-next/CONTEXT.md` | `dataset.json`, NDJSON records, adapters, migrate, reload, collaboration import |
 | Package format reference | `docs/mothbox-next-package.md` | Folder layout and operator steps; verify against code on behavior |
+| Collaboration handoff (manual) | `docs/collaboration-handoff.md` | Zip/unzip, portable paths, return `03_classifications/{id}.ndjson` |
 | Night labeling UI | `src/routes/5.night/` | Grid, selection bar, identify dialog wiring (no local CONTEXT yet) |
 | Workspace agent rules | `.cursor/rules/` | React, testing, Tailwind conventions — not domain truth |
 | Legacy domain rule | `.cursor/rules/project-context.mdc` | Older entity sketch — verify against stores before relying |

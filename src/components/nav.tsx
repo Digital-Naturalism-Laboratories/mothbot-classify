@@ -43,6 +43,7 @@ import {
   healNightSummaryNightIds,
   runDatasetHealthAudit,
 } from '~/features/data-flow/3.persist/dataset-health'
+import { AppDocsPeek, AppDocsPeekTrigger } from '~/components/app-docs-peek'
 // removed isLoadingFoldersStore usage here; loading is derived in root layout
 
 export function Nav() {
@@ -70,6 +71,7 @@ export function Nav() {
   const [isHealingSummaries, setIsHealingSummaries] = useState(false)
   const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
+  const [docsOpen, setDocsOpen] = useState(false)
   const activeProjectId = useMemo(() => {
     if (pathname.startsWith('/projects/')) return pathname.split('/')[2] ?? ''
     if (pathname.startsWith('/datasets/')) return Object.keys(projects ?? {})[0] ?? ''
@@ -157,7 +159,9 @@ export function Nav() {
           />
         </div>
 
-        <div className='ml-auto'>
+        <div className='ml-auto flex items-center gap-8'>
+          <AppDocsPeekTrigger onOpen={() => setDocsOpen(true)} />
+          <AppDocsPeek open={docsOpen} onOpenChange={setDocsOpen} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className='rounded-full border hover:bg-neutral-50 p-2'>
@@ -259,16 +263,18 @@ export function FolderPicking() {
         <ol className='mt-8 list-decimal space-y-6 pl-20'>
           <li>
             <span className='font-medium'>Datasets folder</span> — parent folder that will contain{' '}
-            <span className='font-medium'>all</span> datasets (e.g. <code className='text-12'>~/Mothbox/datasets/</code>
-            ).
+            <span className='font-medium'>all</span> datasets (e.g.{' '}
+            <code className='text-12'>~/Mothbox/datasets/</code> on macOS/Linux,{' '}
+            <code className='text-12'>C:\Users\You\Mothbox\datasets\</code> on Windows).
           </li>
           <li>
-            <span className='font-medium'>Add a dataset</span> — drag a legacy folder (bot JSON +{' '}
-            <code className='text-12'>patches/</code>) or an existing package into your datasets folder in Finder.
+            <span className='font-medium'>Add a dataset</span> — copy or move a legacy folder (bot JSON +{' '}
+            <code className='text-12'>patches/</code>) or an existing package into your datasets folder with your file
+            manager.
           </li>
           <li>
-            Reload the app or click <span className='font-medium'>Refresh datasets</span> after dropping new dataset
-            folders in.
+            Reload the app or click <span className='font-medium'>Refresh datasets</span> after adding new dataset
+            folders.
           </li>
         </ol>
       </div>
