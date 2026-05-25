@@ -6,7 +6,8 @@ import {
 import { setDatasetsWorkspaceFolderName } from '~/stores/datasets-workspace'
 import { isDirectoryPickerAvailable, pickDirectoryHandle } from './directory-picker'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
-import { scanDatasetsFolder } from './scan-datasets-folder'
+import { directoryHasDatasetManifest } from './dataset-manifest'
+import { finishDatasetsWorkspaceSetup } from './datasets-workspace-setup'
 
 export { requireDatasetsFolderHandle } from './datasets-folder-handle'
 
@@ -31,10 +32,21 @@ export async function chooseDatasetsFolder(): Promise<boolean> {
   await persistDatasetsDirectory(handle)
   const name = (handle as { name?: string }).name?.trim() || 'datasets'
   setDatasetsWorkspaceFolderName(name)
-  await scanDatasetsFolder().catch(() => null)
+  let speciesFileCount = 0
+  try {
+    const setup = await finishDatasetsWorkspaceSetup({ autoMigrate: false })
+    speciesFileCount = setup.speciesFileCount
+  } catch (err) {
+    console.warn('🚨 chooseDatasetsFolder: workspace setup failed', err)
+    toast.error('Datasets folder saved, but scanning packages failed. Try reopening the folder.')
+    return false
+  }
 
   toast.success('Datasets folder set', {
-    description: `Legacy datasets will be converted into subfolders here (e.g. ${name}/my-dataset/).`,
+    description:
+      speciesFileCount > 0
+        ? `Packages live here; ${speciesFileCount} species list${speciesFileCount === 1 ? '' : 's'} loaded from ${name}/Species/.`
+        : `Legacy datasets will be converted into subfolders here (e.g. ${name}/my-dataset/). Add CSVs under ${name}/Species/ for identify lists.`,
   })
   return true
 }
@@ -51,7 +63,7 @@ export async function getOrCreateDatasetPackageHandle(params: {
 
   if (!packageHandle) throw new Error(`Could not create dataset folder: ${safeName}`)
 
-  const alreadyPackage = await packageHasManifest(packageHandle)
+  const alreadyPackage = await directoryHasDatasetManifest(packageHandle)
   if (alreadyPackage) {
     throw new Error(
       `“${safeName}” already exists under your datasets folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
@@ -59,15 +71,6 @@ export async function getOrCreateDatasetPackageHandle(params: {
   }
 
   return packageHandle
-}
-
-async function packageHasManifest(packageHandle: FileSystemDirectoryHandleLike): Promise<boolean> {
-  try {
-    await packageHandle.getFileHandle?.('dataset.json', { create: false })
-    return true
-  } catch {
-    return false
-  }
 }
 
 export function sanitizeDatasetFolderName(name: string): string {

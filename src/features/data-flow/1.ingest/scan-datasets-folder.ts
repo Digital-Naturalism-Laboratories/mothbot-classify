@@ -1,102 +1,46 @@
-import { toast } from 'sonner'
-import {
-  type DatasetRegistryEntry,
-  setDatasetsRegistry,
-} from '~/stores/datasets-registry'
-import { requireDatasetsFolderHandle } from './datasets-folder-handle'
-import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
-import { openMothboxNextPackageFromHandle } from './open-mothbox-next-package'
+import { type DatasetRegistryEntry, setDatasetsRegistry } from '~/stores/datasets-registry'
+import { discoverDatasetFolders } from './discover-dataset-folders'
+import { migratePendingDatasetFolders } from './migrate-pending-dataset-folders'
+import { isPatchImagesOnlyKind } from './resolve-setup-kind'
+import { promptUntrackedPendingDatasetSetup } from './check-for-new-dataset-folders'
 
-type DirectoryHandleWithIter = FileSystemDirectoryHandleLike & {
-  kind?: 'directory' | 'file'
-  values?: () => AsyncIterable<unknown>
-  getDirectoryHandle?: (name: string, opts?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
-  getFileHandle?: (name: string, opts?: { create?: boolean }) => Promise<{ getFile?: () => Promise<File> }>
+export type ScanDatasetsFolderOptions = {
+  /** When true, migrates legacy folders immediately. Patch-image-only folders always need setup confirmation. */
+  autoMigrate?: boolean
+  /** When true (default), opens the setup dialog for patch-image-only folders after scan. */
+  promptPatchImagesSetup?: boolean
 }
 
-export async function scanDatasetsFolder(): Promise<DatasetRegistryEntry[]> {
-  const handle = (await requireDatasetsFolderHandle()) as DirectoryHandleWithIter | null
-  if (!handle) {
-    setDatasetsRegistry([])
-    return []
+export async function scanDatasetsFolder(options?: ScanDatasetsFolderOptions): Promise<DatasetRegistryEntry[]> {
+  const autoMigrate = options?.autoMigrate ?? true
+  const promptPatchImagesSetup = options?.promptPatchImagesSetup ?? true
+  const { packages, pendingMigration } = await discoverDatasetFolders()
+
+  let entries = [...packages]
+
+  const pendingAutoMigrate = autoMigrate
+    ? pendingMigration.filter((item) => !isPatchImagesOnlyKind(item.kind))
+    : []
+
+  if (pendingAutoMigrate.length > 0) {
+    const { migrated } = await migratePendingDatasetFolders(pendingAutoMigrate)
+    entries = [...entries, ...migrated]
   }
 
-  const entries = await collectPackageEntriesFromDatasetsFolder(handle)
   const sorted = entries.sort((a, b) => a.folderName.localeCompare(b.folderName))
   setDatasetsRegistry(sorted)
+
+  if (promptPatchImagesSetup) {
+    await promptUntrackedPendingDatasetSetup({ registry: sorted, pendingMigration })
+  }
+
   return sorted
 }
 
-async function collectPackageEntriesFromDatasetsFolder(
-  handle: DirectoryHandleWithIter,
-): Promise<DatasetRegistryEntry[]> {
-  const entries: DatasetRegistryEntry[] = []
-  if (typeof handle.values !== 'function') return entries
-
-  for await (const child of handle.values()) {
-    const candidate = child as DirectoryHandleWithIter
-    if (candidate?.kind !== 'directory') continue
-
-    const folderName = candidate.name?.trim()
-    if (!folderName) continue
-
-    const manifestInfo = await readManifestSummary(candidate)
-    if (!manifestInfo.hasManifest) continue
-
-    entries.push({
-      folderName,
-      datasetId: manifestInfo.datasetId,
-      hasManifest: true,
-    })
-  }
-
-  return entries
-}
-
-async function readManifestSummary(directory: DirectoryHandleWithIter) {
-  try {
-    const manifestHandle = await directory.getFileHandle?.('dataset.json', { create: false })
-    if (!manifestHandle) return { hasManifest: false }
-
-    let datasetId: string | undefined
-    try {
-      const file = await manifestHandle.getFile?.()
-      if (file) {
-        const text = await file.text()
-        const parsed = JSON.parse(text)
-        const id = (parsed as { dataset_id?: unknown })?.dataset_id
-        if (typeof id === 'string' && id.trim()) datasetId = id.trim()
-      }
-    } catch {
-      // ignore manifest parse failures; we still know the package exists
-    }
-
-    return { hasManifest: true, datasetId }
-  } catch {
-    return { hasManifest: false }
-  }
-}
-
-export async function openDatasetByFolderName(params: { folderName: string }): Promise<boolean> {
-  const { folderName } = params
-  const root = (await requireDatasetsFolderHandle()) as DirectoryHandleWithIter | null
-  if (!root) {
-    toast.error('Datasets folder is not set.')
-    return false
-  }
-
-  let subdir: FileSystemDirectoryHandleLike | undefined
-  try {
-    subdir = await root.getDirectoryHandle?.(folderName, { create: false })
-  } catch {
-    subdir = undefined
-  }
-
-  if (!subdir) {
-    toast.error(`Could not open dataset folder “${folderName}”.`)
-    return false
-  }
-
-  const opened = await openMothboxNextPackageFromHandle(subdir)
-  return opened.ok
+/** Re-scan datasets root and replace registry (drops folders removed from disk). */
+export async function refreshRegisteredPackagesFromDisk(): Promise<DatasetRegistryEntry[]> {
+  const { packages } = await discoverDatasetFolders()
+  const sorted = [...packages].sort((a, b) => a.folderName.localeCompare(b.folderName))
+  setDatasetsRegistry(sorted)
+  return sorted
 }

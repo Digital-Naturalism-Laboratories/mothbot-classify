@@ -2,7 +2,7 @@ import { datasetStore } from '~/stores/dataset'
 import { pickerErrorStore } from '~/stores/ui'
 import { directoryFilesStore, selectedFilesStore } from './files.state'
 import {
-  collectFilesWithPathsRecursively,
+  collectIndexedFromDirectoryHandle,
   normalizeIndexedFilesForIngest,
   pickDirectoryFilesWithPaths,
   type IndexedPickedFile,
@@ -19,6 +19,7 @@ import { forgetDatasetsDirectory } from '~/features/data-flow/3.persist/files.pe
 import { clearDatasetsWorkspace } from '~/stores/datasets-workspace'
 import { setActiveDatasetFolderName } from '~/stores/datasets-registry'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
+import { formatFilesystemError, isFilesystemNotFoundError } from '~/utils/fs-error'
 
 export async function openDirectory() {
   console.log('🏁 openDirectory: start picking projects folder')
@@ -88,14 +89,15 @@ export function clearSelections() {
   void forgetDatasetsDirectory()
 }
 
-export async function tryRestoreFromSavedDirectory() {
+export async function tryRestoreLegacyPickedDirectory() {
   try {
-    console.log('🏁 restoreDirectory: attempting to restore previously picked folder')
-    const tStart = performance.now()
+    console.log('🏁 restoreLegacyDirectory: attempting to restore legacy picked folder')
 
+    const tStart = performance.now()
     const handle = await loadSavedDirectory()
     if (!handle) {
       console.log('❌ restoreDirectory: no saved directory handle found')
+      pickerErrorStore.set(null)
       return false
     }
 
@@ -105,9 +107,8 @@ export async function tryRestoreFromSavedDirectory() {
       return false
     }
 
-    const items: IndexedPickedFile[] = []
     const tCollect = performance.now()
-    await collectFilesWithPathsRecursively({ directoryHandle: handle as FileSystemDirectoryHandleLike, pathParts: [], items })
+    const items = await collectIndexedFromDirectoryHandle(handle as FileSystemDirectoryHandleLike)
     const collectMs = Math.round(performance.now() - tCollect)
     console.log('📂 restoreDirectory: collected files', { total: items.length, ms: collectMs })
 
@@ -119,6 +120,7 @@ export async function tryRestoreFromSavedDirectory() {
     if (!result.ok) {
       console.log('🚨 restoreDirectory: ingest failed', { message: result.message })
       pickerErrorStore.set(result.message)
+      if (isFilesystemNotFoundError(result.message)) await forgetSavedDirectory()
       return false
     }
 
@@ -128,13 +130,15 @@ export async function tryRestoreFromSavedDirectory() {
       totalMs,
     })
     console.log('⏱️ restoreDirectory: timings', { collectMs, pipelineMs, totalMs })
+    pickerErrorStore.set(null)
     const folderName = (handle as { name?: string }).name?.trim()
     if (folderName) setActiveDatasetFolderName(folderName)
     return true
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.log('🚨 restoreDirectory: unexpected error', { message })
+    const message = formatFilesystemError(err)
+    console.log('🚨 restoreDirectory: unexpected error', { message, err })
     pickerErrorStore.set(message)
+    if (isFilesystemNotFoundError(err)) await forgetSavedDirectory()
     return false
   }
 }

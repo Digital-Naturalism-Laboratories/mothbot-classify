@@ -47,6 +47,34 @@ export function buildLegacyNightIdFromRoute(params: {
   return `${projectId}/${deploymentId}/${nightId}`
 }
 
+/** Last path segment for slash-separated entity ids; unchanged for flat ids. */
+export function routePathSegmentFromEntityId(id: string) {
+  const parts = (id ?? '').split('/').filter(Boolean)
+  if (parts.length > 1) return parts[parts.length - 1] ?? id
+  return id
+}
+
+/** Night segment for router params: legacy uses last path segment; mothbox-next uses night_date (name). */
+export function routeNightSegmentFromEntity(night: { id: string; name: string }) {
+  const id = night.id ?? ''
+  if (id.includes('/')) return routePathSegmentFromEntityId(id)
+  if (id.includes('__')) return (night.name || id.split('__').pop() || id).trim()
+  return routePathSegmentFromEntityId(id)
+}
+
+export function buildNightRouteParams(params: {
+  projectId: string
+  deploymentId: string
+  night: { id: string; name: string }
+}) {
+  const { projectId, deploymentId, night } = params
+  return {
+    projectId,
+    deploymentId: routePathSegmentFromEntityId(deploymentId),
+    nightId: routeNightSegmentFromEntity(night),
+  }
+}
+
 /**
  * Maps URL route params to the night entity id in the store.
  * Legacy nights use project/deployment/night; mothbox-next packages use camera_day_id.
@@ -65,6 +93,14 @@ export function resolveNightEntityIdFromRoute(params: {
 
   const cameraDayId = `${deploymentId}__${nightId}`
   if (nights[cameraDayId]) return cameraDayId
+
+  if (nightId.includes('__')) {
+    const nightDate = nightId.split('__').pop() ?? ''
+    if (nightDate) {
+      const fromDate = `${deploymentId}__${nightDate}`
+      if (nights[fromDate]) return fromDate
+    }
+  }
 
   return legacyId
 }

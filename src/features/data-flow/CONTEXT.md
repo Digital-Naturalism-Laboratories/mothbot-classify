@@ -22,7 +22,7 @@
   - Legacy path parsing: `ingest-paths.ts` (`parsePathParts`, `resolveNightEntityIdFromRoute`)
   - Legacy store ingest: `ingest.ts`
   - Package single-pass: `files.single-pass.ts` → `1.ingest/package/ingest-package.ts`
-  - Migrate UI flow: `convert-legacy-to-package.ts`, `choose-datasets-folder.ts`
+  - Datasets workspace: `choose-datasets-folder.ts`, `build-mothbox-package-from-folder.ts`, `content-integration-checks.ts`
   - Indexed state / preload: `files.initialize.ts`
 - **2. Identify** — `2.identify/` (dialog, species lists, picker state)
 - **3. Persist** — `3.persist/` (`_identified.json`, summaries, covers, links; package persist via mothbox-next)

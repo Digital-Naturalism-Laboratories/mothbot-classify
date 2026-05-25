@@ -33,18 +33,19 @@ export async function ingestIndexedFolderFiles(params: {
   }
 
   const ingestMode = detectIngestModeFromFiles(normalized.files)
-  const indexedForIngest =
-    ingestMode === 'mothbox-next' ? excludePackageArchiveIndexedFiles(normalized.files) : normalized.files
+  const isPackage = ingestMode === 'mothbox-next'
+  const indexedForStore = isPackage ? excludePackageArchiveIndexedFiles(normalized.files) : normalized.files
+  const indexedForPackageLoad = isPackage ? normalized.files : indexedForStore
 
-  const validation = await validateFolderSelection({ files: indexedForIngest })
+  const validation = await validateFolderSelection({ files: indexedForPackageLoad })
   if (!validation.ok) return { ok: false, message: validation.message }
 
   if (ingestMode === 'legacy') clearMothboxNextPackage()
 
-  applyIndexedFilesState({ indexed: indexedForIngest, ingestMode })
+  applyIndexedFilesState({ indexed: indexedForStore, ingestMode })
 
   const ingest = await singlePassIngest({
-    files: indexedForIngest,
+    files: indexedForPackageLoad,
     pathsAlreadyNormalized: true,
     skipIndexedStateApply: true,
     skipValidation: true,
@@ -52,5 +53,5 @@ export async function ingestIndexedFolderFiles(params: {
   if (!ingest.ok) return { ok: false, message: ingest.message ?? 'Ingest failed.' }
 
   pickerErrorStore.set(null)
-  return { ok: true, ingestMode, fileCount: indexedForIngest.length }
+  return { ok: true, ingestMode, fileCount: indexedForPackageLoad.length }
 }
