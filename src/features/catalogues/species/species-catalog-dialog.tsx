@@ -4,6 +4,7 @@ import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
 import { detectionsStore } from '~/stores/entities/detections'
+import { nightsStore } from '~/stores/entities/4.nights'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { SpeciesDetailsDialog } from './species-details-dialog'
 import { Column, Row } from '~/styles'
@@ -11,13 +12,10 @@ import { ImageWithDownloadName } from '~/components/atomic/image-with-download-n
 import { TaxonomySection } from '~/features/left-panel/taxonomy-section'
 import { CountsRow } from '~/features/left-panel/counts-row'
 import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope-filters'
-import { computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
 import { useCatalogScopeContext } from '~/features/catalogues/shared/catalog-scope-context'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
+import { buildSpeciesCatalogView } from './species-catalog-model'
 import {
-  buildSpeciesCatalogItems,
-  buildSpeciesScopeCounts,
-  buildSpeciesTaxonomyIndex,
   buildSpeciesTaxonomyTree,
   filterSpeciesByTaxon,
   type SpeciesPreviewPair,
@@ -42,22 +40,19 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
 
   const summaries = useStore(nightSummariesStore)
   const detections = useStore(detectionsStore)
+  const nights = useStore(nightsStore)
 
-  const scopeCounts = useMemo(() => {
-    return buildSpeciesScopeCounts({ summaries, projectId, siteId, deploymentId, nightId })
-  }, [summaries, projectId, siteId, deploymentId, nightId])
+  const catalogView = useMemo(() => {
+    return buildSpeciesCatalogView({
+      summaries,
+      detections,
+      nights,
+      usageScope,
+      scope: { projectId, siteId, deploymentId, nightId },
+    })
+  }, [summaries, detections, nights, usageScope, projectId, siteId, deploymentId, nightId])
 
-  const allowedNightIds = useMemo(() => {
-    return computeAllowedNightIds({ usageScope, summaries, projectId, siteId, deploymentId, nightId })
-  }, [usageScope, summaries, projectId, siteId, deploymentId, nightId])
-
-  const list = useMemo(() => {
-    return buildSpeciesCatalogItems({ summaries, allowedNightIds, detections })
-  }, [summaries, allowedNightIds, detections])
-
-  const taxonomyByName = useMemo(() => {
-    return buildSpeciesTaxonomyIndex({ summaries, allowedNightIds, detections })
-  }, [summaries, allowedNightIds, detections])
+  const { scopeCounts, list, taxonomyByName, allowedNightIds } = catalogView
 
   const [selectedTaxon, setSelectedTaxon] = useState<SpeciesTaxonSelection | undefined>(undefined)
 
@@ -91,7 +86,7 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
           <Column className='w-[300px] border-r overflow-y-auto px-16 py-20'>
             <CountsRow
               label='All species'
-              count={list.length}
+              count={scopeCounts[usageScope]}
               selected={!selectedTaxon}
               onSelect={() => {
                 setSelectedTaxon(undefined)

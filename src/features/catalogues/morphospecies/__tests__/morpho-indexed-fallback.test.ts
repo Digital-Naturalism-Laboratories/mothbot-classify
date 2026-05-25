@@ -57,6 +57,15 @@ describe('morpho indexed fallback', () => {
     expect(nightIds).toEqual(['project-a/deployment-a/night-a', 'project-b/deployment-b/night-b'])
   })
 
+  it('falls back to loaded night ids when summaries are empty', () => {
+    const nightIds = getRelevantNightIdsForMorphoFallback({
+      summaries: {},
+      nightIds: ['project/deployment/night-1'],
+    })
+
+    expect(nightIds).toEqual(['project/deployment/night-1'])
+  })
+
   it('loads fallback when summaries have morpho counts but no preview ids or taxonomy', () => {
     const shouldLoad = shouldLoadMorphoIndexedFallback({
       nightIds: ['project/deployment/night'],
