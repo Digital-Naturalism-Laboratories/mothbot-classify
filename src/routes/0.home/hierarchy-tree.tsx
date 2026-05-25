@@ -12,7 +12,7 @@ import { buildLeafGroupLinkParams, isSingleLeafHierarchy } from '~/features/moth
 import { shouldSkipHierarchyLevel } from '~/features/mothbox-next/build-hierarchy-breadcrumbs'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import type { HierarchyNode, ResolvedHierarchy } from '~/features/mothbox-next/resolve-hierarchy-nodes'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { cn } from '~/utils/cn'
 import { InlineProgress } from './inline-progress'
@@ -28,7 +28,7 @@ const projectsTreeIndentLeafClass = 'ml-[38px]'
 
 type ManifestHierarchyTreeProps = {
   projectId: string
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
   progressIndex: ProgressIndex
 }
 
@@ -62,7 +62,7 @@ type HierarchyTreeLevelProps = {
   parentId?: string
   projectId: string
   folderName: string | null
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
   progressIndex: ProgressIndex
   resolved: ResolvedHierarchy
   collapsed: Record<string, boolean>
@@ -133,7 +133,7 @@ type HierarchyTreeNodeProps = {
   childLevelIndex: number
   projectId: string
   folderName: string | null
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
   progressIndex: ProgressIndex
   resolved: ResolvedHierarchy
   collapsed: Record<string, boolean>
@@ -159,7 +159,7 @@ function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
 
   if (isLeafLevel) {
     const night = nights[node.id]
-    const prog = progressIndex.byNight[node.id] ?? { total: 0, identified: 0 }
+    const prog = progressIndex.byLeafGroup[node.id] ?? { total: 0, identified: 0 }
     const isExporting = exportingNightIds.has(node.id)
     const link = buildLeafGroupLinkParams({
       folderName,
@@ -258,7 +258,7 @@ function progressForBranch(params: {
   let identified = 0
 
   for (const leafId of leafIds) {
-    const prog = progressIndex.byNight[leafId]
+    const prog = progressIndex.byLeafGroup[leafId]
     if (!prog) continue
     total += prog.total
     identified += prog.identified

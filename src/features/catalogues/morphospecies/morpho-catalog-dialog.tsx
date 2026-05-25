@@ -24,9 +24,9 @@ import { CountsRow } from '~/features/left-panel/counts-row'
 import { TaxonomySection } from '~/features/left-panel/taxonomy-section'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import type { TaxonRecord } from '~/models/taxonomy/types'
-import { nightsStore, type NightEntity } from '~/stores/entities/4.nights'
+import { leafGroupsStore, type LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { bulkIdentifyMorphospecies, detectionsStore, findMorphoUsageByKey } from '~/stores/entities/detections'
-import { nightSummariesStore, type NightSummaryEntity } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column, Row } from '~/styles'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { buildMorphoBulkIdentifyConfirmText, buildMorphoBulkIdentifySuccessText } from './morpho-bulk-identify-copy'
@@ -46,27 +46,27 @@ export type MorphoCatalogDialogProps = {
 export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
   const { open, onOpenChange, projectIdOverride, initialScope } = props
 
-  const { projectId, siteId, deploymentId, nightId, usageScope, setUsageScope, hasProject, hasSite, hasDeployment, hasNight } =
+  const { projectId, siteId, deploymentId, leafGroupId, usageScope, setUsageScope, hasProject, hasSite, hasDeployment, hasNight } =
     useCatalogScopeContext({
       open,
       projectIdOverride,
       initialScope,
     })
 
-  const summaries = useStore(nightSummariesStore)
+  const summaries = useStore(leafGroupSummariesStore)
   const detections = useStore(detectionsStore)
-  const nights = useStore(nightsStore)
+  const nights = useStore(leafGroupsStore)
 
-  const nightIds = useMemo(() => Object.keys(nights ?? {}), [nights])
+  const leafGroupIds = useMemo(() => Object.keys(nights ?? {}), [nights])
   const indexedFallbackForScope = useMorphoIndexedFallback({
     open,
     summaries,
-    nightIds,
+    leafGroupIds,
     usageScope,
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
   })
 
   const catalogView = useMemo(() => {
@@ -75,7 +75,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
       detections,
       nights,
       usageScope,
-      scope: { projectId, siteId, deploymentId, nightId },
+      scope: { projectId, siteId, deploymentId, leafGroupId },
       indexedFallback: {
         counts: indexedFallbackForScope.counts,
         taxonomyByKey: indexedFallbackForScope.taxonomyByKey,
@@ -89,7 +89,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
     indexedFallbackForScope,
   ])
 
@@ -263,9 +263,9 @@ function MorphoCard(props: MorphoCardProps) {
 function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
   const { morphoKey, onClose } = props
   const router = useRouter()
-  const summaries = useStore(nightSummariesStore)
+  const summaries = useStore(leafGroupSummariesStore)
   const detections = useStore(detectionsStore)
-  const nights = useStore(nightsStore)
+  const nights = useStore(leafGroupsStore)
   const [identifyDialogOpen, setIdentifyDialogOpen] = useState(false)
   const { setConfirmDialog } = useConfirmDialog()
 
@@ -281,7 +281,7 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
 
     const usage = findMorphoUsageByKey({ morphoKey })
     const count = usage.instanceCount
-    const nightCount = usage.nightIds.size
+    const leafGroupCount = usage.leafGroupIds.size
     const projectCount = usage.projectIds.size
 
     if (count === 0) {
@@ -290,7 +290,7 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
     }
 
     setConfirmDialog({
-      content: buildMorphoBulkIdentifyConfirmText({ count, nightCount, projectCount }),
+      content: buildMorphoBulkIdentifyConfirmText({ count, leafGroupCount, projectCount }),
       confirmText: 'Update All',
       onConfirm: () => {
         void executeBulkIdentification({ taxon })
@@ -305,7 +305,7 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
     const result = await bulkIdentifyMorphospecies({ morphoKey, taxon })
 
     if (result.updatedCount > 0) {
-      toast.success(buildMorphoBulkIdentifySuccessText({ count: result.updatedCount, nightCount: result.nightCount, projectCount: result.projectCount }))
+      toast.success(buildMorphoBulkIdentifySuccessText({ count: result.updatedCount, leafGroupCount: result.leafGroupCount, projectCount: result.projectCount }))
       setIdentifyDialogOpen(false)
     } else {
       toast.warning('No instances were updated')
@@ -361,7 +361,7 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
         open={identifyDialogOpen}
         onOpenChange={setIdentifyDialogOpen}
         onSubmit={handleIdentifyDialogSubmit}
-        projectId={primaryProjectId}
+        datasetId={primaryProjectId}
       />
     </>
   )
@@ -369,7 +369,7 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
 
 function handleLoadInNight(params: {
   router: ReturnType<typeof useRouter>
-  summaries: ReturnType<typeof useStore<typeof nightSummariesStore>>
+  summaries: ReturnType<typeof useStore<typeof leafGroupSummariesStore>>
   detections: ReturnType<typeof useStore<typeof detectionsStore>>
   morphoKey: string
   onClose?: () => void
@@ -386,7 +386,7 @@ function handleLoadInNight(params: {
     return
   }
 
-  const nightEntity = nightsStore.get()?.[firstNightId]
+  const nightEntity = leafGroupsStore.get()?.[firstNightId]
   if (!nightEntity) {
     toast.warning('Could not navigate to night')
     return
@@ -411,8 +411,8 @@ function handleLoadInNight(params: {
 
 function useMorphoPreviewUrl(params: { morphoKey: string; indexedPreviewPairs?: MorphoPreviewPair[] }) {
   const { morphoKey, indexedPreviewPairs = [] } = params
-  const summaries = useStore(nightSummariesStore)
-  const nights = useStore(nightsStore)
+  const summaries = useStore(leafGroupSummariesStore)
+  const nights = useStore(leafGroupsStore)
   const covers = useStore(morphoCoversStore)
   const detections = useStore(detectionsStore)
 
@@ -437,26 +437,26 @@ function useMorphoPreviewUrl(params: { morphoKey: string; indexedPreviewPairs?: 
 }
 
 function computePrimaryProjectIdForMorphoKey(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  nights?: Record<string, NightEntity>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  nights?: Record<string, LeafGroupEntity>
   morphoKey: string
 }) {
   const { summaries, nights, morphoKey } = params
   const normalizedMorphoKey = normalizeMorphoKey(morphoKey)
   const projectIds = new Set<string>()
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
     const count = summary?.morphoCounts?.[normalizedMorphoKey]
     if (!count) continue
 
-    const projectId = nights?.[nightId]?.projectId
+    const projectId = nights?.[leafGroupId]?.projectId
     if (projectId) projectIds.add(projectId)
   }
 
   return Array.from(projectIds)?.[0]
 }
 
-function findFirstNightForMorphoKey(params: { summaries?: Record<string, NightSummaryEntity>; morphoKey: string }) {
+function findFirstNightForMorphoKey(params: { summaries?: Record<string, LeafGroupSummaryEntity>; morphoKey: string }) {
   const { summaries, morphoKey } = params
   const out: string[] = []
 

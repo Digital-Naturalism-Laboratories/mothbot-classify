@@ -1,8 +1,8 @@
-import { computeAllowedNightIds, type CatalogScopeIds } from '~/features/catalogues/shared/catalog-utils'
+import { computeAllowedLeafGroupIds, type CatalogScopeIds } from '~/features/catalogues/shared/catalog-utils'
 import type { ScopeType } from '~/features/catalogues/shared/scope-filters'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import type { NightEntity } from '~/stores/entities/4.nights'
-import type { NightSummaryEntity, SpeciesTaxonomySummary } from '~/stores/entities/night-summaries'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
+import type { LeafGroupSummaryEntity, SpeciesTaxonomySummary } from '~/stores/entities/night-summaries'
 import {
   buildSpeciesCatalogItems,
   buildSpeciesScopeCounts,
@@ -11,15 +11,15 @@ import {
 } from './species-data'
 
 export type SpeciesCatalogModelInput = {
-  summaries?: Record<string, NightSummaryEntity>
+  summaries?: Record<string, LeafGroupSummaryEntity>
   detections?: Record<string, DetectionEntity>
-  nights?: Record<string, NightEntity>
+  nights?: Record<string, LeafGroupEntity>
   scope: CatalogScopeIds
   usageScope: ScopeType
 }
 
 export type SpeciesCatalogView = {
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
   scopeCounts: Record<ScopeType, number>
   list: SpeciesCatalogItem[]
   taxonomyByName: Map<string, SpeciesTaxonomySummary>
@@ -27,7 +27,7 @@ export type SpeciesCatalogView = {
 
 export function buildSpeciesCatalogView(input: SpeciesCatalogModelInput): SpeciesCatalogView {
   const { summaries, detections, nights, scope, usageScope } = input
-  const { projectId, siteId, deploymentId, nightId } = scope
+  const { projectId, siteId, deploymentId, leafGroupId } = scope
 
   const scopeCounts = buildSpeciesScopeCounts({
     summaries,
@@ -36,21 +36,21 @@ export function buildSpeciesCatalogView(input: SpeciesCatalogModelInput): Specie
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
   })
 
-  const allowedNightIds = computeAllowedNightIds({
+  const allowedLeafGroupIds = computeAllowedLeafGroupIds({
     usageScope,
     summaries: summaries ?? {},
     nights,
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
   })
 
-  const list = buildSpeciesCatalogItems({ summaries, allowedNightIds, detections })
-  const taxonomyByName = buildSpeciesTaxonomyIndex({ summaries, allowedNightIds, detections })
+  const list = buildSpeciesCatalogItems({ summaries, allowedLeafGroupIds, detections })
+  const taxonomyByName = buildSpeciesTaxonomyIndex({ summaries, allowedLeafGroupIds, detections })
 
-  return { allowedNightIds, scopeCounts, list, taxonomyByName }
+  return { allowedLeafGroupIds, scopeCounts, list, taxonomyByName }
 }

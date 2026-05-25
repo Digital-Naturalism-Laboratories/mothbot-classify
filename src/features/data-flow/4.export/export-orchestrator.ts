@@ -1,6 +1,6 @@
 import { exportNightDarwinCSV } from '~/features/data-flow/4.export/darwin-csv'
 import { exportNightSummaryRS } from '~/features/data-flow/4.export/rs-summary'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
@@ -12,7 +12,7 @@ type ExportScope = 'project' | 'site' | 'deployment' | 'night'
 type ExportScopeParams = {
   scope: ExportScope
   id: string
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
 }
 
 export async function exportScopeDarwinCSV(params: ExportScopeParams) {
@@ -43,7 +43,7 @@ export async function exportScopeRS(params: ExportScopeParams) {
   return result
 }
 
-export function collectNightIdsForScope(params: { scope: ExportScope; id: string; nights: Record<string, NightEntity> }) {
+export function collectNightIdsForScope(params: { scope: ExportScope; id: string; nights: Record<string, LeafGroupEntity> }) {
   const { scope, id, nights } = params
 
   if (scope === 'night') return [id]
@@ -60,64 +60,64 @@ export function collectNightIdsForScope(params: { scope: ExportScope; id: string
 async function processNightsForExport(params: {
   scope: ExportScope
   id: string
-  nights: Record<string, NightEntity>
-  exportFn: (params: { nightId: string }) => Promise<boolean>
+  nights: Record<string, LeafGroupEntity>
+  exportFn: (params: { leafGroupId: string }) => Promise<boolean>
   label: string
 }) {
   const { scope, id, nights, exportFn, label } = params
-  const nightIds = collectNightIdsForScope({ scope, id, nights })
+  const leafGroupIds = collectNightIdsForScope({ scope, id, nights })
 
-  console.log(`🏁 exportScope${label}: start`, { scope, id, nightCount: nightIds.length })
+  console.log(`🏁 exportScope${label}: start`, { scope, id, nightCount: leafGroupIds.length })
 
   let processedCount = 0
   let failedCount = 0
 
-  for (const nightId of nightIds) {
+  for (const leafGroupId of leafGroupIds) {
     try {
-      setNightExporting(nightId)
-      await ensureDetectionsLoadedForNight({ nightId })
-      const exportResult = await exportFn({ nightId })
+      setNightExporting(leafGroupId)
+      await ensureDetectionsLoadedForNight({ leafGroupId })
+      const exportResult = await exportFn({ leafGroupId })
 
-      clearDetectionsForNight({ nightId })
-      clearNightExporting(nightId)
+      clearDetectionsForNight({ leafGroupId })
+      clearNightExporting(leafGroupId)
 
       if (!exportResult) {
         failedCount++
-        console.error(`🚨 exportScope${label}: export returned false`, { nightId })
+        console.error(`🚨 exportScope${label}: export returned false`, { leafGroupId })
       } else {
         processedCount++
       }
     } catch (error) {
       failedCount++
-      clearNightExporting(nightId)
-      console.error(`🚨 exportScope${label}: failed for night`, { nightId, error })
+      clearNightExporting(leafGroupId)
+      console.error(`🚨 exportScope${label}: failed for night`, { leafGroupId, error })
     }
   }
 
-  console.log(`✅ exportScope${label}: complete`, { scope, id, nightCount: nightIds.length, processedCount, failedCount })
+  console.log(`✅ exportScope${label}: complete`, { scope, id, nightCount: leafGroupIds.length, processedCount, failedCount })
   return { processedCount, failedCount }
 }
 
-function clearDetectionsForNight(params: { nightId: string }) {
-  const { nightId } = params
+function clearDetectionsForNight(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
 
-  filterStoreByNightId(detectionsStore, nightId, (d: any) => d?.nightId)
-  filterStoreByNightId(patchesStore, nightId, (p: PatchEntity) => p.nightId)
-  filterStoreByNightId(photosStore, nightId, (p: PhotoEntity) => p.nightId)
+  filterStoreByNightId(detectionsStore, leafGroupId, (d: any) => d?.leafGroupId)
+  filterStoreByNightId(patchesStore, leafGroupId, (p: PatchEntity) => p.leafGroupId)
+  filterStoreByNightId(photosStore, leafGroupId, (p: PhotoEntity) => p.leafGroupId)
 
-  console.log('🗑️ clearDetectionsForNight: cleared', { nightId })
+  console.log('🗑️ clearDetectionsForNight: cleared', { leafGroupId })
 }
 
 function filterStoreByNightId<T extends Record<string, any>>(
   store: { get: () => T | undefined; set: (value: T) => void },
-  nightId: string,
+  leafGroupId: string,
   getNightId: (item: T[keyof T]) => string | undefined,
 ) {
   const current = store.get() || ({} as T)
   const filtered = {} as T
 
   for (const [id, item] of Object.entries(current)) {
-    if (getNightId(item as T[keyof T]) !== nightId) {
+    if (getNightId(item as T[keyof T]) !== leafGroupId) {
       ;(filtered as any)[id] = item
     }
   }

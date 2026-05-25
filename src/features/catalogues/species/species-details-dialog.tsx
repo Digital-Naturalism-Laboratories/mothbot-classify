@@ -1,8 +1,8 @@
 import { PropsWithChildren, ReactNode, useMemo } from 'react'
 import { useStore } from '@nanostores/react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { detectionsStore } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
@@ -12,16 +12,16 @@ import { buildSpeciesTaxonomyIndex, buildSpeciesUsageSummary } from './species-d
 
 export type SpeciesDetailsDialogProps = PropsWithChildren<{
   speciesName: string
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onNavigate?: () => void
 }> & { trigger?: ReactNode }
 
 export function SpeciesDetailsDialog(props: SpeciesDetailsDialogProps) {
-  const { speciesName, allowedNightIds, children, open, onOpenChange, onNavigate } = props
-  const summaries = useStore(nightSummariesStore)
-  const nights = useStore(nightsStore)
+  const { speciesName, allowedLeafGroupIds, children, open, onOpenChange, onNavigate } = props
+  const summaries = useStore(leafGroupSummariesStore)
+  const nights = useStore(leafGroupsStore)
   const allDetections = useStore(detectionsStore)
 
   const usage = useMemo(() => {
@@ -29,19 +29,19 @@ export function SpeciesDetailsDialog(props: SpeciesDetailsDialogProps) {
       speciesName,
       summaries,
       nights,
-      allowedNightIds,
+      allowedLeafGroupIds,
       detections: allDetections,
     })
-  }, [speciesName, summaries, nights, allowedNightIds, allDetections])
+  }, [speciesName, summaries, nights, allowedLeafGroupIds, allDetections])
 
   const taxonomy = useMemo(() => {
     const taxonomyByName = buildSpeciesTaxonomyIndex({
       summaries,
-      allowedNightIds,
+      allowedLeafGroupIds,
       detections: allDetections,
     })
     return taxonomyByName.get(speciesName) || null
-  }, [summaries, allowedNightIds, allDetections, speciesName])
+  }, [summaries, allowedLeafGroupIds, allDetections, speciesName])
 
   const previewFile = usePreviewFile({ previewPairs: usage.previewPairs })
   const previewUrl = useObjectUrl(previewFile)
@@ -56,14 +56,14 @@ export function SpeciesDetailsDialog(props: SpeciesDetailsDialogProps) {
           <ImageWithDownloadName src={previewUrl} alt={speciesName} downloadName={speciesName} className='max-h-[240px] rounded border' />
         </div>
 
-        <UsageStatsDisplay projectCount={usage.projectIds.length} nightCount={usage.nightIds.length} instanceCount={usage.instanceCount} />
+        <UsageStatsDisplay projectCount={usage.projectIds.length} nightCount={usage.leafGroupIds.length} instanceCount={usage.instanceCount} />
 
         {taxonomy ? <TaxonomyDisplay taxonomy={taxonomy} /> : null}
 
         <ProjectsListDisplay projectIds={usage.projectIds} />
 
         <NightsListDisplay
-          nightIds={usage.nightIds}
+          leafGroupIds={usage.leafGroupIds}
           onNavigate={() => {
             onOpenChange?.(false)
             onNavigate?.()

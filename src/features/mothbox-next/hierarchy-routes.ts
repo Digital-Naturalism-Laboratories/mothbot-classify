@@ -1,6 +1,6 @@
-import { buildNightRouteParams, resolveNightEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
+import { buildNightRouteParams, resolveLeafGroupEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
 import type { ResolvedHierarchy } from './resolve-hierarchy-nodes'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 
 export type HomeTreeMode = 'manifest' | 'legacy' | 'none'
 
@@ -53,7 +53,7 @@ export function buildLeafGroupUrl(params: { folderName: string; leafGroupId: str
 export function buildLegacyNightUrl(params: {
   projectId: string
   deploymentId: string
-  night: Pick<NightEntity, 'id' | 'name'>
+  night: Pick<LeafGroupEntity, 'id' | 'name'>
 }) {
   const routeParams = buildNightRouteParams(params)
   return `/projects/${routeParams.projectId}/deployments/${routeParams.deploymentId}/nights/${routeParams.nightId}`
@@ -63,7 +63,7 @@ export function buildLeafGroupLinkParams(params: {
   folderName?: string | null
   projectId: string
   deploymentId: string
-  night: Pick<NightEntity, 'id' | 'name'>
+  night: Pick<LeafGroupEntity, 'id' | 'name'>
   singleLeafDataset?: boolean
 }) {
   const { folderName, projectId, deploymentId, night, singleLeafDataset } = params
@@ -117,15 +117,15 @@ export function parseLegacyNightRoute(pathname: string) {
 
   const projectId = parts[1]
   const deploymentId = parts[3]
-  const nightId = parts[5]
-  if (!projectId || !deploymentId || !nightId) return null
+  const leafGroupId = parts[5]
+  if (!projectId || !deploymentId || !leafGroupId) return null
 
-  return { projectId, deploymentId, nightId }
+  return { projectId, deploymentId, leafGroupId }
 }
 
 export function resolveLeafGroupIdFromRoute(params: {
   pathname: string
-  nights: Record<string, Pick<NightEntity, 'id'> | undefined>
+  nights: Record<string, Pick<LeafGroupEntity, 'id'> | undefined>
   leafGroupIds?: string[]
 }) {
   const { pathname, nights, leafGroupIds = [] } = params
@@ -139,10 +139,10 @@ export function resolveLeafGroupIdFromRoute(params: {
   const legacy = parseLegacyNightRoute(pathname)
   if (!legacy) return null
 
-  return resolveNightEntityIdFromRoute({
+  return resolveLeafGroupEntityIdFromRoute({
     nights,
     projectId: legacy.projectId,
     deploymentId: legacy.deploymentId,
-    nightId: legacy.nightId,
+    leafGroupId: legacy.leafGroupId,
   })
 }

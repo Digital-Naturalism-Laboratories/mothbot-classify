@@ -4,14 +4,14 @@ import { useStore } from '@nanostores/react'
 import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
 import { extractDatasetRouteIds, extractRouteIds } from './catalog-utils'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import type { ScopeType } from './scope-filters'
 
 export type CatalogScopeContext = {
   projectId?: string
   siteId?: string
   deploymentId?: string
-  nightId?: string
+  leafGroupId?: string
   defaultScope: ScopeType
   hasProject: boolean
   hasSite: boolean
@@ -26,7 +26,7 @@ export function useCatalogScopeContext(params: {
 }) {
   const { open, projectIdOverride, initialScope } = params
   const route = useRouterState({ select: (state) => state.location })
-  const nights = useStore(nightsStore)
+  const nights = useStore(leafGroupsStore)
   const leafGroupIds = useStore(activeHierarchyStore)?.leafGroupIds ?? []
   const scopeContext = useMemo(() => {
     return resolveCatalogScopeContext({
@@ -65,7 +65,7 @@ export function resolveCatalogScopeContext(params: {
   const datasetIds = extractDatasetRouteIds(pathname, nights, leafGroupIds)
   const projectId = projectIdOverride || datasetIds.projectId || legacyIds.projectId
   const deploymentId = projectIdOverride ? undefined : datasetIds.deploymentId || legacyIds.deploymentId
-  const nightId = projectIdOverride ? undefined : datasetIds.nightId || legacyIds.nightId
+  const leafGroupId = projectIdOverride ? undefined : datasetIds.leafGroupId || legacyIds.leafGroupId
   const siteId = deploymentId
     ? datasetIds.siteId || deriveSiteFromDeploymentFolder(deploymentId)
     : undefined
@@ -75,11 +75,11 @@ export function resolveCatalogScopeContext(params: {
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
     defaultScope,
     hasProject: !!projectId,
     hasSite: !!(projectId && siteId),
     hasDeployment: !!(projectId && deploymentId),
-    hasNight: !!(projectId && deploymentId && nightId),
+    hasNight: !!(projectId && deploymentId && leafGroupId),
   }
 }

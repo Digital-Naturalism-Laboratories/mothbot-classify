@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
@@ -12,13 +12,17 @@ import {
   updateDetectionAsMorphospecies,
   updateDetectionAsError,
 } from '~/models/detection-shapes'
-import { scheduleSaveForNight } from '~/features/data-flow/3.persist/detection-persistence'
+import { scheduleSaveForLeafGroup } from '~/features/data-flow/3.persist/detection-persistence'
 import { ensureDetectionsLoadedForNight } from '~/features/data-flow/1.ingest/night-detection-loader'
 import { clearMorphoCover } from '~/features/data-flow/3.persist/covers'
 import { setMorphoLink } from '~/features/data-flow/3.persist/links'
-import { buildNightSummary } from './night-summaries'
+import { buildLeafGroupSummary } from './night-summaries'
 import { hasTaxonFields } from '~/models/taxonomy/validate'
-import { getProjectIdFromNightId } from '~/utils/paths'
+import { resolveDatasetIdForLeafGroup } from '~/features/mothbox-next/dataset-scope'
+import { isMothboxNextPackageOpen, mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
+import { findBotClassificationForPatch } from '~/features/mothbox-next/resolve-classifications'
+import { leafGroupsStore } from './leaf-groups'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { computeFinalLabel } from '~/models/taxonomy/label'
 
@@ -33,42 +37,45 @@ export function detectionStoreById(id: string) {
 }
 
 /**
- * Computed store: detections grouped by nightId.
- * Provides O(1) lookup for night-specific detections.
+ * Computed store: detections grouped by leafGroupId.
+ * Provides O(1) lookup for leaf-group-specific detections.
  */
-export const detectionsByNightStore = computed(detectionsStore, (all) => {
-  const byNight: Record<string, DetectionEntity[]> = {}
+export const detectionsByLeafGroupStore = computed(detectionsStore, (all) => {
+  const byLeafGroup: Record<string, DetectionEntity[]> = {}
   for (const d of Object.values(all)) {
-    const nightId = d.nightId
-    if (!nightId) continue
-    if (!byNight[nightId]) byNight[nightId] = []
-    byNight[nightId].push(d)
+    const leafGroupId = d.leafGroupId
+    if (!leafGroupId) continue
+    if (!byLeafGroup[leafGroupId]) byLeafGroup[leafGroupId] = []
+    byLeafGroup[leafGroupId].push(d)
   }
-  return byNight
+  return byLeafGroup
 })
 
 /**
- * Selector: Get all detections for a specific night.
+ * Selector: Get all detections for a specific leaf group.
  * Uses the computed store for efficient lookup.
  */
-export function getDetectionsForNight(nightId: string): DetectionEntity[] {
-  const byNight = detectionsByNightStore.get()
-  return byNight[nightId] || []
+export function getDetectionsForLeafGroup(leafGroupId: string): DetectionEntity[] {
+  const byLeafGroup = detectionsByLeafGroupStore.get()
+  return byLeafGroup[leafGroupId] || []
 }
 
 /**
- * Selector: Get user-identified detections for a specific night.
+ * Selector: Get user-identified detections for a specific leaf group.
  */
-export function getIdentifiedDetectionsForNight(nightId: string): DetectionEntity[] {
-  return getDetectionsForNight(nightId).filter((d) => d.detectedBy === 'user')
+export function getIdentifiedDetectionsForLeafGroup(leafGroupId: string): DetectionEntity[] {
+  return getDetectionsForLeafGroup(leafGroupId).filter((d) => d.detectedBy === 'user')
 }
 
 /**
- * Selector: Get auto-detected (not user-identified) detections for a specific night.
+ * Selector: Get auto-detected (not user-identified) detections for a specific leaf group.
  */
-export function getAutoDetectionsForNight(nightId: string): DetectionEntity[] {
-  return getDetectionsForNight(nightId).filter((d) => d.detectedBy !== 'user')
+export function getAutoDetectionsForLeafGroup(leafGroupId: string): DetectionEntity[] {
+  return getDetectionsForLeafGroup(leafGroupId).filter((d) => d.detectedBy !== 'user')
 }
+
+/** @deprecated Use getAutoDetectionsForLeafGroup */
+export const getAutoDetectionsForNight = getAutoDetectionsForLeafGroup
 
 /**
  * Checks if a detection was identified by a user.
@@ -129,7 +136,7 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
   }
 
   detectionsStore.set(updated)
-  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+  updateLeafGroupSummariesAndScheduleSave({ detectionIds, detections: updated })
 }
 
 /**
@@ -151,7 +158,7 @@ export function acceptDetections(params: { detectionIds: string[] }) {
   }
 
   detectionsStore.set(updated)
-  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+  updateLeafGroupSummariesAndScheduleSave({ detectionIds, detections: updated })
 }
 
 /**
@@ -193,66 +200,94 @@ export async function resetDetections(params: { detectionIds: string[] }) {
       const existing = current?.[id]
       if (!existing) continue
 
+      const packageBot = resolvePackageBotDetection({ patchId: id, existing })
+      if (packageBot) {
+        updated[id] = packageBot
+        continue
+      }
+
       const match = shapes.find((s: any) => extractPatchFilename({ patchPath: (s as any)?.patch_path ?? '' }) === id)
 
       if (match) {
         updated[id] = buildDetectionFromBotShape({ shape: match, existingDetection: existing })
       } else {
-        // Fallback: clear human flags and mark as auto
-        const next: DetectionEntity = {
-          ...existing,
-          detectedBy: 'auto',
-          identifiedAt: undefined,
-          isError: undefined,
-          morphospecies: undefined,
-          speciesListId: undefined,
-          speciesListDOI: undefined,
-        }
-        updated[id] = next
+        updated[id] = clearHumanIdentificationFlags({ existing })
       }
     }
   }
 
   detectionsStore.set(updated)
-  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+  updateLeafGroupSummariesAndScheduleSave({ detectionIds, detections: updated })
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
-function collectTouchedNightIds(params: { detectionIds: string[]; detections: Record<string, DetectionEntity> }): Set<string> {
+function resolvePackageBotDetection(params: {
+  patchId: string
+  existing: DetectionEntity
+}): DetectionEntity | undefined {
+  const { patchId, existing } = params
+  if (!isMothboxNextPackageOpen()) return undefined
+
+  const classificationFiles = mothboxNextPackageStore.get()?.loaded?.classificationFiles
+  const botRow = findBotClassificationForPatch({ patchId, classificationFiles })
+  if (!botRow) return undefined
+
+  const photoId = existing.photoId
+  const leafGroupId = existing.leafGroupId
+  if (!photoId || !leafGroupId) return undefined
+
+  return detectionFromClassification({ row: botRow, leafGroupId, photoId })
+}
+
+function clearHumanIdentificationFlags(params: { existing: DetectionEntity }): DetectionEntity {
+  const { existing } = params
+
+  return {
+    ...existing,
+    detectedBy: 'auto',
+    identifiedAt: undefined,
+    isError: undefined,
+    morphospecies: undefined,
+    speciesListId: undefined,
+    speciesListDOI: undefined,
+  }
+}
+
+function collectTouchedLeafGroupIds(params: { detectionIds: string[]; detections: Record<string, DetectionEntity> }): Set<string> {
   const { detectionIds, detections } = params
-  const touchedNightIds = new Set<string>()
+  const touchedLeafGroupIds = new Set<string>()
   for (const id of detectionIds) {
     const detection = detections?.[id]
-    if (detection?.nightId) touchedNightIds.add(detection.nightId)
+    if (detection?.leafGroupId) touchedLeafGroupIds.add(detection.leafGroupId)
   }
-  return touchedNightIds
+  return touchedLeafGroupIds
 }
 
-function updateNightSummariesAndScheduleSave(params: { detectionIds: string[]; detections: Record<string, DetectionEntity> }) {
+function updateLeafGroupSummariesAndScheduleSave(params: { detectionIds: string[]; detections: Record<string, DetectionEntity> }) {
   const { detectionIds, detections } = params
-  const touchedNightIds = collectTouchedNightIds({ detectionIds, detections })
-  updateNightSummariesInMemory({ nightIds: touchedNightIds, detections })
+  const touchedLeafGroupIds = collectTouchedLeafGroupIds({ detectionIds, detections })
+  updateLeafGroupSummariesInMemory({ leafGroupIds: touchedLeafGroupIds, detections })
 
-  for (const nightId of touchedNightIds) {
-    scheduleSaveForNight(nightId)
+  for (const leafGroupId of touchedLeafGroupIds) {
+    scheduleSaveForLeafGroup(leafGroupId)
   }
 }
 
-function updateNightSummariesInMemory(params: { nightIds: Set<string>; detections: Record<string, DetectionEntity> }) {
-  const { nightIds, detections } = params
+function updateLeafGroupSummariesInMemory(params: { leafGroupIds: Set<string>; detections: Record<string, DetectionEntity> }) {
+  const { leafGroupIds, detections } = params
 
-  if (!nightIds || nightIds.size === 0) return
-  const detectionsByNight = groupDetectionsByNight({ detections })
+  if (!leafGroupIds || leafGroupIds.size === 0) return
+  const detectionsByLeafGroup = groupDetectionsByLeafGroup({ detections })
 
-  for (const nightId of nightIds) {
-    if (!nightId) continue
-    const summary = buildNightSummary({ nightId, detections: detectionsByNight[nightId] || [] })
+  for (const leafGroupId of leafGroupIds) {
+    if (!leafGroupId) continue
+    const summary = buildLeafGroupSummary({ leafGroupId, detections: detectionsByLeafGroup[leafGroupId] || [] })
 
-    const currentSummaries = nightSummariesStore.get() || {}
-    nightSummariesStore.set({ ...currentSummaries, [nightId]: summary })
+    const currentSummaries = leafGroupSummariesStore.get() || {}
+    leafGroupSummariesStore.set({ ...currentSummaries, [leafGroupId]: summary })
   }
 }
 
@@ -260,7 +295,7 @@ export function findDetectionsByMorphoKey(params: { morphoKey: string }) {
   const { morphoKey } = params
   const allDetections = detectionsStore.get() || {}
   const detectionIds: string[] = []
-  const nightIds = new Set<string>()
+  const leafGroupIds = new Set<string>()
 
   const normalizedKey = normalizeMorphoKey(morphoKey)
 
@@ -269,54 +304,55 @@ export function findDetectionsByMorphoKey(params: { morphoKey: string }) {
     const normalizedMorpho = normalizeMorphoKey(morpho)
     if (normalizedMorpho === normalizedKey && detection?.detectedBy === 'user') {
       detectionIds.push(id)
-      if (detection?.nightId) nightIds.add(detection.nightId)
+      if (detection?.leafGroupId) leafGroupIds.add(detection.leafGroupId)
     }
   }
 
-  return { detectionIds, nightIds }
+  return { detectionIds, leafGroupIds }
 }
 
 export function findMorphoUsageByKey(params: { morphoKey: string }) {
   const { morphoKey } = params
   const normalizedKey = normalizeMorphoKey(morphoKey)
-  const summaries = nightSummariesStore.get() || {}
+  const summaries = leafGroupSummariesStore.get() || {}
   const detections = detectionsStore.get() || {}
-  const nightIds = new Set<string>()
+  const leafGroupIds = new Set<string>()
   const projectIds = new Set<string>()
-  const countedNightIds = new Set<string>()
+  const countedLeafGroupIds = new Set<string>()
+  const leafGroups = leafGroupsStore.get() || {}
   let instanceCount = 0
 
-  for (const [nightId, summary] of Object.entries(summaries)) {
+  for (const [leafGroupId, summary] of Object.entries(summaries)) {
     const count = summary?.morphoCounts?.[normalizedKey]
     if (!count) continue
-    nightIds.add(nightId)
-    countedNightIds.add(nightId)
+    leafGroupIds.add(leafGroupId)
+    countedLeafGroupIds.add(leafGroupId)
     instanceCount += count
 
-    const projectId = getProjectIdFromNightId(nightId)
-    if (projectId) projectIds.add(projectId)
+    const datasetId = resolveDatasetIdForLeafGroup({ leafGroupId, leafGroups })
+    if (datasetId) projectIds.add(datasetId)
   }
 
   for (const detection of Object.values(detections)) {
     if (detection?.detectedBy !== 'user') continue
     if (normalizeMorphoKey(detection?.morphospecies ?? '') !== normalizedKey) continue
 
-    const nightId = detection?.nightId
-    if (!nightId) continue
+    const leafGroupId = detection?.leafGroupId
+    if (!leafGroupId) continue
 
-    nightIds.add(nightId)
+    leafGroupIds.add(leafGroupId)
 
-    const projectId = getProjectIdFromNightId(nightId)
-    if (projectId) projectIds.add(projectId)
+    const datasetId = resolveDatasetIdForLeafGroup({ leafGroupId, leafGroups })
+    if (datasetId) projectIds.add(datasetId)
 
-    if (countedNightIds.has(nightId)) continue
+    if (countedLeafGroupIds.has(leafGroupId)) continue
     instanceCount += 1
   }
 
   return {
     morphoKey: normalizedKey,
     instanceCount,
-    nightIds,
+    leafGroupIds,
     projectIds,
   }
 }
@@ -324,18 +360,18 @@ export function findMorphoUsageByKey(params: { morphoKey: string }) {
 export async function bulkIdentifyMorphospecies(params: { morphoKey: string; taxon: TaxonRecord }) {
   const { morphoKey, taxon } = params
   const usage = findMorphoUsageByKey({ morphoKey })
-  const nightIds = Array.from(usage.nightIds)
+  const leafGroupIds = Array.from(usage.leafGroupIds)
 
-  if (nightIds.length === 0) {
-    return { updatedCount: 0, nightCount: 0, projectCount: 0 }
+  if (leafGroupIds.length === 0) {
+    return { updatedCount: 0, leafGroupCount: 0, projectCount: 0 }
   }
 
   let updatedCount = 0
 
-  for (const nightId of nightIds) {
-    await ensureDetectionsLoadedForNight({ nightId })
+  for (const leafGroupId of leafGroupIds) {
+    await ensureDetectionsLoadedForNight({ leafGroupId })
 
-    const detectionIds = findDetectionIdsByMorphoKeyInNight({ morphoKey, nightId })
+    const detectionIds = findDetectionIdsByMorphoKeyInLeafGroup({ morphoKey, leafGroupId })
     if (!detectionIds.length) continue
 
     const result = applyTaxonToDetectionIds({ detectionIds, taxon })
@@ -350,7 +386,7 @@ export async function bulkIdentifyMorphospecies(params: { morphoKey: string; tax
 
   return {
     updatedCount,
-    nightCount: usage.nightIds.size,
+    leafGroupCount: usage.leafGroupIds.size,
     projectCount: usage.projectIds.size,
   }
 }
@@ -368,14 +404,14 @@ function isMorphospeciesLabelWithTaxon(params: { label: string; taxon: TaxonReco
   return normalizedLabel !== normalizedTaxonLabel
 }
 
-function findDetectionIdsByMorphoKeyInNight(params: { morphoKey: string; nightId: string }) {
-  const { morphoKey, nightId } = params
+function findDetectionIdsByMorphoKeyInLeafGroup(params: { morphoKey: string; leafGroupId: string }) {
+  const { morphoKey, leafGroupId } = params
   const normalizedKey = normalizeMorphoKey(morphoKey)
   const detections = detectionsStore.get() || {}
   const detectionIds: string[] = []
 
   for (const [id, detection] of Object.entries(detections)) {
-    if (detection?.nightId !== nightId) continue
+    if (detection?.leafGroupId !== leafGroupId) continue
     if (detection?.detectedBy !== 'user') continue
     if (normalizeMorphoKey(detection?.morphospecies ?? '') !== normalizedKey) continue
     detectionIds.push(id)
@@ -399,20 +435,20 @@ function applyTaxonToDetectionIds(params: { detectionIds: string[]; taxon: Taxon
   }
 
   detectionsStore.set(updated)
-  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
+  updateLeafGroupSummariesAndScheduleSave({ detectionIds, detections: updated })
 
   return { updatedCount }
 }
 
-function groupDetectionsByNight(params: { detections: Record<string, DetectionEntity> }) {
+function groupDetectionsByLeafGroup(params: { detections: Record<string, DetectionEntity> }) {
   const { detections } = params
   const grouped: Record<string, DetectionEntity[]> = {}
 
   for (const detection of Object.values(detections || {})) {
-    const nightId = detection?.nightId
-    if (!nightId) continue
-    if (!grouped[nightId]) grouped[nightId] = []
-    grouped[nightId].push(detection)
+    const leafGroupId = detection?.leafGroupId
+    if (!leafGroupId) continue
+    if (!grouped[leafGroupId]) grouped[leafGroupId] = []
+    grouped[leafGroupId].push(detection)
   }
 
   return grouped
@@ -422,8 +458,11 @@ function getSpeciesListContextForDetection(params: { detection: DetectionEntity 
   const { detection } = params
   const selectionByProject = projectSpeciesSelectionStore.get() || {}
   const speciesLists = speciesListsStore.get() || {}
-  const projectId = getProjectIdFromNightId(detection?.nightId)
-  const speciesListId = projectId ? selectionByProject?.[projectId] : undefined
+  const leafGroups = leafGroupsStore.get() || {}
+  const datasetId = detection?.leafGroupId
+    ? resolveDatasetIdForLeafGroup({ leafGroupId: detection.leafGroupId, leafGroups })
+    : undefined
+  const speciesListId = datasetId ? selectionByProject?.[datasetId] : undefined
   const speciesListDOI = speciesListId ? (speciesLists?.[speciesListId]?.doi as string | undefined) : undefined
 
   return { speciesListId, speciesListDOI }

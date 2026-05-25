@@ -8,22 +8,22 @@ const hydratedByNightState = vi.hoisted(() => ({
   current: {} as Record<string, Record<string, any>>,
 }))
 
-const scheduleSaveForNightMock = vi.hoisted(() => vi.fn())
+const scheduleSaveForLeafGroupMock = vi.hoisted(() => vi.fn())
 const setMorphoLinkMock = vi.hoisted(() => vi.fn())
 const clearMorphoCoverMock = vi.hoisted(() => vi.fn())
 
 vi.mock('~/features/data-flow/3.persist/detection-persistence', () => ({
-  scheduleSaveForNight: scheduleSaveForNightMock,
+  scheduleSaveForLeafGroup: scheduleSaveForLeafGroupMock,
 }))
 
 vi.mock('~/stores/entities/night-summaries', () => ({
-  nightSummariesStore: {
+  leafGroupSummariesStore: {
     get: vi.fn(() => summaryState.current),
     set: vi.fn((next) => {
       summaryState.current = next
     }),
   },
-  buildNightSummary: vi.fn(({ nightId, detections }) => {
+  buildLeafGroupSummary: vi.fn(({ leafGroupId, detections }) => {
     const morphoCounts: Record<string, number> = {}
     for (const detection of detections ?? []) {
       const morpho = String(detection?.morphospecies ?? '').trim().toLowerCase()
@@ -32,7 +32,7 @@ vi.mock('~/stores/entities/night-summaries', () => ({
     }
 
     return {
-      nightId,
+      leafGroupId,
       totalDetections: detections.length,
       totalIdentified: detections.filter((d: any) => d?.detectedBy === 'user').length,
       morphoCounts,
@@ -53,10 +53,10 @@ vi.mock('~/stores/species/project-species-list', () => ({
 }))
 
 vi.mock('~/features/data-flow/1.ingest/night-detection-loader', () => ({
-  ensureDetectionsLoadedForNight: vi.fn(async ({ nightId }: { nightId: string }) => {
+  ensureDetectionsLoadedForNight: vi.fn(async ({ leafGroupId }: { leafGroupId: string }) => {
     const { detectionsStore } = await import('../detections')
     const current = detectionsStore.get() || {}
-    const hydrated = hydratedByNightState.current[nightId] || {}
+    const hydrated = hydratedByNightState.current[leafGroupId] || {}
     detectionsStore.set({ ...current, ...hydrated })
   }),
 }))
@@ -95,7 +95,7 @@ describe('bulkIdentifyMorphospecies', () => {
     detectionsStore.set({})
     summaryState.current = {}
     hydratedByNightState.current = {}
-    scheduleSaveForNightMock.mockReset()
+    scheduleSaveForLeafGroupMock.mockReset()
     setMorphoLinkMock.mockReset()
     clearMorphoCoverMock.mockReset()
   })
@@ -107,13 +107,13 @@ describe('bulkIdentifyMorphospecies', () => {
 
     summaryState.current = {
       [nightOne]: {
-        nightId: nightOne,
+        leafGroupId: nightOne,
         totalDetections: 1,
         totalIdentified: 1,
         morphoCounts: { [morphoKey]: 1 },
       },
       [nightTwo]: {
-        nightId: nightTwo,
+        leafGroupId: nightTwo,
         totalDetections: 1,
         totalIdentified: 1,
         morphoCounts: { [morphoKey]: 1 },
@@ -125,7 +125,7 @@ describe('bulkIdentifyMorphospecies', () => {
         id: 'patch1',
         patchId: 'patch1',
         photoId: 'photo1.jpg',
-        nightId: nightOne,
+        leafGroupId: nightOne,
         label: morphoKey,
         detectedBy: 'user',
         morphospecies: morphoKey,
@@ -144,7 +144,7 @@ describe('bulkIdentifyMorphospecies', () => {
         id: 'patch2',
         patchId: 'patch2',
         photoId: 'photo2.jpg',
-        nightId: nightTwo,
+        leafGroupId: nightTwo,
         label: morphoKey,
         detectedBy: 'user',
         morphospecies: morphoKey,
@@ -175,7 +175,7 @@ describe('bulkIdentifyMorphospecies', () => {
 
     expect(result).toEqual({
       updatedCount: 2,
-      nightCount: 2,
+      leafGroupCount: 2,
       projectCount: 2,
     })
 
@@ -194,9 +194,9 @@ describe('bulkIdentifyMorphospecies', () => {
 
     expect(summaryState.current[nightOne]?.morphoCounts).toEqual({})
     expect(summaryState.current[nightTwo]?.morphoCounts).toEqual({})
-    expect(scheduleSaveForNightMock).toHaveBeenCalledTimes(2)
-    expect(scheduleSaveForNightMock).toHaveBeenCalledWith(nightOne)
-    expect(scheduleSaveForNightMock).toHaveBeenCalledWith(nightTwo)
+    expect(scheduleSaveForLeafGroupMock).toHaveBeenCalledTimes(2)
+    expect(scheduleSaveForLeafGroupMock).toHaveBeenCalledWith(nightOne)
+    expect(scheduleSaveForLeafGroupMock).toHaveBeenCalledWith(nightTwo)
     expect(setMorphoLinkMock).toHaveBeenCalledWith({ morphoKey, url: '' })
     expect(clearMorphoCoverMock).toHaveBeenCalledWith({ morphoKey })
   })

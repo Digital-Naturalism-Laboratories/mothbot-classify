@@ -1,18 +1,18 @@
 import {
   buildCatalogScopeCounts,
-  computeAllowedNightIds,
+  computeAllowedLeafGroupIds,
   type CatalogScopeIds,
 } from '~/features/catalogues/shared/catalog-utils'
 import type { ScopeType } from '~/features/catalogues/shared/scope-filters'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import {
   buildMorphoContextByKey,
   buildMorphoTaxonomyIndex,
   mergeMorphoCountSources,
   type MorphoCatalogItem,
 } from './morpho-taxonomy'
-import { mergeMorphoTaxonomySummary, type MorphoTaxonomySummary, type NightSummaryEntity } from '~/stores/entities/night-summaries'
+import { mergeMorphoTaxonomySummary, type MorphoTaxonomySummary, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 
 export type MorphoCatalogIndexedFallback = {
   counts: Record<string, number>
@@ -20,16 +20,16 @@ export type MorphoCatalogIndexedFallback = {
 }
 
 export type MorphoCatalogModelInput = {
-  summaries?: Record<string, NightSummaryEntity>
+  summaries?: Record<string, LeafGroupSummaryEntity>
   detections?: Record<string, DetectionEntity>
-  nights?: Record<string, NightEntity>
+  nights?: Record<string, LeafGroupEntity>
   scope: CatalogScopeIds
   usageScope: ScopeType
   indexedFallback?: MorphoCatalogIndexedFallback
 }
 
 export type MorphoCatalogView = {
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
   scopeCounts: Record<ScopeType, number>
   counts: Record<string, number>
   list: MorphoCatalogItem[]
@@ -38,7 +38,7 @@ export type MorphoCatalogView = {
 
 export function buildMorphoCatalogView(input: MorphoCatalogModelInput): MorphoCatalogView {
   const { summaries, detections, nights, scope, usageScope, indexedFallback } = input
-  const { projectId, siteId, deploymentId, nightId } = scope
+  const { projectId, siteId, deploymentId, leafGroupId } = scope
 
   const scopeCounts = buildMorphoCatalogScopeCounts({
     summaries,
@@ -47,27 +47,27 @@ export function buildMorphoCatalogView(input: MorphoCatalogModelInput): MorphoCa
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
   })
 
-  const allowedNightIds = computeAllowedNightIds({
+  const allowedLeafGroupIds = computeAllowedLeafGroupIds({
     usageScope,
     summaries: summaries ?? {},
     nights,
     projectId,
     siteId,
     deploymentId,
-    nightId,
+    leafGroupId,
   })
 
   const counts = mergeMorphoCountSources({
     summaries,
     detections,
-    allowedNightIds,
+    allowedLeafGroupIds,
     indexedFallbackCounts: indexedFallback?.counts,
   })
 
-  const taxonomyByKey = buildMorphoTaxonomyIndex({ summaries, allowedNightIds, detections })
+  const taxonomyByKey = buildMorphoTaxonomyIndex({ summaries, allowedLeafGroupIds, detections })
   if (indexedFallback?.taxonomyByKey) {
     for (const [key, taxonomy] of indexedFallback.taxonomyByKey.entries()) {
       taxonomyByKey.set(
@@ -88,25 +88,25 @@ export function buildMorphoCatalogView(input: MorphoCatalogModelInput): MorphoCa
     })
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
 
-  return { allowedNightIds, scopeCounts, counts, list, taxonomyByKey }
+  return { allowedLeafGroupIds, scopeCounts, counts, list, taxonomyByKey }
 }
 
 export function buildMorphoCatalogScopeCounts(params: {
-  summaries?: Record<string, NightSummaryEntity>
+  summaries?: Record<string, LeafGroupSummaryEntity>
   detections?: Record<string, DetectionEntity>
-  nights?: Record<string, NightEntity>
+  nights?: Record<string, LeafGroupEntity>
   projectId?: string
   siteId?: string
   deploymentId?: string
-  nightId?: string
+  leafGroupId?: string
 }): Record<ScopeType, number> {
-  const { summaries, detections, nights, projectId, siteId, deploymentId, nightId } = params
+  const { summaries, detections, nights, projectId, siteId, deploymentId, leafGroupId } = params
 
   return buildCatalogScopeCounts({
     summaries,
     nights,
-    scopeIds: { projectId, siteId, deploymentId, nightId },
-    countForScope: (allowedNightIds) =>
-      Object.keys(mergeMorphoCountSources({ summaries, detections, allowedNightIds })).length,
+    scopeIds: { projectId, siteId, deploymentId, leafGroupId },
+    countForScope: (allowedLeafGroupIds) =>
+      Object.keys(mergeMorphoCountSources({ summaries, detections, allowedLeafGroupIds })).length,
   })
 }

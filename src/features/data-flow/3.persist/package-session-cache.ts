@@ -7,11 +7,16 @@ import type { MorphoLinksMap } from '~/features/data-flow/3.persist/links'
 import type { ProjectEntity } from '~/stores/entities/1.projects'
 import type { SiteEntity } from '~/stores/entities/2.sites'
 import type { DeploymentEntity } from '~/stores/entities/3.deployments'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
+import {
+  normalizeLeafGroupsFromCache,
+  resolveDatasetId,
+  type LeafGroupCacheRow,
+} from '~/features/mothbox-next/dataset-scope'
 import type { PhotoEntity } from '~/stores/entities/photos'
 import type { PatchEntity } from '~/stores/entities/5.patches'
 import type { DetectionEntity } from '~/models/detection.types'
-import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
+import type { LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 import {
   buildIndexedFileMap,
   readIndexedEntryText,
@@ -27,7 +32,7 @@ export type IndexedFileMeta = {
   size: number
 }
 
-export const PACKAGE_SESSION_CACHE_VERSION = 4
+export const PACKAGE_SESSION_CACHE_VERSION = 5
 
 export type PackageSessionCacheEntry = {
   cacheVersion: number
@@ -40,11 +45,11 @@ export type PackageSessionCacheEntry = {
   projects: Record<string, ProjectEntity>
   sites: Record<string, SiteEntity>
   deployments: Record<string, DeploymentEntity>
-  nights: Record<string, NightEntity>
+  leafGroups: Record<string, LeafGroupEntity>
   photos: Record<string, PhotoEntity>
   patches: Record<string, PatchEntity>
   detections: Record<string, DetectionEntity>
-  nightSummaries: Record<string, NightSummaryEntity>
+  leafGroupSummaries: Record<string, LeafGroupSummaryEntity>
   morphoLinks: MorphoLinksMap
   indexedMeta: IndexedFileMeta[]
 }
@@ -71,7 +76,10 @@ export function isSessionCacheRenderable(entry: PackageSessionCacheEntry): boole
 
   if (hasLegacyRows) return true
 
-  return Object.values(entry.nights).some((night) => projectIds.includes(night.projectId))
+  return Object.values(entry.leafGroups).some((leafGroup) => {
+    const datasetId = resolveDatasetId(leafGroup)
+    return datasetId ? projectIds.includes(datasetId) : false
+  })
 }
 
 export function hashString(value: string): string {
@@ -236,6 +244,11 @@ export function isValidPackageSessionCacheEntry(
   return true
 }
 
+function normalizePackageSessionCacheEntry(entry: PackageSessionCacheEntry): PackageSessionCacheEntry {
+  const leafGroups = normalizeLeafGroupsFromCache(entry.leafGroups as Record<string, LeafGroupCacheRow>)
+  return { ...entry, leafGroups: leafGroups as Record<string, LeafGroupEntity> }
+}
+
 export async function loadPackageSessionCache(folderName: string): Promise<PackageSessionCacheEntry | null> {
   const key = packageSessionCacheKey(folderName)
   if (!key) return null
@@ -243,7 +256,7 @@ export async function loadPackageSessionCache(folderName: string): Promise<Packa
   try {
     const saved = (await idbGet(DB_NAME, IDB_STORE, key)) as PackageSessionCacheEntry | null
     if (!isValidPackageSessionCacheEntry(saved, folderName)) return null
-    return saved
+    return normalizePackageSessionCacheEntry(saved)
   } catch {
     return null
   }
@@ -278,11 +291,11 @@ export type BuildPackageSessionCacheEntryParams = {
   projects: Record<string, ProjectEntity>
   sites: Record<string, SiteEntity>
   deployments: Record<string, DeploymentEntity>
-  nights: Record<string, NightEntity>
+  leafGroups: Record<string, LeafGroupEntity>
   photos: Record<string, PhotoEntity>
   patches: Record<string, PatchEntity>
   detections: Record<string, DetectionEntity>
-  nightSummaries: Record<string, NightSummaryEntity>
+  leafGroupSummaries: Record<string, LeafGroupSummaryEntity>
   morphoLinks: MorphoLinksMap
 }
 
@@ -310,11 +323,11 @@ export async function buildPackageSessionCacheEntry(
     projects: params.projects,
     sites: params.sites,
     deployments: params.deployments,
-    nights: params.nights,
+    leafGroups: params.leafGroups,
     photos: stripIndexedFilesFromPhotos(params.photos),
     patches: stripIndexedFilesFromPatches(params.patches),
     detections: params.detections,
-    nightSummaries: params.nightSummaries,
+    leafGroupSummaries: params.leafGroupSummaries,
     morphoLinks: params.morphoLinks,
     indexedMeta: toIndexedFileMeta(normalized),
   }

@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent } from '~/components/ui/dialog'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { detectionsStore } from '~/stores/entities/detections'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { SpeciesDetailsDialog } from './species-details-dialog'
 import { Column, Row } from '~/styles'
@@ -31,16 +31,16 @@ export type SpeciesCatalogDialogProps = {
 
 export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
   const { open, onOpenChange, projectIdOverride, initialScope } = props
-  const { projectId, siteId, deploymentId, nightId, usageScope, setUsageScope, hasProject, hasSite, hasDeployment, hasNight } =
+  const { projectId, siteId, deploymentId, leafGroupId, usageScope, setUsageScope, hasProject, hasSite, hasDeployment, hasNight } =
     useCatalogScopeContext({
       open,
       projectIdOverride,
       initialScope,
     })
 
-  const summaries = useStore(nightSummariesStore)
+  const summaries = useStore(leafGroupSummariesStore)
   const detections = useStore(detectionsStore)
-  const nights = useStore(nightsStore)
+  const nights = useStore(leafGroupsStore)
 
   const catalogView = useMemo(() => {
     return buildSpeciesCatalogView({
@@ -48,11 +48,11 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
       detections,
       nights,
       usageScope,
-      scope: { projectId, siteId, deploymentId, nightId },
+      scope: { projectId, siteId, deploymentId, leafGroupId },
     })
-  }, [summaries, detections, nights, usageScope, projectId, siteId, deploymentId, nightId])
+  }, [summaries, detections, nights, usageScope, projectId, siteId, deploymentId, leafGroupId])
 
-  const { scopeCounts, list, taxonomyByName, allowedNightIds } = catalogView
+  const { scopeCounts, list, taxonomyByName, allowedLeafGroupIds } = catalogView
 
   const [selectedTaxon, setSelectedTaxon] = useState<SpeciesTaxonSelection | undefined>(undefined)
 
@@ -117,7 +117,7 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
                     speciesName={it.speciesName}
                     count={it.count}
                     previewPairs={it.previewPairs}
-                    allowedNightIds={allowedNightIds}
+                    allowedLeafGroupIds={allowedLeafGroupIds}
                   />
                 ))}
               </ul>
@@ -133,11 +133,11 @@ type SpeciesCardProps = {
   speciesName: string
   count: number
   previewPairs: SpeciesPreviewPair[]
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
 }
 
 function SpeciesCard(props: SpeciesCardProps) {
-  const { speciesName, count, previewPairs, allowedNightIds } = props
+  const { speciesName, count, previewPairs, allowedLeafGroupIds } = props
   const previewUrl = useSpeciesPreviewUrl({ previewPairs })
 
   return (
@@ -156,7 +156,7 @@ function SpeciesCard(props: SpeciesCardProps) {
       </div>
 
       <Row className='mt-8 gap-4 justify-end'>
-        <SpeciesDetailsDialog speciesName={speciesName} allowedNightIds={allowedNightIds}>
+        <SpeciesDetailsDialog speciesName={speciesName} allowedLeafGroupIds={allowedLeafGroupIds}>
           <Button size='xsm'>View usage</Button>
         </SpeciesDetailsDialog>
       </Row>

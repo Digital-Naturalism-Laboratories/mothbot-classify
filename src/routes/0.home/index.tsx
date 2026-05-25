@@ -2,9 +2,9 @@ import { useStore } from '@nanostores/react'
 import { projectsStore } from '~/stores/entities/1.projects'
 import { sitesStore } from '~/stores/entities/2.sites'
 import { deploymentsStore } from '~/stores/entities/3.deployments'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { detectionsStore } from '~/stores/entities/detections'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { pickerErrorStore } from '~/stores/ui'
 import { useAppLoading } from '~/features/data-flow/1.ingest/files-queries'
 import { Row } from '~/styles'
@@ -18,9 +18,9 @@ export function Home() {
   const projects = useStore(projectsStore)
   const sites = useStore(sitesStore)
   const deployments = useStore(deploymentsStore)
-  const nights = useStore(nightsStore)
+  const nights = useStore(leafGroupsStore)
   const detections = useStore(detectionsStore)
-  const nightSummaries = useStore(nightSummariesStore)
+  const nightSummaries = useStore(leafGroupSummariesStore)
 
   return (
     <Row className='p-20 pt-12 h-full min-h-0 items-start gap-16 overflow-y-auto'>

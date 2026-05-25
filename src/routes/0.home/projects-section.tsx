@@ -15,9 +15,9 @@ import { exportingNightIdsStore } from '~/features/data-flow/4.export/export.sta
 import type { ProjectEntity } from '~/stores/entities/1.projects'
 import type { SiteEntity } from '~/stores/entities/2.sites'
 import type { DeploymentEntity } from '~/stores/entities/3.deployments'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
+import type { LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
 import { cn } from '~/utils/cn'
 import { DATASET_PROGRESS_BAR_WIDTH_PX, InlineProgress } from './inline-progress'
@@ -48,7 +48,7 @@ const projectsTreeIndentNightClass = 'ml-[38px]'
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
   deployments: Record<string, DeploymentEntity>
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
 }
 type ListStores = Pick<HierarchyStores, 'deployments' | 'nights'>
 
@@ -56,7 +56,7 @@ export type ProjectsSectionProps = HierarchyStores & {
   isLoading: boolean
   projects: Record<string, ProjectEntity>
   detections: Record<string, DetectionEntity>
-  nightSummaries: Record<string, NightSummaryEntity>
+  nightSummaries: Record<string, LeafGroupSummaryEntity>
 }
 
 type CollapsedState = {
@@ -198,7 +198,7 @@ export function ProjectsSection(props: ProjectsSectionProps) {
 type ProjectsListProps = HierarchyStores & {
   projects: Record<string, ProjectEntity>
   detections: Record<string, DetectionEntity>
-  nightSummaries: Record<string, NightSummaryEntity>
+  nightSummaries: Record<string, LeafGroupSummaryEntity>
   collapsed: CollapsedState
   onToggleSite: (siteId: string) => void
   onToggleDeployment: (deploymentId: string) => void
@@ -584,7 +584,7 @@ function NightsList(props: NightsListProps) {
   return (
     <div className='flex w-full flex-col gap-1'>
       {list.map((night) => {
-        const prog = progressIndex.byNight[night.id] ?? { total: 0, identified: 0 }
+        const prog = progressIndex.byLeafGroup[night.id] ?? { total: 0, identified: 0 }
         const isExporting = exportingNightIds.has(night.id)
         const link = buildLeafGroupLinkParams({
           folderName,
@@ -642,7 +642,7 @@ function getDeploymentsForProject(params: { deployments: Record<string, Deployme
   return list.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function getNightsForDeployment(params: { nights: Record<string, NightEntity>; deploymentId: string }) {
+function getNightsForDeployment(params: { nights: Record<string, LeafGroupEntity>; deploymentId: string }) {
   const { nights, deploymentId } = params
   const list = Object.values(nights ?? {}).filter((n) => n.deploymentId === deploymentId)
   return list

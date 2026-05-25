@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildCatalogScopeCounts, computeAllowedNightIds } from '../catalog-utils'
+import { buildCatalogScopeCounts, computeAllowedLeafGroupIds } from '../catalog-utils'
 
-describe('computeAllowedNightIds', () => {
+describe('computeAllowedLeafGroupIds', () => {
   it('includes nights from the nights store when summaries are empty', () => {
-    const allowed = computeAllowedNightIds({
+    const allowed = computeAllowedLeafGroupIds({
       usageScope: 'project',
       summaries: {},
       nights: {
@@ -17,7 +17,7 @@ describe('computeAllowedNightIds', () => {
   })
 
   it('excludes nights from other datasets in project scope', () => {
-    const allowed = computeAllowedNightIds({
+    const allowed = computeAllowedLeafGroupIds({
       usageScope: 'project',
       summaries: {},
       nights: {
@@ -31,7 +31,7 @@ describe('computeAllowedNightIds', () => {
   })
 
   it('returns undefined for all-datasets scope', () => {
-    const allowed = computeAllowedNightIds({
+    const allowed = computeAllowedLeafGroupIds({
       usageScope: 'all',
       summaries: { 'hoya/a/n1': {} },
       nights: { n1: { id: 'hoya/a/n1' } },
@@ -43,7 +43,7 @@ describe('computeAllowedNightIds', () => {
 
   it('matches mothbox-next camera_day_id nights via entity projectId', () => {
     const packageNightId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-22'
-    const allowed = computeAllowedNightIds({
+    const allowed = computeAllowedLeafGroupIds({
       usageScope: 'project',
       summaries: {},
       nights: {
@@ -59,6 +59,93 @@ describe('computeAllowedNightIds', () => {
 
     expect(allowed).toEqual(new Set([packageNightId]))
   })
+
+  it('matches mothbox-next package nights via datasetId only at project scope', () => {
+    const packageNightId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-22'
+    const datasetId = 'dinacon2025_lightweight_substrate'
+    const allowed = computeAllowedLeafGroupIds({
+      usageScope: 'project',
+      summaries: {},
+      nights: {
+        [packageNightId]: {
+          id: packageNightId,
+          datasetId,
+          siteId: 'Les_BeachPalm',
+          deploymentId: 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23',
+        },
+      },
+      projectId: datasetId,
+    })
+
+    expect(allowed).toEqual(new Set([packageNightId]))
+  })
+
+  it('includes package nights at site scope when entity has datasetId only', () => {
+    const packageNightId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-22'
+    const datasetId = 'dinacon2025_lightweight_substrate'
+    const siteId = 'Les_BeachPalm'
+    const allowed = computeAllowedLeafGroupIds({
+      usageScope: 'site',
+      summaries: {},
+      nights: {
+        [packageNightId]: {
+          id: packageNightId,
+          datasetId,
+          siteId,
+          deploymentId: 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23',
+        },
+      },
+      projectId: datasetId,
+      siteId,
+    })
+
+    expect(allowed).toEqual(new Set([packageNightId]))
+  })
+
+  it('includes package nights at deployment scope when entity has datasetId only', () => {
+    const packageNightId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-22'
+    const datasetId = 'dinacon2025_lightweight_substrate'
+    const deploymentId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23'
+    const allowed = computeAllowedLeafGroupIds({
+      usageScope: 'deployment',
+      summaries: {},
+      nights: {
+        [packageNightId]: {
+          id: packageNightId,
+          datasetId,
+          siteId: 'Les_BeachPalm',
+          deploymentId,
+        },
+      },
+      projectId: datasetId,
+      deploymentId,
+    })
+
+    expect(allowed).toEqual(new Set([packageNightId]))
+  })
+
+  it('includes package nights at night scope when entity has datasetId only', () => {
+    const packageNightId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-22'
+    const datasetId = 'dinacon2025_lightweight_substrate'
+    const deploymentId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23'
+    const allowed = computeAllowedLeafGroupIds({
+      usageScope: 'night',
+      summaries: {},
+      nights: {
+        [packageNightId]: {
+          id: packageNightId,
+          datasetId,
+          siteId: 'Les_BeachPalm',
+          deploymentId,
+        },
+      },
+      projectId: datasetId,
+      deploymentId,
+      leafGroupId: packageNightId,
+    })
+
+    expect(allowed).toEqual(new Set([packageNightId]))
+  })
 })
 
 describe('buildCatalogScopeCounts', () => {
@@ -69,13 +156,13 @@ describe('buildCatalogScopeCounts', () => {
         'other/deploy-a/night-1': { morphoCounts: { beta: 1 } },
       },
       scopeIds: { projectId: 'hoya' },
-      countForScope: (allowedNightIds) => {
+      countForScope: (allowedLeafGroupIds) => {
         const keys = new Set<string>()
-        for (const [nightId, summary] of Object.entries({
+        for (const [leafGroupId, summary] of Object.entries({
           'hoya/deploy-a/night-1': { morphoCounts: { alpha: 1 } },
           'other/deploy-a/night-1': { morphoCounts: { beta: 1 } },
         })) {
-          if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+          if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
           for (const key of Object.keys(summary.morphoCounts ?? {})) keys.add(key)
         }
         return keys.size

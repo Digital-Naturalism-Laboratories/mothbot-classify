@@ -3,7 +3,7 @@ import type { PhotoEntity } from '~/stores/entities/photos'
 import type { ProjectEntity } from '~/stores/entities/1.projects'
 import type { SiteEntity } from '~/stores/entities/2.sites'
 import type { DeploymentEntity } from '~/stores/entities/3.deployments'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import type { DetectionEntity } from '~/models/detection.types'
 import type { IndexedFile } from '~/stores/entities/photos'
 import type { CameraDayRecord, DeploymentRecord, PatchRecord, PatchSourceRecord } from './records'
@@ -24,12 +24,14 @@ import {
   isIsoDateOnly,
   siteDisplayNameForDeployment,
 } from './hierarchy-display-labels'
+import { resolveIndexedEntry } from './package-indexed-access'
+import { resolveSourcePhotoAssetPathForPatchSource } from './migrate-package-source-to-archive'
 
 export type HydratedPackageEntities = {
   projects: Record<string, ProjectEntity>
   sites: Record<string, SiteEntity>
   deployments: Record<string, DeploymentEntity>
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
   photos: Record<string, PhotoEntity>
   patches: Record<string, PatchEntity>
   detections: Record<string, DetectionEntity>
@@ -56,7 +58,7 @@ function buildHierarchyFromRecords(params: {
 
   const sites: Record<string, SiteEntity> = {}
   const deps: Record<string, DeploymentEntity> = {}
-  const nights: Record<string, NightEntity> = {}
+  const nights: Record<string, LeafGroupEntity> = {}
 
   for (const d of deployments) {
     const siteId = resolveDeploymentSiteId({ datasetId, deployment: d })
@@ -87,7 +89,7 @@ function buildHierarchyFromRecords(params: {
     nights[cd.camera_day_id] = {
       id: cd.camera_day_id,
       name: cd.night_date ?? cd.camera_day_id,
-      projectId: datasetId,
+      datasetId,
       siteId,
       deploymentId,
     }
@@ -113,7 +115,7 @@ function buildHierarchyFromRecords(params: {
     nights[defaultNightId] = {
       id: defaultNightId,
       name: defaultNightId,
-      projectId: datasetId,
+      datasetId,
       siteId: defaultSiteId,
       deploymentId: defaultDeploymentId,
     }
@@ -156,11 +158,11 @@ function buildFlatLeafHierarchyFromRecords(params: { datasetId: string; cameraDa
     [datasetId]: { id: datasetId, name: datasetId },
   }
 
-  const nights: Record<string, NightEntity> = {
+  const nights: Record<string, LeafGroupEntity> = {
     [leafId]: {
       id: leafId,
       name: leafName,
-      projectId: datasetId,
+      datasetId,
       siteId: `${datasetId}/site/default`,
       deploymentId: `${datasetId}/deployment/default`,
     },
@@ -186,6 +188,8 @@ export function hydratePackageEntities(params: {
   cameraDays: CameraDayRecord[]
   resolvedClassifications: ClassificationRecord[]
   indexedByAssetPath: Record<string, IndexedFile>
+  sourceResolutionByPath?: Record<string, IndexedFile>
+  packageRoot?: string
   legacySourceRootName?: string
   indexedPaths?: string[]
 }): HydratedPackageEntities {
@@ -195,6 +199,8 @@ export function hydratePackageEntities(params: {
     patchSources = [],
     resolvedClassifications,
     indexedByAssetPath,
+    sourceResolutionByPath = {},
+    packageRoot = '',
     legacySourceRootName,
     indexedPaths,
   } = params
@@ -255,20 +261,31 @@ export function hydratePackageEntities(params: {
   const classificationByPatch = new Map(resolvedClassifications.map((r) => [r.patch_id, r]))
 
   for (const patch of patches) {
-    const nightId = patch.camera_day_id && hierarchy.nights[patch.camera_day_id]
+    const leafGroupId = patch.camera_day_id && hierarchy.nights[patch.camera_day_id]
       ? patch.camera_day_id
       : hierarchy.defaultNightId
     const photoId = syntheticPhotoId({ patch, patchSourcesById })
     const imageFile = indexedByAssetPath[patch.asset_path]
 
     if (!photos[photoId]) {
-      photos[photoId] = { id: photoId, name: photoId, nightId }
+      const sourceRow = patchSourcesById[patch.patch_id]
+      const photoAssetPath = sourceRow ? resolveSourcePhotoAssetPathForPatchSource(sourceRow) : undefined
+      const photoImageFile = photoAssetPath
+        ? resolveIndexedEntry({
+            byPath: sourceResolutionByPath,
+            packageRoot,
+            filePath: photoAssetPath,
+            archiveFallback: true,
+          })
+        : undefined
+
+      photos[photoId] = { id: photoId, name: photoId, leafGroupId, imageFile: photoImageFile }
     }
 
     patchesOut[patch.patch_id] = {
       id: patch.patch_id,
       name: patch.patch_id,
-      nightId,
+      leafGroupId,
       photoId,
       imageFile,
     }
@@ -277,7 +294,7 @@ export function hydratePackageEntities(params: {
     if (classification) {
       detections[patch.patch_id] = detectionFromClassification({
         row: classification,
-        nightId,
+        leafGroupId,
         photoId,
       })
     } else {
@@ -285,7 +302,7 @@ export function hydratePackageEntities(params: {
         id: patch.patch_id,
         patchId: patch.patch_id,
         photoId,
-        nightId,
+        leafGroupId,
         detectedBy: 'auto',
       }
     }

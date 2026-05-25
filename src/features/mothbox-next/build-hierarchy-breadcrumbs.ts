@@ -2,7 +2,7 @@ import type { HierarchyDef } from './hierarchy-manifest'
 import { buildLeafGroupUrl, resolveLeafGroupIdFromRoute, isSingleLeafHierarchy } from './hierarchy-routes'
 import type { ResolvedHierarchy } from './resolve-hierarchy-nodes'
 import { walkAncestorChain } from './resolve-hierarchy-nodes'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 
 export type HierarchyBreadcrumb = {
   label: string
@@ -14,7 +14,7 @@ export function buildHierarchyBreadcrumbs(params: {
   pathname: string
   resolved: ResolvedHierarchy
   folderName?: string | null
-  nights: Record<string, Pick<NightEntity, 'id' | 'name'> | undefined>
+  nights: Record<string, Pick<LeafGroupEntity, 'id' | 'name'> | undefined>
 }): HierarchyBreadcrumb[] {
   const { pathname, resolved, folderName, nights } = params
   const leafGroupId = resolveLeafGroupIdFromRoute({ pathname, nights, leafGroupIds: resolved.leafGroupIds })

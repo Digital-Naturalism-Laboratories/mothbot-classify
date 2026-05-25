@@ -1,8 +1,8 @@
 import { PropsWithChildren, ReactNode, useMemo, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { bulkIdentifyMorphospecies, detectionsStore, findMorphoUsageByKey } from '~/stores/entities/detections'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { morphoCoversStore } from '~/features/data-flow/3.persist/covers'
@@ -28,8 +28,8 @@ export type MorphoSpeciesDetailsDialogProps = PropsWithChildren<{
 
 export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProps) {
   const { morphoKey, children, open, onOpenChange, onNavigate } = props
-  const summaries = useStore(nightSummariesStore)
-  const nights = useStore(nightsStore)
+  const summaries = useStore(leafGroupSummariesStore)
+  const nights = useStore(leafGroupsStore)
   const covers = useStore(morphoCoversStore)
   const allDetections = useStore(detectionsStore)
   const normalizedMorphoKey = useMemo(() => normalizeMorphoKey(morphoKey), [morphoKey])
@@ -38,20 +38,20 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
   const { setConfirmDialog } = useConfirmDialog()
 
   const usage = useMemo(() => {
-    const nightIds: string[] = []
+    const leafGroupIds: string[] = []
     const projectIds = new Set<string>()
     const summaryPreviewPairs = buildSummaryPreviewPairs({ morphoKey, summaries, nights, covers })
     const fallbackPreviewPairs = buildFallbackPreviewPairs({ morphoKey, detections: allDetections })
     const previewPairs = selectMorphoPreviewPairs({ summaryPreviewPairs, fallbackPreviewPairs })
 
-    for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+    for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
       const count = summary?.morphoCounts?.[normalizedMorphoKey]
       if (!count) continue
-      nightIds.push(nightId)
-      const projectId = nights?.[nightId]?.projectId
+      leafGroupIds.push(leafGroupId)
+      const projectId = nights?.[leafGroupId]?.projectId
       if (projectId) projectIds.add(projectId)
     }
-    return { nightIds, projectIds: Array.from(projectIds), previewPairs }
+    return { leafGroupIds, projectIds: Array.from(projectIds), previewPairs }
   }, [summaries, nights, morphoKey, normalizedMorphoKey, covers, allDetections])
 
   const taxonomy = useMemo(() => {
@@ -84,7 +84,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     }
 
     const count = usageSummary.instanceCount
-    const nightCount = usageSummary.nightIds.size
+    const leafGroupCount = usageSummary.leafGroupIds.size
     const projectCount = usageSummary.projectIds.size
 
     if (count === 0) {
@@ -93,7 +93,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     }
 
     setConfirmDialog({
-      content: buildMorphoBulkIdentifyConfirmText({ count, nightCount, projectCount }),
+      content: buildMorphoBulkIdentifyConfirmText({ count, leafGroupCount, projectCount }),
       confirmText: 'Update All',
       onConfirm: () => {
         void executeBulkIdentification({ taxon })
@@ -108,7 +108,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
     const result = await bulkIdentifyMorphospecies({ morphoKey, taxon })
 
     if (result.updatedCount > 0) {
-      toast.success(buildMorphoBulkIdentifySuccessText({ count: result.updatedCount, nightCount: result.nightCount, projectCount: result.projectCount }))
+      toast.success(buildMorphoBulkIdentifySuccessText({ count: result.updatedCount, leafGroupCount: result.leafGroupCount, projectCount: result.projectCount }))
       onOpenChange?.(false)
     } else {
       toast.warning('No instances were updated')
@@ -133,7 +133,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
 
         <UsageStatsDisplay
           projectCount={usage.projectIds.length}
-          nightCount={usage.nightIds.length}
+          nightCount={usage.leafGroupIds.length}
           instanceCount={usageSummary.instanceCount}
         />
 
@@ -142,7 +142,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
         <ProjectsListDisplay projectIds={usage.projectIds} />
 
         <NightsListDisplay
-          nightIds={usage.nightIds}
+          leafGroupIds={usage.leafGroupIds}
           morphoKey={morphoKey}
           onNavigate={() => {
             onOpenChange?.(false)
@@ -154,7 +154,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
           open={identifyDialogOpen}
           onOpenChange={setIdentifyDialogOpen}
           onSubmit={handleIdentifyDialogSubmit}
-          projectId={primaryProjectId}
+          datasetId={primaryProjectId}
         />
       </DialogContent>
     </Dialog>

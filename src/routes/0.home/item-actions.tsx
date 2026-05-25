@@ -15,14 +15,14 @@ import {
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
 import { exportScopeDarwinCSV } from '~/features/data-flow/4.export/export-orchestrator'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { toast } from 'sonner'
 // import { exportScopeRS } from '~/features/data-flow/4.export/export-orchestrator'
 
 export type ProjectsTreeRowContextMenuProps = {
   scope: 'site' | 'deployment' | 'night'
   id: string
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
   children: ReactNode
 }
 
@@ -50,7 +50,7 @@ export function ProjectsTreeRowContextMenu(props: ProjectsTreeRowContextMenuProp
 
 export type DatasetHeaderMenuProps = {
   projectId: string
-  nights: Record<string, NightEntity>
+  nights: Record<string, LeafGroupEntity>
   onExpandAll: () => void
   onCollapseAll: () => void
   menuAlign?: 'start' | 'end'

@@ -1,11 +1,11 @@
 import { projectsStore } from '~/stores/entities/1.projects'
 import { sitesStore } from '~/stores/entities/2.sites'
 import { deploymentsStore } from '~/stores/entities/3.deployments'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { photosStore } from '~/stores/entities/photos'
 import { patchesStore } from '~/stores/entities/5.patches'
 import { detectionsStore } from '~/stores/entities/detections'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
 import { indexedFilesStore } from '~/features/data-flow/1.ingest/files.state'
@@ -23,11 +23,11 @@ export async function savePackageSessionCacheFromStores(params: { folderName: st
     projects: projectsStore.get() || {},
     sites: sitesStore.get() || {},
     deployments: deploymentsStore.get() || {},
-    nights: nightsStore.get() || {},
+    leafGroups: leafGroupsStore.get() || {},
     photos: photosStore.get() || {},
     patches: patchesStore.get() || {},
     detections: detectionsStore.get() || {},
-    nightSummaries: nightSummariesStore.get() || {},
+    leafGroupSummaries: leafGroupSummariesStore.get() || {},
     morphoLinks: morphoLinksStore.get() || {},
   })
 

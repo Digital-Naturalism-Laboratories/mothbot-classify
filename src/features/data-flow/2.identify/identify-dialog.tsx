@@ -8,6 +8,8 @@ import { useStore } from '@nanostores/react'
 import { DialogTitle } from '@radix-ui/react-dialog'
 import { TaxonRankBadge, TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
+import { isDetectionInDataset } from '~/features/mothbox-next/dataset-scope'
 import { Column } from '~/styles'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
 import { openGlobalDialog } from '~/components/dialogs/global-dialog'
@@ -23,16 +25,18 @@ export type IdentifyDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (label: string, taxon?: TaxonRecord) => void
-  projectId?: string
+  /** Manifest dataset_id for species list and recents scope */
+  datasetId?: string
   detectionIds?: string[]
 }
 
 export function IdentifyDialog(props: IdentifyDialogProps) {
-  const { open, onOpenChange, onSubmit, projectId, detectionIds } = props
+  const { open, onOpenChange, onSubmit, datasetId, detectionIds } = props
 
   const [query, setQuery] = useState('')
   const selection = useStore(projectSpeciesSelectionStore)
   const detections = useStore(detectionsStore)
+  const leafGroups = useStore(leafGroupsStore)
   const isSpeciesLoading = useStore(speciesListsLoadingStore)
   const listRef = useRef<HTMLDivElement>(null)
   const { setConfirmDialog } = useConfirmDialog()
@@ -62,9 +66,9 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [query])
 
   const speciesOptions = useMemo(() => {
-    const res = getSpeciesOptions({ selection, projectId, query })
+    const res = getSpeciesOptions({ selection, datasetId, query })
     return res
-  }, [selection, projectId, query])
+  }, [selection, datasetId, query])
 
   const speciesOptionsLimited = useMemo(() => {
     const list = speciesOptions || []
@@ -73,8 +77,8 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [speciesOptions])
 
   const recentOptions = useMemo(() => {
-    return getRecentOptions({ detections, projectId })
-  }, [detections, projectId])
+    return getRecentOptions({ detections, datasetId, leafGroups })
+  }, [detections, datasetId, leafGroups])
 
   const filteredRecentOptions = useMemo(() => {
     const q = (query ?? '').trim().toLowerCase()
@@ -83,8 +87,8 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [recentOptions, query])
 
   const morphoOptions = useMemo(() => {
-    return getMorphoOptions({ detections, projectId, query })
-  }, [detections, projectId, query])
+    return getMorphoOptions({ detections, datasetId, leafGroups, query })
+  }, [detections, datasetId, leafGroups, query])
 
   const morphoOptionsLimited = useMemo(() => {
     return limitOptions(morphoOptions || [])
@@ -609,14 +613,14 @@ function logIdentificationResult(params: LogIdentificationResultParams) {
 
 type GetSpeciesOptionsParams = {
   selection?: Record<string, string>
-  projectId?: string
+  datasetId?: string
   query: string
 }
 
 function getSpeciesOptions(params: GetSpeciesOptionsParams) {
-  const { selection, projectId, query } = params
+  const { selection, datasetId, query } = params
 
-  const listId = projectId ? selection?.[projectId] : undefined
+  const listId = datasetId ? selection?.[datasetId] : undefined
   if (!listId) {
     return []
   }
@@ -626,17 +630,18 @@ function getSpeciesOptions(params: GetSpeciesOptionsParams) {
 
 type GetRecentOptionsParams = {
   detections?: Record<string, DetectionEntity>
-  projectId?: string
+  datasetId?: string
+  leafGroups?: Record<string, { datasetId?: string }>
 }
 
 function getRecentOptions(params: GetRecentOptionsParams) {
-  const { detections, projectId } = params
+  const { detections, datasetId, leafGroups } = params
 
   const all = Object.values(detections ?? {})
     .filter(
       (d: DetectionEntity | undefined) =>
         d?.detectedBy === 'user' &&
-        isDetectionInProject({ detection: d, projectId }) &&
+        isDetectionInDataset({ detection: d, datasetId: datasetId, leafGroups }) &&
         (!!d?.taxon?.scientificName || !!d?.label || !!d?.morphospecies),
     )
     .sort((a, b) => ((b?.identifiedAt ?? 0) as number) - ((a?.identifiedAt ?? 0) as number))
@@ -674,12 +679,13 @@ function rankToTextClass(rank?: string | null) {
 
 type GetMorphoOptionsParams = {
   detections?: Record<string, DetectionEntity>
-  projectId?: string
+  datasetId?: string
+  leafGroups?: Record<string, { datasetId?: string }>
   query: string
 }
 
 function getMorphoOptions(params: GetMorphoOptionsParams) {
-  const { detections, projectId, query } = params
+  const { detections, datasetId, leafGroups, query } = params
 
   const q = (query ?? '').trim().toLowerCase()
   const map = new Map<string, { label: string; taxon?: TaxonRecord; count: number; last: number }>()
@@ -688,7 +694,7 @@ function getMorphoOptions(params: GetMorphoOptionsParams) {
     const det = d as DetectionEntity | undefined
     if (!det) continue
     if (det.detectedBy !== 'user') continue
-    if (!isDetectionInProject({ detection: det, projectId })) continue
+    if (!isDetectionInDataset({ detection: det, datasetId: datasetId, leafGroups })) continue
     const raw = typeof det.morphospecies === 'string' ? det.morphospecies : ''
     const label = (raw ?? '').trim()
     if (!label) continue
@@ -711,12 +717,3 @@ function deriveLabelFromTaxon(t: TaxonRecord): string {
   return preferred || getDisplayLabelForTaxon(t)
 }
 
-function isDetectionInProject(params: { detection?: DetectionEntity; projectId?: string }) {
-  const { detection, projectId } = params
-  if (!projectId) return true
-
-  const nightId = (detection?.nightId ?? '').trim()
-  if (!nightId) return false
-
-  return nightId.startsWith(projectId + '/')
-}

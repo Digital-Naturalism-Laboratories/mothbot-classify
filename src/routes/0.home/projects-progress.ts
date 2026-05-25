@@ -1,6 +1,6 @@
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import { buildNightSummary, type NightSummaryEntity } from '~/stores/entities/night-summaries'
+import { buildLeafGroupSummary, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 
 export type ProgressCounts = { total: number; identified: number }
 
@@ -8,61 +8,61 @@ export type ProgressIndex = {
   byProject: Record<string, ProgressCounts>
   bySite: Record<string, ProgressCounts>
   byDeployment: Record<string, ProgressCounts>
-  byNight: Record<string, ProgressCounts>
+  byLeafGroup: Record<string, ProgressCounts>
 }
 
 export function buildProgressIndex(params: {
-  nights: Record<string, NightEntity>
-  nightSummaries: Record<string, NightSummaryEntity>
+  nights: Record<string, LeafGroupEntity>
+  nightSummaries: Record<string, LeafGroupSummaryEntity>
   detections: Record<string, DetectionEntity>
 }): ProgressIndex {
   const { nights, nightSummaries, detections } = params
-  const byNight = buildProgressByNight({ nightSummaries, detections })
-  const { byDeployment, bySite, byProject } = rollupProgressFromNights({ byNight, nights })
+  const byLeafGroup = buildProgressByLeafGroup({ nightSummaries, detections })
+  const { byDeployment, bySite, byProject } = rollupProgressFromLeafGroups({ byLeafGroup, nights })
 
-  return { byNight, byDeployment, bySite, byProject }
+  return { byLeafGroup, byDeployment, bySite, byProject }
 }
 
-function buildProgressByNight(params: {
-  nightSummaries: Record<string, NightSummaryEntity>
+function buildProgressByLeafGroup(params: {
+  nightSummaries: Record<string, LeafGroupSummaryEntity>
   detections: Record<string, DetectionEntity>
 }) {
   const { nightSummaries, detections } = params
-  const byNight: Record<string, ProgressCounts> = {}
-  const detectionsByNight = groupDetectionsByNight({ detections })
-  const nightIds = new Set<string>([
+  const byLeafGroup: Record<string, ProgressCounts> = {}
+  const detectionsByLeafGroup = groupDetectionsByNight({ detections })
+  const leafGroupIds = new Set<string>([
     ...Object.keys(nightSummaries ?? {}),
-    ...Object.keys(detectionsByNight),
+    ...Object.keys(detectionsByLeafGroup),
   ])
 
-  for (const nightId of nightIds) {
-    if (!nightId) continue
+  for (const leafGroupId of leafGroupIds) {
+    if (!leafGroupId) continue
 
-    const detectionsForNight = detectionsByNight[nightId] ?? []
+    const detectionsForNight = detectionsByLeafGroup[leafGroupId] ?? []
     if (detectionsForNight.length > 0) {
-      const summary = buildNightSummary({ nightId, detections: detectionsForNight })
-      byNight[nightId] = {
+      const summary = buildLeafGroupSummary({ leafGroupId, detections: detectionsForNight })
+      byLeafGroup[leafGroupId] = {
         total: summary.totalDetections,
         identified: summary.totalIdentified,
       }
       continue
     }
 
-    const summary = nightSummaries?.[nightId]
-    byNight[nightId] = {
+    const summary = nightSummaries?.[leafGroupId]
+    byLeafGroup[leafGroupId] = {
       total: summary?.totalDetections ?? 0,
       identified: summary?.totalIdentified ?? 0,
     }
   }
 
-  return byNight
+  return byLeafGroup
 }
 
-function rollupProgressFromNights(params: {
-  byNight: Record<string, ProgressCounts>
-  nights: Record<string, NightEntity>
+function rollupProgressFromLeafGroups(params: {
+  byLeafGroup: Record<string, ProgressCounts>
+  nights: Record<string, LeafGroupEntity>
 }) {
-  const { byNight, nights } = params
+  const { byLeafGroup, nights } = params
   const byDeployment: Record<string, ProgressCounts> = {}
   const bySite: Record<string, ProgressCounts> = {}
   const byProject: Record<string, ProgressCounts> = {}
@@ -70,7 +70,7 @@ function rollupProgressFromNights(params: {
   for (const night of Object.values(nights ?? {})) {
     if (!night?.id) continue
 
-    const progress = byNight[night.id] ?? { total: 0, identified: 0 }
+    const progress = byLeafGroup[night.id] ?? { total: 0, identified: 0 }
     if (night.deploymentId) addProgressCounts({ bucket: byDeployment, id: night.deploymentId, progress })
     if (night.siteId) addProgressCounts({ bucket: bySite, id: night.siteId, progress })
     if (night.projectId) addProgressCounts({ bucket: byProject, id: night.projectId, progress })
@@ -81,16 +81,16 @@ function rollupProgressFromNights(params: {
 
 function groupDetectionsByNight(params: { detections: Record<string, DetectionEntity> }) {
   const { detections } = params
-  const byNight: Record<string, DetectionEntity[]> = {}
+  const byLeafGroup: Record<string, DetectionEntity[]> = {}
 
   for (const detection of Object.values(detections ?? {})) {
-    const nightId = detection?.nightId
-    if (!nightId) continue
-    if (!byNight[nightId]) byNight[nightId] = []
-    byNight[nightId].push(detection)
+    const leafGroupId = detection?.leafGroupId
+    if (!leafGroupId) continue
+    if (!byLeafGroup[leafGroupId]) byLeafGroup[leafGroupId] = []
+    byLeafGroup[leafGroupId].push(detection)
   }
 
-  return byNight
+  return byLeafGroup
 }
 
 function addProgressCounts(params: {
