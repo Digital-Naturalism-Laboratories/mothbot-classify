@@ -1,8 +1,10 @@
 import type { ClassificationRecord } from './records'
+import type { LegacyDetectionShape } from './legacy-detection-file'
 import { buildTaxonFromShape, extractTaxonomyFromShape } from '~/models/taxonomy/extract'
+import { extractMorphospeciesFromShape } from '~/models/taxonomy/morphospecies'
 
 export function classificationFromBotShape(params: {
-  shape: Record<string, unknown>
+  shape: LegacyDetectionShape
   patchId: string
   classifierId: string
 }): ClassificationRecord {
@@ -30,7 +32,7 @@ export function classificationFromBotShape(params: {
 }
 
 export function classificationFromIdentifiedShape(params: {
-  shape: Record<string, unknown>
+  shape: LegacyDetectionShape
   patchId: string
   classifierId: string
   classifiedAt?: number
@@ -52,9 +54,9 @@ export function classificationFromIdentifiedShape(params: {
     }
   }
 
-  const morphospecies = typeof shape.morphospecies === 'string' ? shape.morphospecies : null
   const taxonomy = extractTaxonomyFromShape({ shape })
   const taxon = buildTaxonFromShape({ shape, taxonomy, isError: false })
+  const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError: false }) ?? null
 
   if (morphospecies) {
     return {
