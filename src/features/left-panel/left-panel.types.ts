@@ -12,6 +12,7 @@ export type TaxonomyNode = {
 }
 
 export type NightLeftPanelProps = {
+  nightId: string
   taxonomyAuto?: TaxonomyNode[]
   taxonomyUser?: TaxonomyNode[]
   totalPatches: number

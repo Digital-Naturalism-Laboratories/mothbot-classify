@@ -4,11 +4,10 @@ const mocks = vi.hoisted(() => {
   return {
     pickDirectoryFilesWithPathsMock: vi.fn(),
     pickerErrorSetMock: vi.fn(),
-    validateProjectRootSelectionMock: vi.fn(),
+    normalizeIndexedFilesForIngestMock: vi.fn(),
+    ingestIndexedFolderFilesMock: vi.fn(),
     persistPickedDirectoryMock: vi.fn(),
     forgetSavedDirectoryMock: vi.fn(),
-    applyIndexedFilesStateMock: vi.fn(),
-    singlePassIngestMock: vi.fn(),
   }
 })
 
@@ -17,6 +16,7 @@ vi.mock('~/features/data-flow/1.ingest/files.fs', async () => {
   return {
     ...actual,
     pickDirectoryFilesWithPaths: mocks.pickDirectoryFilesWithPathsMock,
+    normalizeIndexedFilesForIngest: mocks.normalizeIndexedFilesForIngestMock,
   }
 })
 
@@ -25,12 +25,6 @@ vi.mock('~/stores/ui', async () => {
     pickerErrorStore: {
       set: mocks.pickerErrorSetMock,
     },
-  }
-})
-
-vi.mock('~/features/data-flow/1.ingest/files.validation', async () => {
-  return {
-    validateProjectRootSelection: mocks.validateProjectRootSelectionMock,
   }
 })
 
@@ -43,15 +37,9 @@ vi.mock('~/features/data-flow/3.persist/files.persistence', async () => {
   }
 })
 
-vi.mock('~/features/data-flow/1.ingest/files.initialize', async () => {
+vi.mock('~/features/data-flow/1.ingest/ingest-folder-pipeline', async () => {
   return {
-    applyIndexedFilesState: mocks.applyIndexedFilesStateMock,
-  }
-})
-
-vi.mock('~/features/data-flow/1.ingest/files.single-pass', async () => {
-  return {
-    singlePassIngest: mocks.singlePassIngestMock,
+    ingestIndexedFolderFiles: mocks.ingestIndexedFolderFilesMock,
   }
 })
 
@@ -81,8 +69,10 @@ import { openDirectory } from '../files.service'
 describe('files.service openDirectory integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.validateProjectRootSelectionMock.mockReturnValue({ ok: true })
-    mocks.singlePassIngestMock.mockResolvedValue({ ok: true })
+    mocks.ingestIndexedFolderFilesMock.mockImplementation(async () => {
+      mocks.pickerErrorSetMock(null)
+      return { ok: true, ingestMode: 'legacy', fileCount: 1 }
+    })
     mocks.persistPickedDirectoryMock.mockResolvedValue(undefined)
     mocks.forgetSavedDirectoryMock.mockResolvedValue(undefined)
   })
@@ -107,15 +97,29 @@ describe('files.service openDirectory integration', () => {
         directoryHandle: secondHandle,
       })
 
+    mocks.normalizeIndexedFilesForIngestMock
+      .mockReturnValueOnce({ ok: false, levelsUp: 2, message: 'too deep' })
+      .mockReturnValueOnce({
+        ok: true,
+        files: [
+          {
+            path: 'project-1/site-1/deployment-1/night-1/patches/a.jpg',
+            name: 'a.jpg',
+            size: 1,
+          },
+        ],
+      })
+
     await openDirectory()
 
     expect(mocks.pickDirectoryFilesWithPathsMock).toHaveBeenCalledTimes(2)
-    expect(mocks.pickerErrorSetMock).toHaveBeenCalledWith(expect.stringContaining('Please pick 2 level(s) up'))
+    expect(mocks.pickerErrorSetMock).toHaveBeenCalledWith('too deep')
     expect(mocks.persistPickedDirectoryMock).toHaveBeenCalledTimes(1)
     expect(mocks.persistPickedDirectoryMock).toHaveBeenCalledWith(secondHandle)
-    expect(mocks.validateProjectRootSelectionMock).toHaveBeenCalledTimes(1)
-    expect(mocks.applyIndexedFilesStateMock).toHaveBeenCalledTimes(1)
-    expect(mocks.singlePassIngestMock).toHaveBeenCalledTimes(1)
+    expect(mocks.ingestIndexedFolderFilesMock).toHaveBeenCalledTimes(1)
+    expect(mocks.ingestIndexedFolderFilesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ pathsAlreadyNormalized: true }),
+    )
     expect(mocks.forgetSavedDirectoryMock).not.toHaveBeenCalled()
     expect(mocks.pickerErrorSetMock).toHaveBeenLastCalledWith(null)
   })

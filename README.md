@@ -38,3 +38,9 @@ projects/
 ```
 
 The app lets you navigate through this hierarchy, view AI-detected insects, and approve or further classify each detection.
+
+For **Mothbox Next packages** (`dataset.json`, `01_patches/`, NDJSON records), see `docs/mothbox-next-package.md` and use **Migrate legacy dataset…** in the app nav.
+
+## Agent context
+
+Routing and domain language: [`CONTEXT-MAP.md`](CONTEXT-MAP.md) → local `CONTEXT.md` files under `src/features/`.

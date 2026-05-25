@@ -73,14 +73,7 @@ export async function parseUserDetectionJsonSafely(params: { file: IndexedFile }
   }
 }
 
-export function extractPatchFilename(params: { patchPath: string }) {
-  const { patchPath } = params
-  if (!patchPath) return ''
-  const normalized = patchPath.replaceAll('\\', '/').trim()
-  const segments = normalized.split('/')
-  const name = segments[segments.length - 1]
-  return name ?? ''
-}
+export { extractPatchFilename } from '~/features/mothbox-next/patch-path'
 
 async function ensureTextFromIndexedFile(f: IndexedFile): Promise<string> {
   const hasFile = !!(f as any)?.file

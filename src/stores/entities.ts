@@ -28,11 +28,13 @@ import { nightsStore } from './entities/4.nights'
 import { patchesStore, clearFileObjectsForNight as clearPatchesForNight } from './entities/5.patches'
 import { photosStore, clearFileObjectsForNight as clearPhotosForNight } from './entities/photos'
 import { detectionsStore } from './entities/detections'
+import { clearMothboxNextPackage } from '~/features/mothbox-next/active-package'
 
 /**
  * Resets all entity stores to empty state.
  */
 export function resetAllEntityStores() {
+  clearMothboxNextPackage()
   projectsStore.set({})
   sitesStore.set({})
   deploymentsStore.set({})

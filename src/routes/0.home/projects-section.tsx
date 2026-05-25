@@ -19,18 +19,25 @@ import type { NightEntity } from '~/stores/entities/4.nights'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
-import classed from '~/styles/classed'
 import { cn } from '~/utils/cn'
 import { InlineProgress } from './inline-progress'
 import { ExportDwCDropdown, ItemActions } from './item-actions'
 import { deriveSiteFromDeploymentFolder } from '~/features/data-flow/1.ingest/ingest-paths'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
+import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
+import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
 
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
 const projectsTreeRootRowTitleClass = 'font-medium text-neutral-900'
 const projectsTreeDeepRowTitleClass = 'text-neutral-900'
-/** Fixed-width stats column so progress + actions line up across site / deployment / night rows. */
-const projectsTreeStatsColClass =
-  'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12'
+const projectsTreeRowClass =
+  'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-12'
+/** Matches `ItemActions` trigger width so progress sits in the same column on every row. */
+const projectsTreeActionsColClass = 'flex w-28 shrink-0 justify-end'
+const projectsTreeIndentSiteClass = 'pl-8'
+const projectsTreeIndentDeploymentClass = 'pl-16'
+/** Deployment pl-16 + expand chevron (w-28) + gap-2 — nights have no chevron; margin keeps row bg full width. */
+const projectsTreeIndentNightClass = 'ml-[46px]'
 
 type HierarchyStores = {
   sites: Record<string, SiteEntity>
@@ -62,7 +69,19 @@ type CollapsedState = {
 export function ProjectsSection(props: ProjectsSectionProps) {
   const { isLoading, projects, sites, deployments, nights, detections, nightSummaries } = props
   const hasProjects = Object.keys(projects ?? {}).length > 0
+  const activeFolderName = useStore(activeDatasetFolderNameStore)
+  const datasetProjectId = useMemo(() => Object.keys(projects ?? {})[0], [projects])
+  const speciesSelection = useStore(projectSpeciesSelectionStore)
+  const speciesLists = useStore(speciesListsStore)
+  const datasetSpeciesListName = useMemo(() => {
+    if (!datasetProjectId) return undefined
+    const listId = speciesSelection?.[datasetProjectId]
+    if (!listId) return undefined
+    return speciesLists?.[listId]?.name
+  }, [datasetProjectId, speciesSelection, speciesLists])
   const [collapsed, setCollapsed] = useState<CollapsedState>({ projects: {}, sites: {}, deployments: {} })
+  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
+  const [isMorphoOpen, setIsMorphoOpen] = useState(false)
 
   const expandAll = useCallback(() => {
     setCollapsed({ projects: {}, sites: {}, deployments: {} })
@@ -87,10 +106,48 @@ export function ProjectsSection(props: ProjectsSectionProps) {
 
   return (
     <Column className='gap-8'>
-      <div className='flex items-center justify-between gap-12'>
-        <h2 id='home-projects-heading' className='text-lg font-semibold'>
-          Projects
-        </h2>
+      <div className='flex items-start justify-between gap-12'>
+        <div className='flex min-w-0 flex-1 flex-col gap-4'>
+          <div className='flex min-w-0 flex-wrap items-center gap-12'>
+            <h2 id='home-projects-heading' className='text-lg font-semibold text-balance'>
+              {activeFolderName ?? 'Projects'}
+            </h2>
+            {hasProjects && datasetProjectId ? (
+              <>
+                <Button variant='outline' size='xxsm' type='button' onClick={() => setIsSpeciesOpen(true)}>
+                  Species
+                </Button>
+                <Button variant='outline' size='xxsm' type='button' onClick={() => setIsMorphoOpen(true)}>
+                  Morphospecies
+                </Button>
+                <ExportDwCDropdown
+                  scope='project'
+                  id={datasetProjectId}
+                  nights={nights}
+                  menuAlign='start'
+                  triggerVariant='labeled'
+                />
+                <SpeciesCatalogDialog
+                  open={isSpeciesOpen}
+                  onOpenChange={setIsSpeciesOpen}
+                  projectIdOverride={datasetProjectId}
+                  initialScope='project'
+                />
+                <MorphoCatalogDialog
+                  open={isMorphoOpen}
+                  onOpenChange={setIsMorphoOpen}
+                  projectIdOverride={datasetProjectId}
+                  initialScope='project'
+                />
+              </>
+            ) : null}
+          </div>
+          {hasProjects && datasetProjectId ? (
+            <p className='text-13 text-neutral-500'>
+              {datasetSpeciesListName ?? 'species list not selected'}
+            </p>
+          ) : null}
+        </div>
         {!isLoading && hasProjects ? (
           <div className='flex shrink-0 flex-wrap justify-end gap-8'>
             <Button variant='outline' size='xxsm' type='button' onClick={expandAll}>
@@ -118,7 +175,7 @@ export function ProjectsSection(props: ProjectsSectionProps) {
           onToggleDeployment={onToggleDeployment}
         />
       ) : (
-        <p className='text-sm text-neutral-500'>Load a projects folder to see projects</p>
+        <p className='text-sm text-neutral-500 text-pretty'>Select a dataset on the left, or add a new one below the list.</p>
       )}
     </Column>
   )
@@ -153,7 +210,7 @@ function ProjectsList(props: ProjectsListProps) {
 
   return (
     <section aria-labelledby='home-projects-heading'>
-      <ul className='space-y-8'>
+      <div className='flex flex-col gap-8'>
         {list.map((project) => (
           <ProjectItem
             key={project.id}
@@ -168,7 +225,7 @@ function ProjectsList(props: ProjectsListProps) {
             onToggleDeployment={onToggleDeployment}
           />
         ))}
-      </ul>
+      </div>
     </section>
   )
 }
@@ -195,61 +252,32 @@ function ProjectItem(props: ProjectItemProps) {
     onToggleDeployment,
   } = props
   const prog = progressIndex.byProject[project.id] ?? { total: 0, identified: 0 }
-  const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
-  const [isMorphoOpen, setIsMorphoOpen] = useState(false)
   const sitesForProject = useMemo(() => getSitesForProject({ sites, projectId: project.id }), [sites, project.id])
   const hasSites = sitesForProject.length > 0
   const isProjectExpanded = !collapsed.projects[project.id]
   const projectPanelId = useMemo(() => projectsTreePanelId({ segment: 'project', entityId: project.id }), [project.id])
 
   return (
-    <li className='border bg-white p-8 group/project rounded-lg'>
-      <div className='flex items-center gap-12'>
-        <ProjectsTreeExpandTitle
-          hasBranch={hasSites}
-          expanded={isProjectExpanded}
-          panelId={projectPanelId}
-          onToggle={() => onToggleProject(project.id)}
-          expandAriaLabel={`Expand sites for ${project.name}`}
-          collapseAriaLabel={`Collapse sites for ${project.name}`}
-          titleClassName={projectsTreeRootRowTitleClass}
-        >
-          {project.name}
-        </ProjectsTreeExpandTitle>
-        <Button
-          variant='outline'
-          size='xxsm'
-          onClick={() => setIsSpeciesOpen(true)}
-        >
-          Species
-        </Button>
-        <Button
-          variant='outline'
-          size='xxsm'
-          onClick={() => setIsMorphoOpen(true)}
-        >
-          Morphospecies
-        </Button>
-        <ExportDwCDropdown scope='project' id={project.id} nights={nights} menuAlign='start' />
-
-        <div className='ml-auto flex items-center gap-12'>
-          <InlineProgress total={prog.total} identified={prog.identified} />
+    <div className='group/project shadow-border rounded-xl bg-white p-8'>
+      <div className={projectsTreeRowClass}>
+        <div className='flex min-w-0 flex-wrap items-center gap-12'>
+          <ProjectsTreeExpandTitle
+            hasBranch={hasSites}
+            expanded={isProjectExpanded}
+            panelId={projectPanelId}
+            onToggle={() => onToggleProject(project.id)}
+            expandAriaLabel={`Expand sites for ${project.name}`}
+            collapseAriaLabel={`Collapse sites for ${project.name}`}
+            titleClassName={projectsTreeRootRowTitleClass}
+          >
+            {project.name}
+          </ProjectsTreeExpandTitle>
         </div>
+        <InlineProgress total={prog.total} identified={prog.identified} />
+        <div className={projectsTreeActionsColClass} aria-hidden />
       </div>
-      <SpeciesCatalogDialog
-        open={isSpeciesOpen}
-        onOpenChange={setIsSpeciesOpen}
-        projectIdOverride={project.id}
-        initialScope='project'
-      />
-      <MorphoCatalogDialog
-        open={isMorphoOpen}
-        onOpenChange={setIsMorphoOpen}
-        projectIdOverride={project.id}
-        initialScope='project'
-      />
       {hasSites ? (
-        <ExpandDisclosurePanel id={projectPanelId} hidden={!isProjectExpanded}>
+        <ExpandDisclosurePanel id={projectPanelId} hidden={!isProjectExpanded} className='w-full'>
           <SitesList
             projectId={project.id}
             sites={sites}
@@ -262,7 +290,7 @@ function ProjectItem(props: ProjectItemProps) {
           />
         </ExpandDisclosurePanel>
       ) : null}
-    </li>
+    </div>
   )
 }
 
@@ -280,7 +308,7 @@ function SitesList(props: SitesListProps) {
   if (!list.length) return null
 
   return (
-    <Ul className=''>
+    <div className='flex w-full flex-col gap-1'>
       {list.map((site) => (
         <SiteItem
           key={site.id}
@@ -294,7 +322,7 @@ function SitesList(props: SitesListProps) {
           onToggleDeployment={onToggleDeployment}
         />
       ))}
-    </Ul>
+    </div>
   )
 }
 
@@ -316,26 +344,28 @@ function SiteItem(props: SiteItemProps) {
   const sitePanelId = useMemo(() => projectsTreePanelId({ segment: 'site', entityId: site.id }), [site.id])
 
   return (
-    <Li className={cn('group/site', projectsTreeStatsColClass)}>
-      <div className='flex min-w-0 items-center pl-8'>
-        <ProjectsTreeExpandTitle
-          hasBranch={hasDeployments}
-          expanded={isSiteExpanded}
-          panelId={sitePanelId}
-          onToggle={() => onToggleSite(site.id)}
-          expandAriaLabel={`Expand deployments for ${site.name}`}
-          collapseAriaLabel={`Collapse deployments for ${site.name}`}
-          titleClassName={projectsTreeDeepRowTitleClass}
-        >
-          {site.name}
-        </ProjectsTreeExpandTitle>
-      </div>
-      <div className='flex min-w-0 items-center justify-end gap-12'>
+    <div className='group/site w-full'>
+      <div className={projectsTreeRowClass}>
+        <div className={cn('flex min-w-0 items-center', projectsTreeIndentSiteClass)}>
+          <ProjectsTreeExpandTitle
+            hasBranch={hasDeployments}
+            expanded={isSiteExpanded}
+            panelId={sitePanelId}
+            onToggle={() => onToggleSite(site.id)}
+            expandAriaLabel={`Expand deployments for ${site.name}`}
+            collapseAriaLabel={`Collapse deployments for ${site.name}`}
+            titleClassName={projectsTreeDeepRowTitleClass}
+          >
+            {site.name}
+          </ProjectsTreeExpandTitle>
+        </div>
         <InlineProgress total={prog.total} identified={prog.identified} />
-        <ItemActions scope={'site'} id={site.id} nights={nights} />
+        <div className={projectsTreeActionsColClass}>
+          <ItemActions scope={'site'} id={site.id} nights={nights} />
+        </div>
       </div>
       {hasDeployments ? (
-        <ExpandDisclosurePanel id={sitePanelId} hidden={!isSiteExpanded}>
+        <ExpandDisclosurePanel id={sitePanelId} hidden={!isSiteExpanded} className='w-full'>
           <DeploymentsList
             projectId={projectId}
             siteId={site.id}
@@ -347,7 +377,7 @@ function SiteItem(props: SiteItemProps) {
           />
         </ExpandDisclosurePanel>
       ) : null}
-    </Li>
+    </div>
   )
 }
 
@@ -365,7 +395,7 @@ function DeploymentsList(props: DeploymentsListProps) {
   if (!list.length) return null
 
   return (
-    <Ul>
+    <div className='flex w-full flex-col gap-1'>
       {list.map((dep) => (
         <DeploymentItem
           key={dep.id}
@@ -377,7 +407,7 @@ function DeploymentsList(props: DeploymentsListProps) {
           onToggleDeployment={onToggleDeployment}
         />
       ))}
-    </Ul>
+    </div>
   )
 }
 
@@ -401,31 +431,33 @@ function DeploymentItem(props: DeploymentItemProps) {
   )
 
   return (
-    <Li className={cn('group/deployment', projectsTreeStatsColClass)}>
-      <div className='flex min-w-0 items-center pl-16'>
-        <ProjectsTreeExpandTitle
-          hasBranch={hasNights}
-          expanded={isDeploymentExpanded}
-          panelId={deploymentPanelId}
-          onToggle={() => onToggleDeployment(deployment.id)}
-          expandAriaLabel={`Expand nights for ${deployment.name}`}
-          collapseAriaLabel={`Collapse nights for ${deployment.name}`}
-          titleClassName={projectsTreeDeepRowTitleClass}
-        >
-          {deployment.name}
-        </ProjectsTreeExpandTitle>
-      </div>
-      <div className='flex min-w-0 items-center justify-end gap-12'>
+    <div className='group/deployment w-full'>
+      <div className={projectsTreeRowClass}>
+        <div className={cn('flex min-w-0 items-center', projectsTreeIndentDeploymentClass)}>
+          <ProjectsTreeExpandTitle
+            hasBranch={hasNights}
+            expanded={isDeploymentExpanded}
+            panelId={deploymentPanelId}
+            onToggle={() => onToggleDeployment(deployment.id)}
+            expandAriaLabel={`Expand nights for ${deployment.name}`}
+            collapseAriaLabel={`Collapse nights for ${deployment.name}`}
+            titleClassName={projectsTreeDeepRowTitleClass}
+          >
+            {deployment.name}
+          </ProjectsTreeExpandTitle>
+        </div>
         <InlineProgress total={prog.total} identified={prog.identified} />
-        <ItemActions scope={'deployment'} id={deployment.id} nights={nights} />
+        <div className={projectsTreeActionsColClass}>
+          <ItemActions scope={'deployment'} id={deployment.id} nights={nights} />
+        </div>
       </div>
 
       {hasNights ? (
-        <ExpandDisclosurePanel id={deploymentPanelId} hidden={!isDeploymentExpanded}>
+        <ExpandDisclosurePanel id={deploymentPanelId} hidden={!isDeploymentExpanded} className='w-full'>
           <NightsList projectId={projectId} deploymentId={deployment.id} nights={nights} progressIndex={progressIndex} />
         </ExpandDisclosurePanel>
       ) : null}
-    </Li>
+    </div>
   )
 }
 
@@ -442,44 +474,52 @@ function NightsList(props: NightsListProps) {
   if (!list.length) return null
 
   return (
-    <Ul>
+    <div className='flex w-full flex-col gap-1'>
       {list.map((night) => {
         const prog = progressIndex.byNight[night.id] ?? { total: 0, identified: 0 }
         const isExporting = exportingNightIds.has(night.id)
         return (
-          <Li
+          <div
             key={night.id}
-            className={cn('group/night h-32 bg-stone-50', projectsTreeStatsColClass)}
+            className={cn(
+              'group/night relative h-32 w-full cursor-pointer rounded-md bg-stone-50 hover:bg-blue-100',
+              'transition-[background-color,scale] duration-150 ease-out active:scale-[0.96]',
+            )}
           >
-            <div className='flex min-w-0 items-center pl-24'>
-              <Link
-                to={'/projects/$projectId/deployments/$deploymentId/nights/$nightId'}
-                params={{
-                  projectId,
-                  deploymentId: lastPathSegment({ id: deploymentId }),
-                  nightId: lastPathSegment({ id: night.id }),
-                }}
-                className='flex min-w-0 flex-1 cursor-pointer items-center gap-12 rounded-l-md py-0 hover:bg-blue-100'
-              >
-                <span className='truncate text-sm text-blue-700'>{night.name}</span>
+            <Link
+              to={'/projects/$projectId/deployments/$deploymentId/nights/$nightId'}
+              params={{
+                projectId,
+                deploymentId: lastPathSegment({ id: deploymentId }),
+                nightId: lastPathSegment({ id: night.id }),
+              }}
+              aria-label={`Open night ${night.name}`}
+              className='absolute inset-0 z-0 rounded-md'
+            />
+            <div className={cn(projectsTreeRowClass, 'relative z-[1] pointer-events-none')}>
+              <div className={cn('flex min-h-0 min-w-0 items-center gap-12', projectsTreeIndentNightClass)}>
+                <span className='truncate text-sm leading-none text-blue-700'>{night.name}</span>
                 {isExporting ? (
                   <div className='flex shrink-0 items-center gap-4 text-sm text-neutral-500'>
                     <Loader size={14} />
                     <span>exporting</span>
                   </div>
                 ) : null}
-              </Link>
-            </div>
-            <div className='flex min-w-0 items-center justify-end gap-12'>
-              <InlineProgress total={prog.total} identified={prog.identified} />
-              <div onClick={(e) => e.stopPropagation()}>
+              </div>
+              <div className='flex items-center self-center'>
+                <InlineProgress total={prog.total} identified={prog.identified} />
+              </div>
+              <div
+                className={cn(projectsTreeActionsColClass, 'pointer-events-auto items-center self-center')}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <ItemActions scope={'night'} id={night.id} nights={nights} />
               </div>
             </div>
-          </Li>
+          </div>
         )
       })}
-    </Ul>
+    </div>
   )
 }
 
@@ -701,6 +741,3 @@ function buildProgressIndex(params: {
 
   return { byNight, byDeployment, bySite, byProject }
 }
-
-const Ul = classed('ul', 'w-full space-y-1')
-const Li = classed('li', 'relative rounded-md')

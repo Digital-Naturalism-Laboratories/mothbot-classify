@@ -2,9 +2,11 @@ import { ingestDetectionsForNight } from './ingest'
 import { indexedFilesStore, patchFileMapByNightStore } from './files.state'
 import { detectionsStore } from '~/stores/entities/detections'
 import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { isMothboxNextIngestMode } from './ingest-mode'
 
 export async function ensureDetectionsLoadedForNight(params: { nightId: string }) {
   const { nightId } = params
+  if (isMothboxNextIngestMode()) return
   const loadedCount = countLoadedDetectionsForNight({ nightId })
   const expectedCount = nightSummariesStore.get()?.[nightId]?.totalDetections ?? 0
 

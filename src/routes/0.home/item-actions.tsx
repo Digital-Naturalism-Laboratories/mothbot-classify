@@ -17,17 +17,25 @@ export type ExportDwCDropdownProps = {
   nights: Record<string, NightEntity>
   /** Radix `align` for the menu panel (use `start` beside catalog buttons, `end` for trailing row actions). */
   menuAlign?: 'start' | 'end'
+  /** `icon` = row “…” menu; `labeled` = “Export” beside dataset catalog buttons. */
+  triggerVariant?: 'icon' | 'labeled'
 }
 
 export function ExportDwCDropdown(props: ExportDwCDropdownProps) {
-  const { scope, id, nights, menuAlign = 'end' } = props
+  const { scope, id, nights, menuAlign = 'end', triggerVariant = 'icon' } = props
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant='outline' size='xxsm' type='button' className='min-w-24 px-4' aria-label='More options'>
-          <MoreHorizontal className='h-14 w-14' aria-hidden />
-        </Button>
+        {triggerVariant === 'labeled' ? (
+          <Button variant='outline' size='xxsm' type='button'>
+            Export
+          </Button>
+        ) : (
+          <Button variant='outline' size='xxsm' type='button' className='min-w-24 px-4' aria-label='More options'>
+            <MoreHorizontal className='h-14 w-14' aria-hidden />
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align={menuAlign} sideOffset={4}>
         <DropdownMenuItem
