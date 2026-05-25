@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildNightSummary } from '../night-summaries'
+import { buildLeafGroupSummary } from '../night-summaries'
 
-describe('buildNightSummary', () => {
+describe('buildLeafGroupSummary', () => {
   it('builds species summary data for user identifications without morphospecies', () => {
-    const summary = buildNightSummary({
-      nightId: 'ProjectA/Deploy_Site1_2025/Night1',
+    const summary = buildLeafGroupSummary({
+      leafGroupId: 'ProjectA/Deploy_Site1_2025/Night1',
       detections: [
         {
           id: 'det-1',
@@ -45,8 +45,8 @@ describe('buildNightSummary', () => {
   })
 
   it('keeps morphospecies and species summaries separate', () => {
-    const summary = buildNightSummary({
-      nightId: 'ProjectA/Deploy_Site1_2025/Night1',
+    const summary = buildLeafGroupSummary({
+      leafGroupId: 'ProjectA/Deploy_Site1_2025/Night1',
       detections: [
         {
           id: 'det-1',

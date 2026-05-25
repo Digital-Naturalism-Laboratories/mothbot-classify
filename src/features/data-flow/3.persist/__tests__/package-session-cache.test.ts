@@ -122,7 +122,7 @@ describe('package-session-cache', () => {
       p1: {
         id: 'p1',
         name: 'photo.jpg',
-        nightId: 'n1',
+        leafGroupId: 'n1',
         imageFile: {
           path: 'n1/photo.jpg',
           name: 'photo.jpg',
@@ -142,7 +142,7 @@ describe('package-session-cache', () => {
       p1: {
         id: 'p1',
         name: 'photo.jpg',
-        nightId: 'n1',
+        leafGroupId: 'n1',
         imageFile: { path: 'n1/photo.jpg', name: 'photo.jpg', size: 9 },
       },
     }
@@ -180,11 +180,11 @@ describe('package-session-cache', () => {
       projects: {},
       sites: {},
       deployments: {},
-      nights: {},
+      leafGroups: {},
       photos: {},
       patches: {},
       detections: {},
-      nightSummaries: {},
+      leafGroupSummaries: {},
       morphoLinks: {},
       indexedMeta: [],
     }
@@ -207,11 +207,11 @@ describe('package-session-cache', () => {
       projects: { Hoya: { id: 'Hoya', name: 'Hoya' } },
       sites: {},
       deployments: {},
-      nights: { 'Hoya/dep/night': { id: 'Hoya/dep/night', name: '2025-01-26', projectId: 'Hoya', siteId: 's', deploymentId: 'd' } },
+      leafGroups: { 'Hoya/dep/night': { id: 'Hoya/dep/night', name: '2025-01-26', datasetId: 'Hoya', siteId: 's', deploymentId: 'd' } },
       photos: {},
       patches: {},
       detections: {},
-      nightSummaries: {},
+      leafGroupSummaries: {},
       morphoLinks: {},
       indexedMeta: [],
     }

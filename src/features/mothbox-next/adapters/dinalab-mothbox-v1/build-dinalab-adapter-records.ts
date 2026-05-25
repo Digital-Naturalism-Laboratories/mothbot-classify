@@ -17,6 +17,7 @@ import {
 import { dirnameRelative, joinRelative } from './adapter-path-utils'
 import {
   packageSourceLocationLabel,
+  disambiguatePatchId,
   patchIdFromImageFileName,
   photoBaseFromPatchFileName,
   resolvePatchAssetInPackage,
@@ -58,6 +59,7 @@ export async function buildDinalabMothboxV1Records(params: {
   const patchSources: PatchSourceRecord[] = []
   const botRows: ClassificationRecord[] = []
   const humanRows: ClassificationRecord[] = []
+  const usedPatchIds = new Set<string>()
 
   onProgress?.({
     phase: 'scan',
@@ -92,13 +94,15 @@ export async function buildDinalabMothboxV1Records(params: {
       const patchFileName = extractPatchFilename({ patchPath: String(shape.patch_path ?? '') })
       if (!patchFileName) continue
 
-      const patchId = patchIdFromImageFileName(patchFileName)
+      const basePatchId = patchIdFromImageFileName(patchFileName)
       const botDir = dirnameRelative(botRelativePath)
       const sourcePatchRelative = joinRelative(botDir, 'patches', patchFileName)
       if (!(await io.source.exists(sourcePatchRelative))) continue
 
       const hierarchy = resolveDeploymentContext({ botRelativePath, datasetId, legacySourceRootName })
-      const nightDate = inferNightDateFromPatchId(patchId) ?? hierarchy.nightDate
+      const nightDate = hierarchy.nightDate ?? inferNightDateFromPatchId(basePatchId) ?? 'unknown-night'
+      const cameraDayId = buildCameraDayIdFromParts({ deploymentId: hierarchy.deploymentId, nightDate })
+      const patchId = disambiguatePatchId({ basePatchId, cameraDayId, usedPatchIds })
 
       const assetPath = await resolvePatchAssetInPackage({
         io,
@@ -116,20 +120,24 @@ export async function buildDinalabMothboxV1Records(params: {
         asset_path: assetPath,
         media_type: 'image/jpeg',
         deployment_id: hierarchy.deploymentId,
-        camera_day_id: buildCameraDayIdFromParts({
-          deploymentId: hierarchy.deploymentId,
-          nightDate,
-        }),
+        camera_day_id: cameraDayId,
       })
+
+      const botAssetPath = toPackageRelativeAssetPath({
+        sourcePrefix: packageRelativeSourcePrefix,
+        pathRelativeToSource: botRelativePath,
+      })
+      const photoAssetPath = botRelativePath.replace(/_botdetection\.json$/i, '.jpg')
 
       patchSources.push({
         patch_id: patchId,
         source_type: 'crop_from_photo',
         source_photo_id: photoBase,
-        original_bot_detection_path: toPackageRelativeAssetPath({
+        source_photo_asset_path: toPackageRelativeAssetPath({
           sourcePrefix: packageRelativeSourcePrefix,
-          pathRelativeToSource: botRelativePath,
+          pathRelativeToSource: photoAssetPath,
         }),
+        original_bot_detection_path: botAssetPath,
         original_patch_path: toPackageRelativeAssetPath({
           sourcePrefix: packageRelativeSourcePrefix,
           pathRelativeToSource: sourcePatchRelative,

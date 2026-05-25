@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 vi.mock('~/features/data-flow/3.persist/detection-persistence', () => ({
-  scheduleSaveForNight: vi.fn(),
+  scheduleSaveForLeafGroup: vi.fn(),
 }))
 
 vi.mock('~/stores/entities/night-summaries', () => ({
-  nightSummariesStore: {
+  leafGroupSummariesStore: {
     get: vi.fn(() => ({})),
     set: vi.fn(),
   },
-  buildNightSummary: vi.fn(() => ({})),
+  buildLeafGroupSummary: vi.fn(() => ({})),
 }))
 
 vi.mock('~/features/data-flow/2.identify/species-list.store', () => ({
@@ -37,7 +37,7 @@ describe('acceptDetections', () => {
       id: 'patch1.jpg',
       patchId: 'patch1.jpg',
       photoId: 'photo1.jpg',
-      nightId: 'project/site/deployment/night1',
+      leafGroupId: 'project/site/deployment/night1',
       detectedBy: 'auto',
       label: 'Lepidoptera',
       taxon: {
@@ -73,7 +73,7 @@ describe('acceptDetections', () => {
       id: 'patch2.jpg',
       patchId: 'patch2.jpg',
       photoId: 'photo2.jpg',
-      nightId: 'project/site/deployment/night1',
+      leafGroupId: 'project/site/deployment/night1',
       detectedBy: 'auto',
       label: 'Unknown',
     }

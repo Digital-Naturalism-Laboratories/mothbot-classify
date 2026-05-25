@@ -35,7 +35,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
 
   const [identifyOpen, setIdentifyOpen] = useState(false)
 
-  const projectId = useMemo(() => getProjectIdFromNightId(patch?.nightId), [patch?.nightId])
+  const projectId = useMemo(() => getProjectIdFromNightId(patch?.leafGroupId), [patch?.leafGroupId])
 
   const morphospeciesKey = useMemo(() => {
     const morpho = typeof detection?.morphospecies === 'string' ? detection.morphospecies : ''
@@ -140,7 +140,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
           <div className='space-y-4'>
             <h4 className='text-14 font-semibold text-neutral-800'>Links</h4>
             <div>
-              <span className='font-medium'>Night:</span> {patch?.nightId ?? '—'}
+              <span className='font-medium'>Night:</span> {patch?.leafGroupId ?? '—'}
             </div>
             <div>
               <span className='font-medium'>Photo:</span> {patch?.photoId ?? '—'}
@@ -151,7 +151,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
           </div>
         </div>
 
-        <IdentifyDialog open={identifyOpen} onOpenChange={setIdentifyOpen} onSubmit={onIdentifySubmit} projectId={projectId} />
+        <IdentifyDialog open={identifyOpen} onOpenChange={setIdentifyOpen} onSubmit={onIdentifySubmit} datasetId={projectId} />
       </DialogContent>
     </Dialog>
   )

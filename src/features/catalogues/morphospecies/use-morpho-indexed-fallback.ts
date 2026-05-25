@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@nanostores/react'
-import { buildNightsRecordFromIds, computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
+import { buildNightsRecordFromIds, computeAllowedLeafGroupIds } from '~/features/catalogues/shared/catalog-utils'
 import type { ScopeType } from '~/features/catalogues/shared/scope-filters'
-import { filesByNightIdStore } from '~/features/data-flow/1.ingest/files.state'
-import type { NightSummaryEntity, MorphoTaxonomySummary } from '~/stores/entities/night-summaries'
+import { filesByLeafGroupIdStore } from '~/features/data-flow/1.ingest/files.state'
+import type { LeafGroupSummaryEntity, MorphoTaxonomySummary } from '~/stores/entities/night-summaries'
 import {
   buildMorphoIndexedFallback,
   getRelevantNightIdsForMorphoFallback,
@@ -20,39 +20,39 @@ export type MorphoIndexedFallbackState = {
 
 export function useMorphoIndexedFallback(params: {
   open: boolean
-  summaries?: Record<string, NightSummaryEntity>
-  nightIds?: string[]
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  leafGroupIds?: string[]
   usageScope: ScopeType
   projectId?: string
   siteId?: string
   deploymentId?: string
-  nightId?: string
+  leafGroupId?: string
 }) {
-  const { open, summaries, nightIds, usageScope, projectId, siteId, deploymentId, nightId } = params
-  const filesByNightId = useStore(filesByNightIdStore)
+  const { open, summaries, leafGroupIds, usageScope, projectId, siteId, deploymentId, leafGroupId } = params
+  const filesByNightId = useStore(filesByLeafGroupIdStore)
   const [indexedFallback, setIndexedFallback] = useState<MorphoIndexedFallbackState>(createEmptyMorphoIndexedFallbackState)
 
-  const stableNightIds = useMemo(() => nightIds ?? [], [nightIds])
+  const stableLeafGroupIds = useMemo(() => leafGroupIds ?? [], [leafGroupIds])
 
   useEffect(() => {
     if (!open) return
 
-    const allowedNightIds = computeAllowedNightIds({
+    const allowedLeafGroupIds = computeAllowedLeafGroupIds({
       usageScope,
       summaries: summaries ?? {},
-      nights: buildNightsRecordFromIds(stableNightIds),
+      nights: buildNightsRecordFromIds(stableLeafGroupIds),
       projectId,
       siteId,
       deploymentId,
-      nightId,
+      leafGroupId,
     })
-    const relevantNightIds = getRelevantNightIdsForMorphoFallback({ allowedNightIds, summaries, nightIds: stableNightIds })
+    const relevantNightIds = getRelevantNightIdsForMorphoFallback({ allowedLeafGroupIds, summaries, leafGroupIds: stableLeafGroupIds })
     if (relevantNightIds.length === 0) {
       setIndexedFallback(createEmptyMorphoIndexedFallbackState())
       return
     }
 
-    const shouldLoadFallback = shouldLoadMorphoIndexedFallback({ nightIds: relevantNightIds, summaries })
+    const shouldLoadFallback = shouldLoadMorphoIndexedFallback({ leafGroupIds: relevantNightIds, summaries })
     if (!shouldLoadFallback) {
       setIndexedFallback(createEmptyMorphoIndexedFallbackState())
       return
@@ -80,7 +80,7 @@ export function useMorphoIndexedFallback(params: {
     return () => {
       cancelled = true
     }
-  }, [open, usageScope, summaries, stableNightIds, projectId, siteId, deploymentId, nightId, filesByNightId])
+  }, [open, usageScope, summaries, stableLeafGroupIds, projectId, siteId, deploymentId, leafGroupId, filesByNightId])
 
   return indexedFallback
 }

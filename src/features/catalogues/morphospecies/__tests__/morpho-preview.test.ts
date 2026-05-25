@@ -23,7 +23,7 @@ describe('morpho preview fallback', () => {
         a: {
           detectedBy: 'user',
           morphospecies: 'Forcipomyia1',
-          nightId: 'project/deployment/night',
+          leafGroupId: 'project/deployment/night',
           patchId: 'fallback-patch.jpg',
         },
       },
@@ -31,7 +31,7 @@ describe('morpho preview fallback', () => {
 
     const selected = selectMorphoPreviewPairs({ summaryPreviewPairs, fallbackPreviewPairs })
 
-    expect(summaryPreviewPairs).toEqual([{ nightId: 'project/deployment/night', patchId: 'summary-patch.jpg' }])
+    expect(summaryPreviewPairs).toEqual([{ leafGroupId: 'project/deployment/night', patchId: 'summary-patch.jpg' }])
     expect(selected).toEqual(summaryPreviewPairs)
   })
 
@@ -55,25 +55,25 @@ describe('morpho preview fallback', () => {
         a: {
           detectedBy: 'user',
           morphospecies: 'Miridae13',
-          nightId: 'project/deployment/night',
+          leafGroupId: 'project/deployment/night',
           patchId: 'patch-a.jpg',
         },
         b: {
           detectedBy: 'user',
           morphospecies: ' miridae13 ',
-          nightId: 'project/deployment/night',
+          leafGroupId: 'project/deployment/night',
           patchId: 'patch-b.jpg',
         },
         c: {
           detectedBy: 'auto',
           morphospecies: 'Miridae13',
-          nightId: 'project/deployment/night',
+          leafGroupId: 'project/deployment/night',
           patchId: 'ignored-auto.jpg',
         },
         d: {
           detectedBy: 'user',
           morphospecies: 'OtherMorpho',
-          nightId: 'project/deployment/night',
+          leafGroupId: 'project/deployment/night',
           patchId: 'ignored-other.jpg',
         },
       },
@@ -83,8 +83,8 @@ describe('morpho preview fallback', () => {
 
     expect(summaryPreviewPairs).toEqual([])
     expect(fallbackPreviewPairs).toEqual([
-      { nightId: 'project/deployment/night', patchId: 'patch-a.jpg' },
-      { nightId: 'project/deployment/night', patchId: 'patch-b.jpg' },
+      { leafGroupId: 'project/deployment/night', patchId: 'patch-a.jpg' },
+      { leafGroupId: 'project/deployment/night', patchId: 'patch-b.jpg' },
     ])
     expect(selected).toEqual(fallbackPreviewPairs)
   })

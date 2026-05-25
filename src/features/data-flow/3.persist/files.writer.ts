@@ -1,7 +1,7 @@
-import { detectionsStore, getDetectionsForNight, getIdentifiedDetectionsForNight, type DetectionEntity } from '~/stores/entities/detections'
+import { detectionsStore, getDetectionsForLeafGroup, getIdentifiedDetectionsForLeafGroup, type DetectionEntity } from '~/stores/entities/detections'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
 import { idbGet } from '~/utils/index-db'
-import { nightSummariesStore, type NightSummaryEntity } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 import { ensureReadWritePermission, persistenceConstants } from './files.persistence'
 import { userSessionStore } from '~/stores/ui'
 import { morphoLinksStore } from './links'
@@ -10,7 +10,7 @@ import { buildIdentifiedJsonShapeFromDetection } from '~/models/detection-shapes
 import { setDetectionSaveScheduler } from './detection-persistence'
 import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
 import { exportUserDetectionsForMothboxNextPackage } from '~/features/mothbox-next/persist/package-fs-writer'
-import { buildNightSummary } from '~/stores/entities/night-summaries'
+import { buildLeafGroupSummary } from '~/stores/entities/night-summaries'
 import { writeTextFile } from '~/utils/fs-directory-handle'
 import {
   morphoLinksMapToRecords,
@@ -30,14 +30,14 @@ type FileSystemFileHandleLike = {
 const pendingTimers: Record<string, number> = {}
 const PACKAGE_SAVE_TIMER_KEY = '__mothbox-next-package__'
 
-export function scheduleSaveUserDetections(params: { nightId: string; delayMs?: number }) {
-  const { nightId } = params
+export function scheduleSaveUserDetections(params: { leafGroupId: string; delayMs?: number }) {
+  const { leafGroupId } = params
 
   const delayMs = typeof params?.delayMs === 'number' ? params.delayMs : 400
 
-  if (!nightId) return
+  if (!leafGroupId) return
 
-  const timerKey = isMothboxNextIngestMode() ? PACKAGE_SAVE_TIMER_KEY : nightId
+  const timerKey = isMothboxNextIngestMode() ? PACKAGE_SAVE_TIMER_KEY : leafGroupId
   const prev = pendingTimers[timerKey]
   if (prev) window.clearTimeout(prev)
 
@@ -46,14 +46,14 @@ export function scheduleSaveUserDetections(params: { nightId: string; delayMs?: 
       void exportUserDetectionsForMothboxNextPackage()
       return
     }
-    void exportUserDetectionsForNight({ nightId })
+    void exportUserDetectionsForNight({ leafGroupId })
   }, delayMs)
 
   pendingTimers[timerKey] = t
 }
 
-export async function exportUserDetectionsForNight(params: { nightId: string }) {
-  const { nightId } = params
+export async function exportUserDetectionsForNight(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
   const root = (await idbGet(
     persistenceConstants.IDB_NAME,
     persistenceConstants.IDB_STORE,
@@ -67,8 +67,8 @@ export async function exportUserDetectionsForNight(params: { nightId: string }) 
 
   const allPhotos = photosStore.get() || {}
 
-  const detectionsForNight = getDetectionsForNight(nightId)
-  const identifiedForNight = getIdentifiedDetectionsForNight(nightId)
+  const detectionsForNight = getDetectionsForLeafGroup(leafGroupId)
+  const identifiedForNight = getIdentifiedDetectionsForLeafGroup(leafGroupId)
   const byPhoto: Record<string, DetectionEntity[]> = {}
 
   for (const d of identifiedForNight) {
@@ -78,7 +78,7 @@ export async function exportUserDetectionsForNight(params: { nightId: string }) 
     byPhoto[photoId].push(d)
   }
 
-  const photosForNight = Object.values(allPhotos).filter((p) => p.nightId === nightId)
+  const photosForNight = Object.values(allPhotos).filter((p) => p.leafGroupId === leafGroupId)
   const nightDiskPathByPhotoId: Record<string, string> = {}
 
   for (const p of photosForNight) {
@@ -107,9 +107,9 @@ export async function exportUserDetectionsForNight(params: { nightId: string }) 
   await Promise.all(tasks)
 
   // Update + persist night summary
-  const summary = buildNightSummary({ nightId, detections: detectionsForNight })
-  const currentSummaries = nightSummariesStore.get() || {}
-  nightSummariesStore.set({ ...currentSummaries, [nightId]: summary })
+  const summary = buildLeafGroupSummary({ leafGroupId, detections: detectionsForNight })
+  const currentSummaries = leafGroupSummariesStore.get() || {}
+  leafGroupSummariesStore.set({ ...currentSummaries, [leafGroupId]: summary })
 
   const anyPhoto = photosForNight[0]
   if (anyPhoto) {

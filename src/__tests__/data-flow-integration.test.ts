@@ -3,18 +3,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // Mock dependencies
 vi.mock('~/features/data-flow/3.persist/detection-persistence', async () => {
   return {
-    scheduleSaveForNight: vi.fn(),
+    scheduleSaveForLeafGroup: vi.fn(),
   }
 })
 
 vi.mock('~/stores/entities/night-summaries', async () => {
   return {
-    nightSummariesStore: {
+    leafGroupSummariesStore: {
       get: vi.fn(() => ({})),
       set: vi.fn(),
     },
-    buildNightSummary: vi.fn((params: { nightId: string; detections: any[] }) => ({
-      nightId: params.nightId,
+    buildLeafGroupSummary: vi.fn((params: { leafGroupId: string; detections: any[] }) => ({
+      leafGroupId: params.leafGroupId,
       totalDetections: params.detections.length,
       totalIdentified: params.detections.filter((d: any) => d?.detectedBy === 'user').length,
     })),
@@ -62,7 +62,7 @@ describe('Data Flow Integration Tests', () => {
     id: 'patch1',
     patchId: 'patch1',
     photoId: 'photo1.jpg',
-    nightId: 'Dinacon2025/Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23/2025-06-22',
+    leafGroupId: 'Dinacon2025/Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23/2025-06-22',
     detectedBy: 'auto' as const,
   } as const
 
@@ -75,7 +75,7 @@ describe('Data Flow Integration Tests', () => {
   const BASE_EXPORT_PARAMS = {
     patch: { id: 'patch1', imageFile: { path: 'patches/patch1.jpg' } } as any,
     photo: { id: 'photo1.jpg' } as any,
-    nightId: BASE_DETECTION.nightId,
+    leafGroupId: BASE_DETECTION.leafGroupId,
     nightDiskPath: 'Dinacon2025/Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23/2025-06-22',
   } as const
 
@@ -212,7 +212,7 @@ describe('Data Flow Integration Tests', () => {
   })
 
   describe('Deployment Column Population', () => {
-    it('should populate deployment column from nightId (remove trailing night date)', () => {
+    it('should populate deployment column from leafGroupId (remove trailing night date)', () => {
       const detection: DetectionEntity = {
         ...BASE_DETECTION,
         label: 'Diptera',
@@ -230,7 +230,7 @@ describe('Data Flow Integration Tests', () => {
       })
 
       // deployment should be parentEventID without the trailing night date segment
-      // nightId: Dinacon2025/Dinacon2025_Les_BeachPalm/grupoKite_2025-06-23/2025-06-22
+      // leafGroupId: Dinacon2025/Dinacon2025_Les_BeachPalm/grupoKite_2025-06-23/2025-06-22
       // datasetID/parentEventID: Dinacon2025_Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23_2025-06-22
       // deployment: Dinacon2025_Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23 (without _2025-06-22)
       expect(row.deployment).not.toBe('')
@@ -419,7 +419,7 @@ describe('Data Flow Integration Tests', () => {
       expect(shape.order).toBe('Diptera')
 
       // Step 2: Load from JSON shape (simulates loading from _identified.json)
-      const photo = { id: BASE_DETECTION.photoId, nightId: BASE_DETECTION.nightId } as any
+      const photo = { id: BASE_DETECTION.photoId, leafGroupId: BASE_DETECTION.leafGroupId } as any
       const loaded = buildDetectionFromIdentifiedJsonShape({ shape, photo, existingDetection: undefined })
 
       // Verify morphospecies was restored
@@ -450,7 +450,7 @@ describe('Data Flow Integration Tests', () => {
         timestamp_ID_human: Date.now(),
       }
 
-      const photo = { id: BASE_DETECTION.photoId, nightId: BASE_DETECTION.nightId } as any
+      const photo = { id: BASE_DETECTION.photoId, leafGroupId: BASE_DETECTION.leafGroupId } as any
       const loaded = buildDetectionFromIdentifiedJsonShape({ shape, photo, existingDetection: existing })
 
       expect(loaded.morphospecies).toBe('111')

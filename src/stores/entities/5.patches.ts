@@ -4,20 +4,20 @@ import { IndexedFile } from './photos'
 export type PatchEntity = {
   id: string
   name: string
-  nightId: string
+  leafGroupId: string
   photoId: string
   imageFile?: IndexedFile
 }
 
 export const patchesStore = atom<Record<string, PatchEntity>>({})
 
-export function clearFileObjectsForNight(params: { nightId: string }) {
-  const { nightId } = params
+export function clearFileObjectsForLeafGroup(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
   const current = patchesStore.get() || {}
   const updated: Record<string, PatchEntity> = {}
 
   for (const [id, patch] of Object.entries(current)) {
-    if (patch.nightId === nightId) {
+    if (patch.leafGroupId === leafGroupId) {
       updated[id] = {
         ...patch,
         imageFile: patch.imageFile ? { ...patch.imageFile, file: undefined } : undefined,

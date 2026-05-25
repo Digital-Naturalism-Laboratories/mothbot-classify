@@ -4,10 +4,10 @@ import { TestIdentification } from './routes/test-identification'
 import { RootLayout } from '~/root-layout'
 import { Home } from '~/routes/0.home'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import { isSingleLeafHierarchy } from '~/features/mothbox-next/hierarchy-routes'
-import { resolveNightEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
+import { resolveLeafGroupEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
 
 export const rootRoute = createRootRoute({
   component: RootLayout,
@@ -48,12 +48,12 @@ export const nightRoute = createRoute({
     const folderName = activeDatasetFolderNameStore.get()
     if (!folderName) return
 
-    const nights = nightsStore.get() || {}
-    const leafGroupId = resolveNightEntityIdFromRoute({
+    const nights = leafGroupsStore.get() || {}
+    const leafGroupId = resolveLeafGroupEntityIdFromRoute({
       nights,
       projectId: params.projectId,
       deploymentId: params.deploymentId,
-      nightId: params.nightId,
+      leafGroupId: params.nightId,
     })
 
     const resolved = activeHierarchyStore.get()

@@ -3,7 +3,7 @@ import {
   buildNightRouteParams,
   normalizeLegacyNightId,
   parsePathParts,
-  resolveNightEntityIdFromRoute,
+  resolveLeafGroupEntityIdFromRoute,
 } from '../ingest-paths'
 
 describe('ingest-paths', () => {
@@ -53,11 +53,11 @@ describe('ingest-paths', () => {
       [cameraDayId]: { id: cameraDayId },
     }
 
-    const resolved = resolveNightEntityIdFromRoute({
+    const resolved = resolveLeafGroupEntityIdFromRoute({
       nights,
       projectId: 'Dinacon2025',
       deploymentId: 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23',
-      nightId: '2025-06-23',
+      leafGroupId: '2025-06-23',
     })
 
     expect(resolved).toBe(cameraDayId)
@@ -67,11 +67,11 @@ describe('ingest-paths', () => {
     const cameraDayId = 'Hoya_168m_doubleParina_2025-01-26__2025-01-26'
     const nights = { [cameraDayId]: { id: cameraDayId } }
 
-    const resolved = resolveNightEntityIdFromRoute({
+    const resolved = resolveLeafGroupEntityIdFromRoute({
       nights,
       projectId: 'Hoya',
       deploymentId: 'Hoya_168m_doubleParina_2025-01-26',
-      nightId: cameraDayId,
+      leafGroupId: cameraDayId,
     })
 
     expect(resolved).toBe(cameraDayId)
@@ -97,11 +97,11 @@ describe('ingest-paths', () => {
       [legacyId]: { id: legacyId },
     }
 
-    const resolved = resolveNightEntityIdFromRoute({
+    const resolved = resolveLeafGroupEntityIdFromRoute({
       nights,
       projectId: 'Dinacon2025',
       deploymentId: 'Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20',
-      nightId: '2025-06-21',
+      leafGroupId: '2025-06-21',
     })
 
     expect(resolved).toBe(legacyId)

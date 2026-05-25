@@ -67,11 +67,11 @@ export function buildDatasetFromFiles(params: { files: IndexedFile[] }): Dataset
 
     const projectId = projectName
     const deploymentId = `${projectName}/${deploymentName}`
-    const nightId = `${deploymentId}/${nightName}`
+    const leafGroupId = `${deploymentId}/${nightName}`
 
     const project = getOrCreateProject({ grouped, projectId, projectName })
     const deployment = getOrCreateDeployment({ project, deploymentId, deploymentName })
-    const night = getOrCreateNight({ deployment, nightId, nightName })
+    const night = getOrCreateNight({ deployment, leafGroupId, nightName })
 
     const isPatch = isPatchFile({ file: f })
     const isJson = isBotDetectionJson({ file: f })
@@ -117,11 +117,11 @@ function getOrCreateDeployment(params: { project: Project; deploymentId: string;
   return created
 }
 
-function getOrCreateNight(params: { deployment: Deployment; nightId: string; nightName: string }) {
-  const { deployment, nightId, nightName } = params
-  const found = deployment.nights.find((n) => n.id === nightId)
+function getOrCreateNight(params: { deployment: Deployment; leafGroupId: string; nightName: string }) {
+  const { deployment, leafGroupId, nightName } = params
+  const found = deployment.nights.find((n) => n.id === leafGroupId)
   if (found) return found
-  const created: Night = { id: nightId, name: nightName, photos: [] }
+  const created: Night = { id: leafGroupId, name: nightName, photos: [] }
   deployment.nights.push(created)
   return created
 }

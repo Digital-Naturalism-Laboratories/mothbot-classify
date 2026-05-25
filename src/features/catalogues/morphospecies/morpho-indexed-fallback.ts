@@ -22,30 +22,30 @@ type SummaryLike = {
 }
 
 export function getRelevantNightIdsForMorphoFallback(params: {
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
   summaries?: Record<string, SummaryLike>
-  nightIds?: string[]
+  leafGroupIds?: string[]
 }) {
-  const { allowedNightIds, summaries, nightIds } = params
-  if (allowedNightIds?.size) return Array.from(allowedNightIds)
+  const { allowedLeafGroupIds, summaries, leafGroupIds } = params
+  if (allowedLeafGroupIds?.size) return Array.from(allowedLeafGroupIds)
 
   const fromSummaries = Object.keys(summaries ?? {})
   if (fromSummaries.length) return fromSummaries
 
-  return nightIds ?? []
+  return leafGroupIds ?? []
 }
 
 export function shouldLoadMorphoIndexedFallback(params: {
-  nightIds: string[]
+  leafGroupIds: string[]
   summaries?: Record<string, SummaryLike>
 }) {
-  const { nightIds, summaries } = params
-  if (!nightIds.length) return false
+  const { leafGroupIds, summaries } = params
+  if (!leafGroupIds.length) return false
 
   let hasMorphoCounts = false
 
-  for (const nightId of nightIds) {
-    const summary = summaries?.[nightId]
+  for (const leafGroupId of leafGroupIds) {
+    const summary = summaries?.[leafGroupId]
     const morphoCounts = summary?.morphoCounts ?? {}
     const morphoKeys = Object.keys(morphoCounts)
     if (!morphoKeys.length) continue
@@ -68,7 +68,7 @@ export function buildMorphoIndexedFallback(params: { shapesByNight: Record<strin
   const previewPairsByKey: Record<string, MorphoPreviewPair[]> = {}
   const previewPairKeysByMorpho: Record<string, Set<string>> = {}
 
-  for (const [nightId, shapes] of Object.entries(shapesByNight ?? {})) {
+  for (const [leafGroupId, shapes] of Object.entries(shapesByNight ?? {})) {
     for (const shape of shapes ?? []) {
       const isError = shape?.is_error === true || String(shape?.label || '').toUpperCase() === 'ERROR'
       const taxonomy = extractTaxonomyFromShape({ shape })
@@ -89,7 +89,7 @@ export function buildMorphoIndexedFallback(params: { shapesByNight: Record<strin
           previewPairsByKey,
           previewPairKeysByMorpho,
           morphoKey: key,
-          pair: { nightId, patchId },
+          pair: { leafGroupId, patchId },
         })
       }
     }
@@ -105,14 +105,14 @@ export async function loadMorphoShapesByNight(params: {
   const { relevantNightIds, filesByNightId } = params
   const shapesByNight: Record<string, any[]> = {}
 
-  for (const nightId of relevantNightIds) {
-    const files = filesByNightId?.[nightId] || []
+  for (const leafGroupId of relevantNightIds) {
+    const files = filesByNightId?.[leafGroupId] || []
     const identifiedFiles = files.filter((file) => (file?.name ?? '').toLowerCase().endsWith('_identified.json'))
     if (!identifiedFiles.length) continue
 
     const parsedFiles = await Promise.all(identifiedFiles.map((file) => parseUserDetectionJsonSafely({ file })))
     const shapes = parsedFiles.flatMap((parsed) => parsed?.shapes || [])
-    if (shapes.length > 0) shapesByNight[nightId] = shapes
+    if (shapes.length > 0) shapesByNight[leafGroupId] = shapes
   }
 
   return shapesByNight
@@ -125,7 +125,7 @@ function addPreviewPair(params: {
   pair: MorphoPreviewPair
 }) {
   const { previewPairsByKey, previewPairKeysByMorpho, morphoKey, pair } = params
-  const pairKey = `${pair.nightId}::${pair.patchId}`
+  const pairKey = `${pair.leafGroupId}::${pair.patchId}`
 
   if (!previewPairKeysByMorpho[morphoKey]) previewPairKeysByMorpho[morphoKey] = new Set<string>()
   if (previewPairKeysByMorpho[morphoKey].has(pairKey)) return

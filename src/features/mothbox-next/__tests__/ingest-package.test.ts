@@ -5,6 +5,7 @@ import { loadMothboxNextPackageData } from '../load-package-data'
 import { hydratePackageEntities } from '../hydration-bridge'
 import { detectionsStore } from '~/stores/entities/detections'
 import { patchesStore } from '~/stores/entities/5.patches'
+import { photosStore } from '~/stores/entities/photos'
 import { projectsStore } from '~/stores/entities/1.projects'
 import {
   createNodePackageDataAccess,
@@ -53,9 +54,29 @@ describe('ingestMothboxNextPackage (L3)', () => {
     expect(Object.keys(hydrated.patches)).toHaveLength(5)
     expect(Object.keys(hydrated.detections)).toHaveLength(5)
     for (const patch of Object.values(hydrated.patches)) {
-      expect(patch.nightId).toBeTruthy()
+      expect(patch.leafGroupId).toBeTruthy()
       expect(patch.imageFile?.path).toContain('01_patches/')
     }
+
+    const sourcePhotoPath =
+      '00_source/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/hopeCobo_2025_06_22__04_58_06_HDR0.jpg'
+    const photoId = 'hopeCobo_2025_06_22__04_58_06_HDR0.jpg'
+    const photoFile = { path: sourcePhotoPath, name: 'hopeCobo_2025_06_22__04_58_06_HDR0.jpg', size: 1 }
+
+    const withArchivePhoto = hydratePackageEntities({
+      datasetId: loaded!.manifest.dataset_id,
+      manifest: loaded!.manifest,
+      patches: loaded!.patches,
+      patchSources: loaded!.patchSources,
+      deployments: loaded!.deployments,
+      cameraDays: loaded!.cameraDays,
+      resolvedClassifications: loaded!.resolvedClassifications,
+      indexedByAssetPath: indexedByAssetPath as any,
+      sourceResolutionByPath: { [sourcePhotoPath]: photoFile as any },
+      packageRoot: packageRoot,
+    })
+
+    expect(withArchivePhoto.photos[photoId]?.imageFile?.path).toBe(sourcePhotoPath)
   })
 
   it('ingests via indexed file list', async () => {

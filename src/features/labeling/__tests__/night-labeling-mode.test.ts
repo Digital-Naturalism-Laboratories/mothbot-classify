@@ -5,9 +5,9 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 describe('nightHasMachineIdentification', () => {
   it('returns true when a night photo has legacy bot detection JSON', () => {
     const result = nightHasMachineIdentification({
-      nightId: 'night-1',
+      leafGroupId: 'night-1',
       photos: {
-        'photo.jpg': { nightId: 'night-1', botDetectionFile: { path: 'night/photo_botdetection.json' } },
+        'photo.jpg': { leafGroupId: 'night-1', botDetectionFile: { path: 'night/photo_botdetection.json' } },
       },
       detections: {},
     })
@@ -17,14 +17,14 @@ describe('nightHasMachineIdentification', () => {
 
   it('returns true when an auto detection has machine taxonomy', () => {
     const result = nightHasMachineIdentification({
-      nightId: 'night-1',
+      leafGroupId: 'night-1',
       photos: {},
       detections: {
         'patch-a.jpg': {
           id: 'patch-a.jpg',
           patchId: 'patch-a.jpg',
           photoId: 'patch-a',
-          nightId: 'night-1',
+          leafGroupId: 'night-1',
           detectedBy: 'auto',
           taxon: { order: 'Lepidoptera' },
         } satisfies DetectionEntity,
@@ -36,16 +36,16 @@ describe('nightHasMachineIdentification', () => {
 
   it('returns false for patch-images-only style nights with no bot labels', () => {
     const result = nightHasMachineIdentification({
-      nightId: 'night-1',
+      leafGroupId: 'night-1',
       photos: {
-        'patch-a': { nightId: 'night-1' },
+        'patch-a': { leafGroupId: 'night-1' },
       },
       detections: {
         'patch-a.jpg': {
           id: 'patch-a.jpg',
           patchId: 'patch-a.jpg',
           photoId: 'patch-a',
-          nightId: 'night-1',
+          leafGroupId: 'night-1',
           detectedBy: 'auto',
         } satisfies DetectionEntity,
       },
@@ -58,11 +58,11 @@ describe('nightHasMachineIdentification', () => {
 describe('countUnassignedDetectionsForNight', () => {
   it('counts auto-bucket detections for the night', () => {
     const count = countUnassignedDetectionsForNight({
-      nightId: 'night-1',
+      leafGroupId: 'night-1',
       detections: {
-        a: { id: 'a', patchId: 'a', photoId: 'a', nightId: 'night-1', detectedBy: 'auto' } satisfies DetectionEntity,
-        b: { id: 'b', patchId: 'b', photoId: 'b', nightId: 'night-1', detectedBy: 'user' } satisfies DetectionEntity,
-        c: { id: 'c', patchId: 'c', photoId: 'c', nightId: 'night-2', detectedBy: 'auto' } satisfies DetectionEntity,
+        a: { id: 'a', patchId: 'a', photoId: 'a', leafGroupId: 'night-1', detectedBy: 'auto' } satisfies DetectionEntity,
+        b: { id: 'b', patchId: 'b', photoId: 'b', leafGroupId: 'night-1', detectedBy: 'user' } satisfies DetectionEntity,
+        c: { id: 'c', patchId: 'c', photoId: 'c', leafGroupId: 'night-2', detectedBy: 'auto' } satisfies DetectionEntity,
       },
     })
 

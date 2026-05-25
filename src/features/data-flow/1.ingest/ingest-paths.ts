@@ -12,7 +12,7 @@ export type ParsedNightId = {
   site: string
   deployment: string
   night: string
-  nightId: string
+  leafGroupId: string
 }
 
 export function deriveSiteFromDeploymentFolder(deploymentFolderName: string) {
@@ -23,8 +23,8 @@ export function deriveSiteFromDeploymentFolder(deploymentFolderName: string) {
   return name
 }
 
-export function normalizeLegacyNightId(nightId: string) {
-  const normalized = (nightId ?? '').replaceAll('\\', '/').replace(/^\/+/, '').trim()
+export function normalizeLegacyNightId(leafGroupId: string) {
+  const normalized = (leafGroupId ?? '').replaceAll('\\', '/').replace(/^\/+/, '').trim()
   if (!normalized) return ''
 
   const parts = normalized.split('/').filter(Boolean)
@@ -41,10 +41,10 @@ export function normalizeLegacyNightId(nightId: string) {
 export function buildLegacyNightIdFromRoute(params: {
   projectId: string
   deploymentId: string
-  nightId: string
+  leafGroupId: string
 }): string {
-  const { projectId, deploymentId, nightId } = params
-  return `${projectId}/${deploymentId}/${nightId}`
+  const { projectId, deploymentId, leafGroupId } = params
+  return `${projectId}/${deploymentId}/${leafGroupId}`
 }
 
 /** Last path segment for slash-separated entity ids; unchanged for flat ids. */
@@ -79,23 +79,23 @@ export function buildNightRouteParams(params: {
  * Maps URL route params to the night entity id in the store.
  * Legacy nights use project/deployment/night; mothbox-next packages use camera_day_id.
  */
-export function resolveNightEntityIdFromRoute(params: {
+export function resolveLeafGroupEntityIdFromRoute(params: {
   nights: Record<string, { id: string } | undefined>
   projectId: string
   deploymentId: string
-  nightId: string
+  leafGroupId: string
 }): string {
-  const { nights, projectId, deploymentId, nightId } = params
-  const legacyId = buildLegacyNightIdFromRoute({ projectId, deploymentId, nightId })
+  const { nights, projectId, deploymentId, leafGroupId } = params
+  const legacyId = buildLegacyNightIdFromRoute({ projectId, deploymentId, leafGroupId })
 
   if (nights[legacyId]) return legacyId
-  if (nights[nightId]) return nightId
+  if (nights[leafGroupId]) return leafGroupId
 
-  const cameraDayId = `${deploymentId}__${nightId}`
+  const cameraDayId = `${deploymentId}__${leafGroupId}`
   if (nights[cameraDayId]) return cameraDayId
 
-  if (nightId.includes('__')) {
-    const nightDate = nightId.split('__').pop() ?? ''
+  if (leafGroupId.includes('__')) {
+    const nightDate = leafGroupId.split('__').pop() ?? ''
     if (nightDate) {
       const fromDate = `${deploymentId}__${nightDate}`
       if (nights[fromDate]) return fromDate
@@ -105,9 +105,9 @@ export function resolveNightEntityIdFromRoute(params: {
   return legacyId
 }
 
-export function parseNightId(params: { nightId: string }): ParsedNightId | null {
-  const { nightId } = params
-  const normalized = normalizeLegacyNightId(nightId)
+export function parseNightId(params: { leafGroupId: string }): ParsedNightId | null {
+  const { leafGroupId } = params
+  const normalized = normalizeLegacyNightId(leafGroupId)
   if (!normalized) return null
 
   const parts = normalized.split('/').filter(Boolean)
@@ -122,7 +122,7 @@ export function parseNightId(params: { nightId: string }): ParsedNightId | null 
     site,
     deployment,
     night,
-    nightId: `${project}/${deployment}/${night}`,
+    leafGroupId: `${project}/${deployment}/${night}`,
   }
 }
 

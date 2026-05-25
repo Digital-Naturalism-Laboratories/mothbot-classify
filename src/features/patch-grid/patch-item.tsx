@@ -13,7 +13,7 @@ import {
   setSelectedClusterId,
   selectedSubClusterIdStore,
   setSelectedSubClusterId,
-  selectionNightIdStore,
+  selectionLeafGroupIdStore,
 } from '~/stores/ui'
 import { cn } from '~/utils/cn'
 import { useObjectUrl } from '~/utils/use-object-url'
@@ -25,7 +25,7 @@ import { MoreVertical } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
 import { setMorphoCover } from '~/features/data-flow/3.persist/covers'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { Column, Row } from '~/styles'
 import { toast } from 'sonner'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
@@ -44,7 +44,7 @@ function PatchItemImpl(props: PatchItemProps) {
   const { id, index, compact } = props
   const patch = useStore(patchStoreById(id))
   const detection = useStore(detectionStoreById(id))
-  const summaries = useStore(nightSummariesStore)
+  const summaries = useStore(leafGroupSummariesStore)
   const detections = useStore(detectionsStore)
   const hoveredTopClusterId = useStore(selectedClusterIdStore)
   const hoveredSubClusterId = useStore(selectedSubClusterIdStore)
@@ -53,9 +53,9 @@ function PatchItemImpl(props: PatchItemProps) {
   const rank = typeof detection?.morphospecies === 'string' && !!detection?.morphospecies ? 'morphospecies' : detection?.taxon?.taxonRank
   const morphoKeyForDetection = (detection?.morphospecies || '').trim() ? normalizeMorphoKey(detection?.morphospecies || '') : ''
   const isMorphoBySummary = !!(
-    patch?.nightId &&
+    patch?.leafGroupId &&
     morphoKeyForDetection &&
-    (summaries?.[patch.nightId] as any)?.morphoCounts?.[morphoKeyForDetection]
+    (summaries?.[patch.leafGroupId] as any)?.morphoCounts?.[morphoKeyForDetection]
   )
   const isMorphoEffective = !!((typeof detection?.morphospecies === 'string' && !!detection?.morphospecies) || isMorphoBySummary)
   const clusterId = typeof detection?.clusterId === 'number' ? detection.clusterId : undefined
@@ -81,8 +81,8 @@ function PatchItemImpl(props: PatchItemProps) {
     e.stopPropagation()
     const morphoKey = (typeof detection?.morphospecies === 'string' ? detection?.morphospecies || '' : '').trim()
     if (!morphoKey) return
-    if (!patch?.nightId || !patch?.id) return
-    void setMorphoCover({ label: morphoKey, nightId: patch.nightId, patchId: patch.id })
+    if (!patch?.leafGroupId || !patch?.id) return
+    void setMorphoCover({ label: morphoKey, leafGroupId: patch.leafGroupId, patchId: patch.id })
     toast.success('Image will be shown as morphospecies cover')
   }
 
@@ -90,61 +90,61 @@ function PatchItemImpl(props: PatchItemProps) {
     props?.clusterVariant ?? (typeof clusterId === 'number' ? getClusterVariant(clusterId) : undefined)
 
   function onSelectCluster(e?: React.MouseEvent | React.KeyboardEvent) {
-    const nightId = patch?.nightId
+    const leafGroupId = patch?.leafGroupId
 
     if (typeof clusterId !== 'number') return
-    if (!nightId) return
+    if (!leafGroupId) return
 
     const all = Object.values(detections || {})
 
     const topId = Math.trunc(clusterId)
 
     const ids = all
-      .filter((d) => d?.nightId === nightId && typeof d?.clusterId === 'number' && Math.trunc((d as any)?.clusterId as number) === topId)
+      .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc((d as any)?.clusterId as number) === topId)
       .map((d) => (d as any)?.id)
       .filter((x): x is string => typeof x === 'string' && !!x)
 
     if (ids.length === 0) return
 
     const append = !!(e as any)?.metaKey || !!(e as any)?.ctrlKey
-    const currentNightId = selectionNightIdStore.get()
+    const currentNightId = selectionLeafGroupIdStore.get()
 
-    if (append && currentNightId && currentNightId === nightId) {
+    if (append && currentNightId && currentNightId === leafGroupId) {
       const current = new Set(selectedPatchIdsStore.get() ?? new Set<string>())
       for (const pid of ids) current.add(pid)
-      setSelection({ nightId, patchIds: Array.from(current) })
+      setSelection({ leafGroupId, patchIds: Array.from(current) })
       return
     }
 
-    setSelection({ nightId, patchIds: ids })
+    setSelection({ leafGroupId, patchIds: ids })
   }
 
   function onSelectSubCluster(e?: React.MouseEvent | React.KeyboardEvent) {
-    const nightId = patch?.nightId
+    const leafGroupId = patch?.leafGroupId
 
     if (typeof clusterId !== 'number') return
-    if (!nightId) return
+    if (!leafGroupId) return
 
     const all = Object.values(detections || {})
 
     const ids = all
-      .filter((d) => d?.nightId === nightId && typeof d?.clusterId === 'number' && d?.clusterId === clusterId)
+      .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && d?.clusterId === clusterId)
       .map((d) => (d as any)?.id)
       .filter((x): x is string => typeof x === 'string' && !!x)
 
     if (ids.length === 0) return
 
     const append = !!(e as any)?.metaKey || !!(e as any)?.ctrlKey
-    const currentNightId = selectionNightIdStore.get()
+    const currentNightId = selectionLeafGroupIdStore.get()
 
-    if (append && currentNightId && currentNightId === nightId) {
+    if (append && currentNightId && currentNightId === leafGroupId) {
       const current = new Set(selectedPatchIdsStore.get() ?? new Set<string>())
       for (const pid of ids) current.add(pid)
-      setSelection({ nightId, patchIds: Array.from(current) })
+      setSelection({ leafGroupId, patchIds: Array.from(current) })
       return
     }
 
-    setSelection({ nightId, patchIds: ids })
+    setSelection({ leafGroupId, patchIds: ids })
   }
 
   return (

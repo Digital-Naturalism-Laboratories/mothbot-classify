@@ -90,8 +90,8 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
     collisions: [],
   }
 
-  const firstPhotoById = new Map<string, { nightId: string; path: string }>()
-  const firstPatchById = new Map<string, { nightId: string; path: string }>()
+  const firstPhotoById = new Map<string, { leafGroupId: string; path: string }>()
+  const firstPatchById = new Map<string, { leafGroupId: string; path: string }>()
   const photoCollisionKeys = new Set<string>()
   const patchCollisionKeys = new Set<string>()
 
@@ -110,14 +110,14 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
 
     const parsed = parsePathParts({ path: entry.path })
     if (!parsed) continue
-    const nightId = `${parsed.project}/${parsed.deployment}/${parsed.night}`
+    const leafGroupId = `${parsed.project}/${parsed.deployment}/${parsed.night}`
 
     if (parsed.isPhotoJpg) {
       const photoId = `${parsed.baseName}.jpg`
       registerCollision({
         kind: 'photo',
         id: photoId,
-        nightId,
+        leafGroupId,
         path: entry.path,
         firstById: firstPhotoById,
         collisionKeys: photoCollisionKeys,
@@ -130,7 +130,7 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
       registerCollision({
         kind: 'patch',
         id: parsed.fileName,
-        nightId,
+        leafGroupId,
         path: entry.path,
         firstById: firstPatchById,
         collisionKeys: patchCollisionKeys,
@@ -205,14 +205,14 @@ export async function healNightSummaryNightIds(params?: { entries?: IndexedFile[
       continue
     }
 
-    const currentNightId = typeof json?.nightId === 'string' ? json.nightId : undefined
+    const currentNightId = typeof json?.leafGroupId === 'string' ? json.leafGroupId : undefined
     if (currentNightId === expectedNightId) {
       alreadyCanonical++
       continue
     }
 
     candidates++
-    const next = { ...json, nightId: expectedNightId }
+    const next = { ...json, leafGroupId: expectedNightId }
     const ok = await writeJsonToIndexedPath({ root, entry, json: next })
     if (ok) healed++
     else failedWrites++
@@ -224,28 +224,28 @@ export async function healNightSummaryNightIds(params?: { entries?: IndexedFile[
 function registerCollision(params: {
   kind: 'photo' | 'patch'
   id: string
-  nightId: string
+  leafGroupId: string
   path: string
-  firstById: Map<string, { nightId: string; path: string }>
+  firstById: Map<string, { leafGroupId: string; path: string }>
   collisionKeys: Set<string>
   collisions: CollisionIssue[]
 }) {
-  const { kind, id, nightId, path, firstById, collisionKeys, collisions } = params
+  const { kind, id, leafGroupId, path, firstById, collisionKeys, collisions } = params
   const first = firstById.get(id)
   if (!first) {
-    firstById.set(id, { nightId, path })
+    firstById.set(id, { leafGroupId, path })
     return
   }
 
-  if (first.nightId === nightId) return
+  if (first.leafGroupId === leafGroupId) return
   if (collisionKeys.has(id)) return
 
   collisionKeys.add(id)
   collisions.push({
     kind,
     id,
-    firstNightId: first.nightId,
-    secondNightId: nightId,
+    firstNightId: first.leafGroupId,
+    secondNightId: leafGroupId,
     firstPath: first.path,
     secondPath: path,
   })
@@ -268,7 +268,7 @@ async function auditNightSummaryFile(params: { entry: IndexedFile; report: Datas
     return
   }
 
-  const currentNightId = typeof json?.nightId === 'string' ? json.nightId : undefined
+  const currentNightId = typeof json?.leafGroupId === 'string' ? json.leafGroupId : undefined
   if (!currentNightId) {
     report.summaryIssues.push({ path: entry.path, type: 'missing-night-id', expectedNightId })
     return

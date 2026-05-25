@@ -11,7 +11,7 @@ describe('resolveCatalogScopeContext', () => {
       projectId: 'ProjectA',
       siteId: 'Site1',
       deploymentId: 'Deploy_Site1_2025',
-      nightId: 'Night1',
+      leafGroupId: 'Night1',
       defaultScope: 'all',
       hasProject: true,
       hasSite: true,
@@ -45,18 +45,18 @@ describe('resolveCatalogScopeContext', () => {
     })
 
     expect(result.projectId).toBe('Only-Images')
-    expect(result.nightId).toBe(leafId)
+    expect(result.leafGroupId).toBe(leafId)
     expect(result.hasProject).toBe(true)
     expect(result.hasNight).toBe(true)
   })
 
   it('derives scope from dataset group routes when nights are hydrated', () => {
-    const nightId = 'Hoya/168m/doubleParina · 2025-01-26/2025-01-28'
+    const leafGroupId = 'Hoya/168m/doubleParina · 2025-01-26/2025-01-28'
     const result = resolveCatalogScopeContext({
-      pathname: `/datasets/Hoya/groups/${encodeURIComponent(nightId)}`,
+      pathname: `/datasets/Hoya/groups/${encodeURIComponent(leafGroupId)}`,
       nights: {
-        [nightId]: {
-          id: nightId,
+        [leafGroupId]: {
+          id: leafGroupId,
           projectId: 'Hoya',
           siteId: '168m',
           deploymentId: 'doubleParina · 2025-01-26',
@@ -67,7 +67,7 @@ describe('resolveCatalogScopeContext', () => {
     expect(result.projectId).toBe('Hoya')
     expect(result.siteId).toBe('168m')
     expect(result.deploymentId).toBe('doubleParina · 2025-01-26')
-    expect(result.nightId).toBe(nightId)
+    expect(result.leafGroupId).toBe(leafGroupId)
     expect(result.hasNight).toBe(true)
   })
 
@@ -82,7 +82,7 @@ describe('resolveCatalogScopeContext', () => {
       projectId: 'ProjectA',
       siteId: undefined,
       deploymentId: undefined,
-      nightId: undefined,
+      leafGroupId: undefined,
       defaultScope: 'project',
       hasProject: true,
       hasSite: false,

@@ -3,10 +3,10 @@ import type { ClassificationRecord } from './records'
 
 export function detectionFromClassification(params: {
   row: ClassificationRecord
-  nightId: string
+  leafGroupId: string
   photoId: string
 }): DetectionEntity {
-  const { row, nightId, photoId } = params
+  const { row, leafGroupId, photoId } = params
   const patchId = row.patch_id
   const isError = row.classification_type === 'error' || row.is_error === true
 
@@ -14,7 +14,7 @@ export function detectionFromClassification(params: {
     id: patchId,
     patchId,
     photoId,
-    nightId,
+    leafGroupId,
     label: isError ? 'ERROR' : row.label ?? row.taxon?.scientificName ?? undefined,
     taxon: isError ? undefined : row.taxon ?? undefined,
     detectedBy: row.classifier_type === 'bot' ? 'auto' : 'user',

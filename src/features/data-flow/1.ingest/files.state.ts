@@ -10,5 +10,5 @@ export const isLoadingFoldersStore = atom<boolean>(false)
 
 // Derived indexes for fast night-level ingest
 export type IndexedFile = { file?: File; handle?: unknown; path: string; name: string; size: number }
-export const filesByNightIdStore = atom<Record<string, IndexedFile[]>>({})
+export const filesByLeafGroupIdStore = atom<Record<string, IndexedFile[]>>({})
 export const patchFileMapByNightStore = atom<Record<string, Record<string, IndexedFile>>>({})

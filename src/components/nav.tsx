@@ -3,7 +3,7 @@ import { useIsMutating } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { Logo } from '~/components/logo'
 import { Breadcrumbs } from '~/components/ui/breadcrumb'
-import { deploymentsStore, nightsStore, projectsStore, sitesStore } from '~/stores/entities'
+import { deploymentsStore, leafGroupsStore, projectsStore, sitesStore } from '~/stores/entities'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import {
   useChooseDatasetsFolderMutation,
@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import { deriveSiteFromDeploymentFolder, resolveNightEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
+import { deriveSiteFromDeploymentFolder, resolveLeafGroupEntityIdFromRoute } from '~/features/data-flow/1.ingest/ingest-paths'
 import { buildHierarchyBreadcrumbs } from '~/features/mothbox-next/build-hierarchy-breadcrumbs'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
@@ -50,7 +50,7 @@ export function Nav() {
   const projects = useStore(projectsStore)
   const sites = useStore(sitesStore)
   const deployments = useStore(deploymentsStore)
-  const nights = useStore(nightsStore)
+  const nights = useStore(leafGroupsStore)
   const { pathname } = useRouterState({ select: (s) => s.location })
   const resolvedHierarchy = useStore(activeHierarchyStore)
   const folderName = useStore(activeDatasetFolderNameStore)
@@ -214,7 +214,7 @@ export function Nav() {
       return
     }
     const shouldProceed = window.confirm(
-      'Heal all night_summary.json files to canonical nightId format? This only updates summary nightId fields.',
+      'Heal all night_summary.json files to canonical leafGroupId format? This only updates summary leafGroupId fields.',
     )
     if (!shouldProceed) return
 
@@ -370,20 +370,20 @@ function getBreadcrumbs(params: {
   items.push({ label: deploymentName, entityName: 'Deployment' })
 
   if (parts.length <= 5) return items
-  const nightId = parts[5]
+  const leafGroupId = parts[5]
 
-  if (!nightId) return items
-  const nightKey = resolveNightEntityIdFromRoute({
+  if (!leafGroupId) return items
+  const nightKey = resolveLeafGroupEntityIdFromRoute({
     nights,
     projectId,
     deploymentId,
-    nightId,
+    leafGroupId,
   })
-  const nightName = nights?.[nightKey]?.name ?? nightId
+  const nightName = nights?.[nightKey]?.name ?? leafGroupId
   items.push({
     label: nightName,
     entityName: 'Night',
-    href: `/projects/${projectId}/deployments/${deploymentId}/nights/${nightId}`,
+    href: `/projects/${projectId}/deployments/${deploymentId}/nights/${leafGroupId}`,
   })
 
   return items

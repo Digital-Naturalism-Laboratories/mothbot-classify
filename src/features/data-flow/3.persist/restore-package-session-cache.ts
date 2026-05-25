@@ -34,7 +34,11 @@ export async function restorePackageSessionCache(params: {
       manifest: cached.manifest,
       loaded: cached.loaded,
     })
-    await applyLoadedPackageToStores({ loaded: cached.loaded, indexedFiles: mergedIndexed })
+    await applyLoadedPackageToStores({
+      loaded: cached.loaded,
+      indexedFiles: mergedIndexed,
+      sourceResolutionIndexed: normalized,
+    })
   } catch (err) {
     clearMothboxNextPackage()
     console.warn('🚨 packageSessionCache: restore apply failed', {

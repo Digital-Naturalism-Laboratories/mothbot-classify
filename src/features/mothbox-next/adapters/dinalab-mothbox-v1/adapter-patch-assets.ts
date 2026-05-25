@@ -6,7 +6,26 @@ import {
 import { PACKAGE_ARCHIVE_DIR } from '~/features/data-flow/1.ingest/reserved-paths'
 
 export function patchIdFromImageFileName(fileName: string) {
-  return fileName.replace(/\.(jpg|jpeg|png)$/i, '.pt')
+  const withoutImageExt = fileName.replace(/\.(jpg|jpeg|png)$/i, '')
+  if (/\.pt$/i.test(withoutImageExt)) return withoutImageExt
+  return `${withoutImageExt}.pt`
+}
+
+export function disambiguatePatchId(params: {
+  basePatchId: string
+  cameraDayId: string
+  usedPatchIds: Set<string>
+}) {
+  const { basePatchId, cameraDayId, usedPatchIds } = params
+
+  if (!usedPatchIds.has(basePatchId)) {
+    usedPatchIds.add(basePatchId)
+    return basePatchId
+  }
+
+  const scopedPatchId = `${basePatchId}@${cameraDayId}`
+  usedPatchIds.add(scopedPatchId)
+  return scopedPatchId
 }
 
 export function photoBaseFromPatchFileName(fileName: string) {

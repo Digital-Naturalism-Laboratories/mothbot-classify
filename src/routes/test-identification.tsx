@@ -99,7 +99,7 @@ export function TestIdentification() {
         </div>
       ) : null}
 
-      <IdentifyDialog open={dialogOpen} onOpenChange={setDialogOpen} onSubmit={handleSubmit} projectId={projectId} />
+      <IdentifyDialog open={dialogOpen} onOpenChange={setDialogOpen} onSubmit={handleSubmit} datasetId={projectId} />
     </div>
   )
 }

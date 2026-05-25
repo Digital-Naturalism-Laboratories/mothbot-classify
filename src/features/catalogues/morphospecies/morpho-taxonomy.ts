@@ -4,7 +4,7 @@ import {
   buildMorphoTaxonomySummary,
   mergeMorphoTaxonomySummary,
   type MorphoTaxonomySummary,
-  type NightSummaryEntity,
+  type LeafGroupSummaryEntity,
 } from '~/stores/entities/night-summaries'
 import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
 
@@ -22,15 +22,15 @@ export type MorphoTaxonSelection = {
 }
 
 export function buildMorphoTaxonomyIndex(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  allowedLeafGroupIds?: Set<string>
   detections?: Record<string, DetectionEntity>
 }) {
-  const { summaries, allowedNightIds, detections } = params
+  const { summaries, allowedLeafGroupIds, detections } = params
   const taxonomyByKey = new Map<string, MorphoTaxonomySummary>()
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
-    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
 
     for (const [key, taxonomy] of Object.entries(summary?.morphoTaxonomyByKey ?? {})) {
       taxonomyByKey.set(
@@ -45,7 +45,7 @@ export function buildMorphoTaxonomyIndex(params: {
 
   for (const detection of Object.values(detections ?? {})) {
     if (detection?.detectedBy !== 'user') continue
-    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+    if (allowedLeafGroupIds && detection?.leafGroupId && !allowedLeafGroupIds.has(detection.leafGroupId)) continue
 
     const morphospecies = (detection?.morphospecies ?? '').trim()
     const key = normalizeMorphoKey(morphospecies)
@@ -65,14 +65,14 @@ export function buildMorphoTaxonomyIndex(params: {
 }
 
 export function buildMorphoCountIndex(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  allowedLeafGroupIds?: Set<string>
 }) {
-  const { summaries, allowedNightIds } = params
+  const { summaries, allowedLeafGroupIds } = params
   const counts: Record<string, number> = {}
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
-    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
 
     for (const [key, value] of Object.entries(summary?.morphoCounts ?? {})) {
       counts[key] = (counts[key] || 0) + (typeof value === 'number' ? value : 0)
@@ -84,14 +84,14 @@ export function buildMorphoCountIndex(params: {
 
 export function buildMorphoCountIndexFromDetections(params: {
   detections?: Record<string, DetectionEntity>
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
 }) {
-  const { detections, allowedNightIds } = params
+  const { detections, allowedLeafGroupIds } = params
   const counts: Record<string, number> = {}
 
   for (const detection of Object.values(detections ?? {})) {
     if (detection?.detectedBy !== 'user') continue
-    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+    if (allowedLeafGroupIds && detection?.leafGroupId && !allowedLeafGroupIds.has(detection.leafGroupId)) continue
 
     const key = normalizeMorphoKey(detection?.morphospecies ?? '')
     if (!key) continue
@@ -103,14 +103,14 @@ export function buildMorphoCountIndexFromDetections(params: {
 }
 
 export function mergeMorphoCountSources(params: {
-  summaries?: Record<string, NightSummaryEntity>
+  summaries?: Record<string, LeafGroupSummaryEntity>
   detections?: Record<string, DetectionEntity>
   indexedFallbackCounts?: Record<string, number>
-  allowedNightIds?: Set<string>
+  allowedLeafGroupIds?: Set<string>
 }) {
-  const { summaries, detections, indexedFallbackCounts, allowedNightIds } = params
-  const fromSummaries = buildMorphoCountIndex({ summaries, allowedNightIds })
-  const fromDetections = buildMorphoCountIndexFromDetections({ detections, allowedNightIds })
+  const { summaries, detections, indexedFallbackCounts, allowedLeafGroupIds } = params
+  const fromSummaries = buildMorphoCountIndex({ summaries, allowedLeafGroupIds })
+  const fromDetections = buildMorphoCountIndexFromDetections({ detections, allowedLeafGroupIds })
   const counts: Record<string, number> = {}
 
   const keys = new Set([

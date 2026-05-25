@@ -5,7 +5,7 @@ import { DB_NAME, idbGet, idbPut } from '~/utils/index-db'
 export const pickerErrorStore = atom<string | null>(null)
 
 export const selectedPatchIdsStore = atom<Set<string>>(new Set())
-export const selectionNightIdStore = atom<string | null>(null)
+export const selectionLeafGroupIdStore = atom<string | null>(null)
 
 // UI: hovered/previewed cluster id for selection preview
 export const selectedClusterIdStore = atom<number | null>(null)
@@ -31,44 +31,44 @@ export function togglePatchSelection(params: { patchId: string }) {
   if (!patchId) return
 
   const patch = patchesStore.get()?.[patchId]
-  const patchNightId = patch?.nightId ?? null
+  const patchNightId = patch?.leafGroupId ?? null
 
   if (!patchNightId) return
 
   const currentSelected = new Set(selectedPatchIdsStore.get() ?? new Set())
-  const currentNightId = selectionNightIdStore.get()
+  const currentNightId = selectionLeafGroupIdStore.get()
 
   if (currentNightId && currentNightId !== patchNightId) {
     selectedPatchIdsStore.set(new Set([patchId]))
-    selectionNightIdStore.set(patchNightId)
+    selectionLeafGroupIdStore.set(patchNightId)
     return
   }
 
   if (currentSelected.has(patchId)) {
     currentSelected.delete(patchId)
     selectedPatchIdsStore.set(currentSelected)
-    if (currentSelected.size === 0) selectionNightIdStore.set(null)
+    if (currentSelected.size === 0) selectionLeafGroupIdStore.set(null)
     return
   }
 
   currentSelected.add(patchId)
   selectedPatchIdsStore.set(currentSelected)
 
-  if (!currentNightId) selectionNightIdStore.set(patchNightId)
+  if (!currentNightId) selectionLeafGroupIdStore.set(patchNightId)
 }
 
 export function clearPatchSelection() {
   selectedPatchIdsStore.set(new Set())
-  selectionNightIdStore.set(null)
+  selectionLeafGroupIdStore.set(null)
 }
 
-export function setSelection(params: { nightId: string; patchIds: string[] }) {
-  const { nightId, patchIds } = params
-  if (!nightId) return
+export function setSelection(params: { leafGroupId: string; patchIds: string[] }) {
+  const { leafGroupId, patchIds } = params
+  if (!leafGroupId) return
   const next = new Set<string>()
   for (const id of patchIds ?? []) if (id) next.add(id)
   selectedPatchIdsStore.set(next)
-  selectionNightIdStore.set(next.size > 0 ? nightId : null)
+  selectionLeafGroupIdStore.set(next.size > 0 ? leafGroupId : null)
 }
 
 // User session (initials)
@@ -106,61 +106,61 @@ export async function clearUserSession() {
 }
 
 // Night ingest progress (processed patches count per night)
-export const nightIngestProgressStore = atom<{ nightId?: string; processed: number; total: number }>({ processed: 0, total: 0 })
+export const leafGroupIngestProgressStore = atom<{ leafGroupId?: string; processed: number; total: number }>({ processed: 0, total: 0 })
 
-export function resetNightIngestProgress(params?: { nightId?: string }) {
-  const { nightId } = params || {}
-  console.log('🏁 progress: reset', { nightId })
-  nightIngestProgressStore.set({ nightId, processed: 0, total: 0 })
+export function resetNightIngestProgress(params?: { leafGroupId?: string }) {
+  const { leafGroupId } = params || {}
+  console.log('🏁 progress: reset', { leafGroupId })
+  leafGroupIngestProgressStore.set({ leafGroupId, processed: 0, total: 0 })
 }
 
-export function setNightIngestTotal(params: { nightId: string; total: number }) {
-  const { nightId, total } = params
-  const current = nightIngestProgressStore.get() || { processed: 0, total: 0 }
+export function setNightIngestTotal(params: { leafGroupId: string; total: number }) {
+  const { leafGroupId, total } = params
+  const current = leafGroupIngestProgressStore.get() || { processed: 0, total: 0 }
   console.log('🎯 progress: set total', {
-    nightId,
+    leafGroupId,
     total,
-    prev: { nightId: current.nightId, processed: current.processed, total: current.total },
+    prev: { leafGroupId: current.leafGroupId, processed: current.processed, total: current.total },
   })
-  nightIngestProgressStore.set({ nightId, processed: current.processed, total })
+  leafGroupIngestProgressStore.set({ leafGroupId, processed: current.processed, total })
 }
 
-export function incrementNightIngestProcessed(params: { nightId: string; by?: number }) {
-  const { nightId, by = 1 } = params
-  const current = nightIngestProgressStore.get() || { processed: 0, total: 0 }
-  const processed = (current.nightId === nightId ? current.processed : 0) + by
-  const total = current.nightId === nightId ? current.total : 0
-  nightIngestProgressStore.set({ nightId, processed, total })
+export function incrementNightIngestProcessed(params: { leafGroupId: string; by?: number }) {
+  const { leafGroupId, by = 1 } = params
+  const current = leafGroupIngestProgressStore.get() || { processed: 0, total: 0 }
+  const processed = (current.leafGroupId === leafGroupId ? current.processed : 0) + by
+  const total = current.leafGroupId === leafGroupId ? current.total : 0
+  leafGroupIngestProgressStore.set({ leafGroupId, processed, total })
 }
 
-export function addNightIngestTotal(params: { nightId: string; by: number }) {
-  const { nightId, by } = params
-  const current = nightIngestProgressStore.get() || { processed: 0, total: 0 }
-  const total = (current.nightId === nightId ? current.total : 0) + (by || 0)
-  const processed = current.nightId === nightId ? current.processed : 0
+export function addNightIngestTotal(params: { leafGroupId: string; by: number }) {
+  const { leafGroupId, by } = params
+  const current = leafGroupIngestProgressStore.get() || { processed: 0, total: 0 }
+  const total = (current.leafGroupId === leafGroupId ? current.total : 0) + (by || 0)
+  const processed = current.leafGroupId === leafGroupId ? current.processed : 0
   console.log('➕ progress: add to total', {
-    nightId,
+    leafGroupId,
     by,
-    prev: { nightId: current.nightId, processed: current.processed, total: current.total },
+    prev: { leafGroupId: current.leafGroupId, processed: current.processed, total: current.total },
     next: { processed, total },
   })
-  nightIngestProgressStore.set({ nightId, processed, total })
+  leafGroupIngestProgressStore.set({ leafGroupId, processed, total })
 }
 
 // Active nights tracking for memory management
 // Keeps track of currently active night and recently viewed nights
 // Used to determine which File objects to keep in memory
 export const activeNightIdStore = atom<string | null>(null)
-export const recentlyViewedNightIdsStore = atom<Set<string>>(new Set())
+export const recentlyViewedLeafGroupIdsStore = atom<Set<string>>(new Set())
 
 const MAX_RECENTLY_VIEWED = 2
 
-export function markNightAsActive(params: { nightId: string }) {
-  const { nightId } = params
+export function markLeafGroupAsActive(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
   const currentActive = activeNightIdStore.get()
-  const recent = new Set(recentlyViewedNightIdsStore.get())
+  const recent = new Set(recentlyViewedLeafGroupIdsStore.get())
 
-  if (currentActive && currentActive !== nightId) {
+  if (currentActive && currentActive !== leafGroupId) {
     recent.add(currentActive)
     const recentArray = Array.from(recent)
     if (recentArray.length > MAX_RECENTLY_VIEWED) {
@@ -169,13 +169,13 @@ export function markNightAsActive(params: { nightId: string }) {
     }
   }
 
-  activeNightIdStore.set(nightId)
-  recentlyViewedNightIdsStore.set(recent)
+  activeNightIdStore.set(leafGroupId)
+  recentlyViewedLeafGroupIdsStore.set(recent)
 }
 
-export function getActiveNightIds(): Set<string> {
+export function getActiveLeafGroupIds(): Set<string> {
   const active = activeNightIdStore.get()
-  const recent = recentlyViewedNightIdsStore.get()
+  const recent = recentlyViewedLeafGroupIdsStore.get()
   const result = new Set<string>()
   if (active) result.add(active)
   for (const id of recent) result.add(id)

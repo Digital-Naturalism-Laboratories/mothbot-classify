@@ -26,7 +26,7 @@ export function buildPackageExportRows(params: {
     rows.push({
       patch_id: patch.id,
       asset_path: patch.imageFile?.path ?? '',
-      night_id: patch.nightId,
+      night_id: patch.leafGroupId,
       photo_id: patch.photoId,
       scientific_name: deriveTaxonNameFromDetection({ detection }) ?? detection.label ?? '',
       detected_by: detection.detectedBy ?? 'auto',

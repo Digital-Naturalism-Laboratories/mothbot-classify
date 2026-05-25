@@ -1,7 +1,7 @@
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 
 export type MorphoPreviewPair = {
-  nightId: string
+  leafGroupId: string
   patchId: string
 }
 
@@ -11,14 +11,14 @@ type SummaryLike = {
 }
 
 type DetectionLike = {
-  nightId?: string
+  leafGroupId?: string
   patchId?: string
   detectedBy?: 'auto' | 'user'
   morphospecies?: string
 }
 
 type CoverLike = {
-  nightId: string
+  leafGroupId: string
   patchId: string
 }
 
@@ -33,15 +33,15 @@ export function buildSummaryPreviewPairs(params: {
   const pairs: MorphoPreviewPair[] = []
 
   const override = covers?.[normalizedKey]
-  if (override?.nightId && override?.patchId) pairs.push({ nightId: override.nightId, patchId: override.patchId })
+  if (override?.leafGroupId && override?.patchId) pairs.push({ leafGroupId: override.leafGroupId, patchId: override.patchId })
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
     const countForKey = summary?.morphoCounts?.[normalizedKey]
     if (!countForKey) continue
-    if (nights && !nights[nightId]) continue
+    if (nights && !nights[leafGroupId]) continue
 
     const patchId = summary?.morphoPreviewPatchIds?.[normalizedKey]
-    if (patchId) pairs.push({ nightId, patchId: String(patchId) })
+    if (patchId) pairs.push({ leafGroupId, patchId: String(patchId) })
   }
 
   return pairs
@@ -60,12 +60,12 @@ export function buildFallbackPreviewPairs(params: {
     const morpho = typeof detection?.morphospecies === 'string' ? detection.morphospecies : ''
     if (normalizeMorphoKey(morpho) !== normalizedKey) continue
     if (detection?.detectedBy !== 'user') continue
-    if (!detection?.nightId || !detection?.patchId) continue
+    if (!detection?.leafGroupId || !detection?.patchId) continue
 
-    const pairKey = `${detection.nightId}::${detection.patchId}`
+    const pairKey = `${detection.leafGroupId}::${detection.patchId}`
     if (seen.has(pairKey)) continue
     seen.add(pairKey)
-    pairs.push({ nightId: detection.nightId, patchId: detection.patchId })
+    pairs.push({ leafGroupId: detection.leafGroupId, patchId: detection.patchId })
   }
 
   return pairs

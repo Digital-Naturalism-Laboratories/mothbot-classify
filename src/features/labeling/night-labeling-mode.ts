@@ -4,19 +4,19 @@ export const UNASSIGNED_AGGREGATE_LABEL = 'All unassigned'
 export const UNAPPROVED_AGGREGATE_LABEL = 'All unapproved'
 
 export function nightHasMachineIdentification(params: {
-  photos: Record<string, { nightId?: string; botDetectionFile?: unknown }>
+  photos: Record<string, { leafGroupId?: string; botDetectionFile?: unknown }>
   detections: Record<string, DetectionEntity>
-  nightId: string
+  leafGroupId: string
 }): boolean {
-  const { photos, detections, nightId } = params
+  const { photos, detections, leafGroupId } = params
 
   for (const photo of Object.values(photos ?? {})) {
-    if (photo?.nightId !== nightId) continue
+    if (photo?.leafGroupId !== leafGroupId) continue
     if (photo?.botDetectionFile) return true
   }
 
   for (const detection of Object.values(detections ?? {})) {
-    if (detection?.nightId !== nightId) continue
+    if (detection?.leafGroupId !== leafGroupId) continue
     if (detection?.detectedBy === 'user') continue
     if (autoDetectionHasMachineTaxonomy(detection)) return true
   }
@@ -26,13 +26,13 @@ export function nightHasMachineIdentification(params: {
 
 export function countUnassignedDetectionsForNight(params: {
   detections: Record<string, DetectionEntity>
-  nightId: string
+  leafGroupId: string
 }): number {
-  const { detections, nightId } = params
+  const { detections, leafGroupId } = params
   let count = 0
 
   for (const detection of Object.values(detections ?? {})) {
-    if (detection?.nightId !== nightId) continue
+    if (detection?.leafGroupId !== leafGroupId) continue
     if (detection?.detectedBy === 'user') continue
     count++
   }

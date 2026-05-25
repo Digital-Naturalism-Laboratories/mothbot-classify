@@ -10,6 +10,7 @@ import { applyIndexedFilesState } from '~/features/data-flow/1.ingest/files.init
 import { resetAllEntityStores } from '~/stores/entities'
 import { detectionsStore } from '~/stores/entities/detections'
 import { patchesStore } from '~/stores/entities/5.patches'
+import { photosStore } from '~/stores/entities/photos'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { indexedFilesStore } from '~/features/data-flow/1.ingest/files.state'
 import {
@@ -18,6 +19,8 @@ import {
   setDatasetsRegistry,
 } from '~/stores/datasets-registry'
 import { tryRestorePackageFromSessionCache } from '~/features/data-flow/3.persist/restore-package-session-cache'
+import { applyLoadedPackageToStores } from '~/features/mothbox-next/reload-package'
+import { mergeIndexedWithHandles } from '~/features/data-flow/3.persist/package-session-cache'
 import { savePackageSessionCacheFromStores } from '~/features/data-flow/3.persist/save-package-session-cache'
 import {
   computePackageSessionFingerprint,
@@ -148,6 +151,52 @@ describe('smoke: startup and package session cache', () => {
     const firstPatch = Object.values(patchesStore.get() || {})[0]
     expect(firstPatch?.imageFile?.path).toBeTruthy()
     expect(firstPatch?.imageFile?.file ?? firstPatch?.imageFile?.handle).toBeTruthy()
+  })
+
+  it('restores source photos using full live index when cache meta omits archive paths', async () => {
+    const indexed = await buildFixtureIndexedFiles()
+    const archivePhotoPath =
+      '00_source/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/hopeCobo_2025_06_22__04_58_06_HDR0.jpg'
+
+    await ingestPackageModule.ingestMothboxNextPackageFromIndexedFiles({ files: indexed })
+    applyIndexedFilesState({ indexed, ingestMode: 'mothbox-next' })
+    await savePackageSessionCacheFromStores({ folderName: CACHE_FOLDER_NAME })
+
+    const cached = await loadPackageSessionCache(CACHE_FOLDER_NAME)
+    expect(cached).toBeTruthy()
+    expect(cached?.indexedMeta.some((entry) => entry.path === archivePhotoPath)).toBe(false)
+
+    resetAllEntityStores()
+
+    const indexedWithArchivePhoto = [
+      ...indexed,
+      {
+        path: archivePhotoPath,
+        name: 'hopeCobo_2025_06_22__04_58_06_HDR0.jpg',
+        size: 1,
+        file: { text: async () => '' } as File,
+      },
+    ]
+
+    mothboxNextPackageStore.set({
+      packageRoot: cached!.packageRoot,
+      manifest: cached!.manifest,
+      loaded: cached!.loaded,
+    })
+
+    const mergedIndexed = mergeIndexedWithHandles({
+      meta: cached!.indexedMeta,
+      live: indexedWithArchivePhoto,
+    })
+
+    await applyLoadedPackageToStores({
+      loaded: cached!.loaded,
+      indexedFiles: mergedIndexed,
+      sourceResolutionIndexed: indexedWithArchivePhoto,
+    })
+
+    const photoId = 'hopeCobo_2025_06_22__04_58_06_HDR0.jpg'
+    expect(photosStore.get()?.[photoId]?.imageFile?.path).toBe(archivePhotoPath)
   })
 
   it('rejects stale cache when the indexed tree changes', async () => {

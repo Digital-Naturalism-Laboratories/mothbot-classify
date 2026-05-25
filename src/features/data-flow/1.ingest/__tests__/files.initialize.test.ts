@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { preloadNightSummariesFromIndexed } from '../files.initialize'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 
 describe('preloadNightSummariesFromIndexed', () => {
   beforeEach(() => {
-    nightSummariesStore.set({})
+    leafGroupSummariesStore.set({})
   })
 
   it('prefers canonical source when legacy and canonical ids collide without updatedAt', async () => {
@@ -12,7 +12,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/night_summary.json',
         summary: {
-          nightId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
+          leafGroupId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
           totalDetections: 11,
           totalIdentified: 3,
         },
@@ -22,7 +22,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/night_summary.json',
         summary: {
-          nightId: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
+          leafGroupId: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
           totalDetections: 22,
           totalIdentified: 7,
         },
@@ -31,7 +31,7 @@ describe('preloadNightSummariesFromIndexed', () => {
 
     await waitForAsyncReads()
 
-    const summary = nightSummariesStore.get()['Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21']
+    const summary = leafGroupSummariesStore.get()['Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21']
     expect(summary?.totalDetections).toBe(22)
     expect(summary?.totalIdentified).toBe(7)
   })
@@ -41,7 +41,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/night_summary.json',
         summary: {
-          nightId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
+          leafGroupId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
           totalDetections: 9,
           totalIdentified: 9,
         },
@@ -51,7 +51,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/night_summary.json',
         summary: {
-          nightId: 'Hoya/168m/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
+          leafGroupId: 'Hoya/168m/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
           totalDetections: 2,
           totalIdentified: 1,
         },
@@ -60,7 +60,7 @@ describe('preloadNightSummariesFromIndexed', () => {
 
     await waitForAsyncReads()
 
-    const summary = nightSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
+    const summary = leafGroupSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
     expect(summary?.totalDetections).toBe(9)
     expect(summary?.totalIdentified).toBe(9)
   })
@@ -70,7 +70,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/night_summary.json',
         summary: {
-          nightId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
+          leafGroupId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
           totalDetections: 15,
           totalIdentified: 6,
         },
@@ -79,17 +79,17 @@ describe('preloadNightSummariesFromIndexed', () => {
 
     await waitForAsyncReads()
 
-    const summary = nightSummariesStore.get()['Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21']
+    const summary = leafGroupSummariesStore.get()['Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21']
     expect(summary?.totalDetections).toBe(15)
     expect(summary?.totalIdentified).toBe(6)
   })
 
-  it('prefers the summary file path when embedded nightId is mismatched', async () => {
+  it('prefers the summary file path when embedded leafGroupId is mismatched', async () => {
     preloadNightSummariesFromIndexed([
       makeSummaryEntry({
         path: 'Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-28/2025-01-27/night_summary.json',
         summary: {
-          nightId: 'Projects/Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-26/2025-01-26',
+          leafGroupId: 'Projects/Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-26/2025-01-26',
           totalDetections: 1100,
           totalIdentified: 1100,
           morphoCounts: { forcipomyia1: 264 },
@@ -100,9 +100,9 @@ describe('preloadNightSummariesFromIndexed', () => {
     await waitForAsyncReads()
 
     const correctSummary =
-      nightSummariesStore.get()['Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-28/2025-01-27']
+      leafGroupSummariesStore.get()['Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-28/2025-01-27']
     const wrongSummary =
-      nightSummariesStore.get()['Projects/Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-26/2025-01-26']
+      leafGroupSummariesStore.get()['Projects/Cerro_Hoya_Expedition/Hoya_1004m_accionSauro_2025-01-26/2025-01-26']
 
     expect(correctSummary?.totalDetections).toBe(1100)
     expect(correctSummary?.morphoCounts).toEqual({ forcipomyia1: 264 })
@@ -114,7 +114,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/night_summary.json',
         summary: {
-          nightId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
+          leafGroupId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
           totalDetections: 12,
           totalIdentified: 2,
         },
@@ -139,7 +139,7 @@ describe('preloadNightSummariesFromIndexed', () => {
 
     await waitForAsyncReads()
 
-    const summary = nightSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
+    const summary = leafGroupSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
     expect(summary?.morphoCounts).toEqual({ netelia1: 1 })
     expect(summary?.morphoPreviewPatchIds).toEqual({ netelia1: 'netelia_patch.jpg' })
     expect(summary?.morphoTaxonomyByKey?.netelia1).toMatchObject({
@@ -156,7 +156,7 @@ describe('preloadNightSummariesFromIndexed', () => {
       makeSummaryEntry({
         path: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26/night_summary.json',
         summary: {
-          nightId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
+          leafGroupId: 'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26',
           totalDetections: 12,
           totalIdentified: 2,
         },
@@ -181,7 +181,7 @@ describe('preloadNightSummariesFromIndexed', () => {
 
     await waitForAsyncReads()
 
-    const summary = nightSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
+    const summary = leafGroupSummariesStore.get()['Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26']
     expect(summary?.speciesCounts).toEqual({ pipiens: 1 })
     expect(summary?.speciesPreviewPatchIds).toEqual({ pipiens: 'culex_patch.jpg' })
     expect(summary?.speciesTaxonomyByName?.pipiens).toMatchObject({

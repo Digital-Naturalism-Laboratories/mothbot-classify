@@ -16,7 +16,7 @@ export function Patches() {
   if (!project) return <p className='text-sm text-neutral-500'>Project not found</p>
   const deployment = project.deployments.find((d) => d.name === params.deploymentId)
   if (!deployment) return <p className='text-sm text-neutral-500'>Deployment not found</p>
-  const night = deployment.nights.find((n) => n.name === params.nightId)
+  const night = deployment.nights.find((n) => n.name === params.leafGroupId)
   if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
 
   const photos = night.photos

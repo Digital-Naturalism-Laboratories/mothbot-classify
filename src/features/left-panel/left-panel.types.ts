@@ -11,8 +11,8 @@ export type TaxonomyNode = {
   isMorpho?: boolean
 }
 
-export type NightLeftPanelProps = {
-  nightId: string
+export type LeafGroupLeftPanelProps = {
+  leafGroupId: string
   hasMachineIdentification?: boolean
   unassignedCount?: number
   taxonomyAuto?: TaxonomyNode[]

@@ -10,7 +10,7 @@ import { patchColumnsStore } from '~/components/atomic/patch-size-control'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
 import { PatchItem } from './patch-item'
-import { selectedPatchIdsStore, selectionNightIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
+import { selectedPatchIdsStore, selectionLeafGroupIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
 import {
   addRowBlocks,
   computeDetectionArea,
@@ -53,7 +53,7 @@ type GridBlock = GridBlockHeader | GridBlockRow
 
 export type PatchGridProps = {
   patches: PatchEntity[]
-  nightId: string
+  leafGroupId: string
   className?: string
   onOpenPatchDetail: (id: string) => void
   loading?: boolean
@@ -67,7 +67,7 @@ export type PatchGridProps = {
 export function PatchGrid(props: PatchGridProps) {
   const {
     patches,
-    nightId,
+    leafGroupId,
     className,
     onOpenPatchDetail,
     loading,
@@ -81,7 +81,7 @@ export function PatchGrid(props: PatchGridProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const desiredColumns = useStore(patchColumnsStore)
   const selected = useStore(selectedPatchIdsStore)
-  useStore(selectionNightIdStore)
+  useStore(selectionLeafGroupIdStore)
 
   const [isDragging, setIsDragging] = useState(false)
   const [dragToggled, setDragToggled] = useState<Set<string>>(new Set())
@@ -160,10 +160,10 @@ export function PatchGrid(props: PatchGridProps) {
   // Preserve scroll position on minor list changes (e.g., identifying items)
   // Only reset scroll when the viewing context changes (night, bucket, or selected taxon)
   const lastContextRef = useRef<string>(
-    `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`,
+    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`,
   )
   useEffect(() => {
-    const currentContext = `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`
+    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`
     const contextChanged = currentContext !== lastContextRef.current
     lastContextRef.current = currentContext
 
@@ -178,7 +178,7 @@ export function PatchGrid(props: PatchGridProps) {
     if (el) el.scrollTo({ top: 0 })
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [orderedIds.length, rowVirtualizer, columns, rowHeight, nightId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
+  }, [orderedIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
 
   useEffect(() => {
     const el = containerRef.current
@@ -198,7 +198,7 @@ export function PatchGrid(props: PatchGridProps) {
   const totalCount = patches?.length || 0
   useEffect(() => {
     setLoadedCount(0)
-  }, [nightId, patches])
+  }, [leafGroupId, patches])
   useEffect(() => {
     onImageProgress?.(loadedCount, totalCount)
   }, [loadedCount, totalCount, onImageProgress])
@@ -233,7 +233,7 @@ export function PatchGrid(props: PatchGridProps) {
       const rangeIds = computeShiftSelectionRange({ anchorIndex, currentIndex: index, visualOrderIds })
       const current = new Set(selected ?? new Set())
       for (const id of rangeIds) current.add(id)
-      setSelection({ nightId, patchIds: Array.from(current) })
+      setSelection({ leafGroupId, patchIds: Array.from(current) })
       setAnchorIndex(index)
       setFocusIndex(index)
       focusItem(index)

@@ -1,21 +1,21 @@
 import type { DetectionEntity } from '~/models/detection.types'
-import { buildNightSummary, nightSummariesStore } from '~/stores/entities/night-summaries'
+import { buildLeafGroupSummary, leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 
-export function rebuildNightSummariesFromDetections(detections: Record<string, DetectionEntity>) {
-  const byNight: Record<string, DetectionEntity[]> = {}
+export function rebuildLeafGroupSummariesFromDetections(detections: Record<string, DetectionEntity>) {
+  const byLeafGroup: Record<string, DetectionEntity[]> = {}
 
   for (const detection of Object.values(detections ?? {})) {
-    const nightId = detection?.nightId
-    if (!nightId) continue
-    if (!byNight[nightId]) byNight[nightId] = []
-    byNight[nightId].push(detection)
+    const leafGroupId = detection?.leafGroupId
+    if (!leafGroupId) continue
+    if (!byLeafGroup[leafGroupId]) byLeafGroup[leafGroupId] = []
+    byLeafGroup[leafGroupId].push(detection)
   }
 
-  const summaries: Record<string, ReturnType<typeof buildNightSummary>> = {}
-  for (const [nightId, nightDetections] of Object.entries(byNight)) {
-    summaries[nightId] = buildNightSummary({ nightId, detections: nightDetections })
+  const summaries: Record<string, ReturnType<typeof buildLeafGroupSummary>> = {}
+  for (const [leafGroupId, nightDetections] of Object.entries(byLeafGroup)) {
+    summaries[leafGroupId] = buildLeafGroupSummary({ leafGroupId, detections: nightDetections })
   }
 
-  nightSummariesStore.set(summaries)
+  leafGroupSummariesStore.set(summaries)
   return summaries
 }

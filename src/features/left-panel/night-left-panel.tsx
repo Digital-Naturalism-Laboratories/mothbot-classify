@@ -10,14 +10,14 @@ import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFold
 import { toast } from 'sonner'
 import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
 import { PatchSizeControl } from '~/components/atomic/patch-size-control'
-import type { NightLeftPanelProps } from './left-panel.types'
+import type { LeafGroupLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
 import { TaxonomySection } from './taxonomy-section'
 import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
 
-export function NightLeftPanel(props: NightLeftPanelProps) {
+export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   const {
-    nightId,
+    leafGroupId,
     hasMachineIdentification = true,
     unassignedCount = 0,
     taxonomyAuto,
@@ -40,7 +40,7 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
   const detections = useStore(detectionsStore)
   const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(
-    (d) => (d as any)?.nightId === nightId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
+    (d) => (d as any)?.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
   ).length
 
   return (
@@ -117,14 +117,14 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
       />
 
       <div className='mt-auto pt-16'>
-        <Button className='w-full' onClick={() => showDarwinExportToast({ nightId })}>
+        <Button className='w-full' onClick={() => showDarwinExportToast({ leafGroupId })}>
           Export Darwin CSV
         </Button>
 
         {/* <Button
           className='w-full mt-8'
           onClick={() => {
-            const p = exportNightSummaryRS({ nightId })
+            const p = exportNightSummaryRS({ leafGroupId })
             toast.promise(p, {
               loading: '💾 Exporting RS summary…',
               success: '✅ RS summary exported',
@@ -139,10 +139,10 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
   )
 }
 
-function showDarwinExportToast(params: { nightId: string }) {
-  const { nightId } = params
+function showDarwinExportToast(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
 
-  const promise = exportNightDarwinCSV({ nightId })
+  const promise = exportNightDarwinCSV({ leafGroupId })
 
   toast.promise(promise, {
     loading: '💾 Exporting Darwin CSV…',
@@ -151,13 +151,13 @@ function showDarwinExportToast(params: { nightId: string }) {
       action: {
         label: 'Copy file path',
         onClick: () => {
-          void copyNightExportFilePathToClipboard({ nightId })
+          void copyNightExportFilePathToClipboard({ leafGroupId })
         },
       },
       cancel: {
         label: 'Copy folder path',
         onClick: () => {
-          void copyNightFolderPathToClipboard({ nightId })
+          void copyNightFolderPathToClipboard({ leafGroupId })
         },
       },
     }),

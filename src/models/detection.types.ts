@@ -18,7 +18,7 @@ export type DetectionEntity = {
   id: string
   patchId: string
   photoId: string
-  nightId: string
+  leafGroupId: string
   label?: string
   taxon?: TaxonRecord
   score?: number

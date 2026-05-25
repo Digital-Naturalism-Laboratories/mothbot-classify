@@ -3,6 +3,7 @@ import {
   buildDeploymentAndCameraDayRecords,
   enrichPatchesFromPatchSources,
   inferLegacySourceRootFromIndexedPaths,
+  inferLegacySourceRootNameFromPatchSources,
   parseDinalabDeploymentFolderName,
   resolveDeploymentContext,
   resolveDeploymentContextFromPatchPath,
@@ -81,6 +82,17 @@ describe('derive-dinalab-hierarchy', () => {
 
     expect(ctx.deploymentId).toBe('Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20')
     expect(ctx.siteId).toBe('Dinacon2025/site/Les_BeachPalm')
+  })
+
+  it('infers deployment root from patch sources when paths use 00_source prefix', () => {
+    const root = inferLegacySourceRootNameFromPatchSources([
+      {
+        original_bot_detection_path:
+          '00_source/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/foo_botdetection.json',
+      },
+    ])
+
+    expect(root).toBe('Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20')
   })
 
   it('infers legacy deployment root from indexed source tree paths', () => {

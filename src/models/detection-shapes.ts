@@ -96,7 +96,7 @@ export function buildDetectionFromIdentifiedJsonShape(params: { shape: any; phot
     id: detectionId,
     patchId: detectionId,
     photoId: existingDetection?.photoId || (photo as any).id,
-    nightId: (photo as any).nightId,
+    leafGroupId: (photo as any).leafGroupId,
     label: isError ? 'ERROR' : taxon?.scientificName || safeString(shape?.label) || existingDetection?.label,
     taxon: (taxon as any) ?? (isError ? undefined : existingDetection?.taxon),
     score: safeNumber(shape?.score) ?? existingDetection?.score,

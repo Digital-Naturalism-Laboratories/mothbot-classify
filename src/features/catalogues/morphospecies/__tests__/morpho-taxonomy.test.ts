@@ -13,7 +13,7 @@ describe('morpho taxonomy helpers', () => {
     const taxonomyByKey = buildMorphoTaxonomyIndex({
       summaries: {
         'project/deployment-a/night-1': {
-          nightId: 'project/deployment-a/night-1',
+          leafGroupId: 'project/deployment-a/night-1',
           totalDetections: 10,
           totalIdentified: 2,
           morphoCounts: { netelia1: 2 },
@@ -33,7 +33,7 @@ describe('morpho taxonomy helpers', () => {
           id: 'partial',
           patchId: 'partial',
           photoId: 'partial.jpg',
-          nightId: 'project/deployment-b/night-2',
+          leafGroupId: 'project/deployment-b/night-2',
           detectedBy: 'user',
           morphospecies: 'other1',
         },
@@ -53,7 +53,7 @@ describe('morpho taxonomy helpers', () => {
     const taxonomyByKey = buildMorphoTaxonomyIndex({
       summaries: {
         'project/deployment-a/night-1': {
-          nightId: 'project/deployment-a/night-1',
+          leafGroupId: 'project/deployment-a/night-1',
           totalDetections: 10,
           totalIdentified: 1,
           morphoCounts: { netelia1: 1 },
@@ -64,7 +64,7 @@ describe('morpho taxonomy helpers', () => {
           id: 'netelia',
           patchId: 'netelia',
           photoId: 'netelia.jpg',
-          nightId: 'project/deployment-a/night-1',
+          leafGroupId: 'project/deployment-a/night-1',
           detectedBy: 'user',
           morphospecies: 'netelia1',
           taxon: {
@@ -94,7 +94,7 @@ describe('morpho taxonomy helpers', () => {
     const taxonomyByKey = buildMorphoTaxonomyIndex({
       summaries: {
         'project/deployment-a/night-1': {
-          nightId: 'project/deployment-a/night-1',
+          leafGroupId: 'project/deployment-a/night-1',
           totalDetections: 10,
           totalIdentified: 2,
           morphoCounts: { netelia1: 2, unknown1: 1 },
@@ -131,7 +131,7 @@ describe('morpho taxonomy helpers', () => {
           id: 'patch1',
           patchId: 'patch1',
           photoId: 'photo.jpg',
-          nightId: 'hoya/deployment-a/night-1',
+          leafGroupId: 'hoya/deployment-a/night-1',
           detectedBy: 'user',
           morphospecies: 'mosquito 2',
         },
@@ -145,7 +145,7 @@ describe('morpho taxonomy helpers', () => {
     const counts = mergeMorphoCountSources({
       summaries: {},
       detections: {},
-      allowedNightIds: new Set(['hoya/deployment-a/night-1']),
+      allowedLeafGroupIds: new Set(['hoya/deployment-a/night-1']),
     })
 
     expect(counts).toEqual({})
@@ -155,7 +155,7 @@ describe('morpho taxonomy helpers', () => {
     const counts = mergeMorphoCountSources({
       summaries: {
         'hoya/deploy/night-1': {
-          nightId: 'hoya/deploy/night-1',
+          leafGroupId: 'hoya/deploy/night-1',
           totalDetections: 5,
           totalIdentified: 1,
           morphoCounts: { netelia1: 99 },
@@ -166,7 +166,7 @@ describe('morpho taxonomy helpers', () => {
           id: 'patch1',
           patchId: 'patch1',
           photoId: 'photo.jpg',
-          nightId: 'hoya/deploy/night-1',
+          leafGroupId: 'hoya/deploy/night-1',
           detectedBy: 'user',
           morphospecies: 'netelia1',
         },
@@ -188,7 +188,7 @@ describe('morpho taxonomy helpers', () => {
           id: 'hoyaPatch',
           patchId: 'hoyaPatch',
           photoId: 'photo.jpg',
-          nightId: 'hoya/deployment-a/night-1',
+          leafGroupId: 'hoya/deployment-a/night-1',
           detectedBy: 'user',
           morphospecies: 'hoya morpho',
         },
@@ -196,7 +196,7 @@ describe('morpho taxonomy helpers', () => {
           id: 'otherPatch',
           patchId: 'otherPatch',
           photoId: 'photo2.jpg',
-          nightId: 'other/deployment-b/night-2',
+          leafGroupId: 'other/deployment-b/night-2',
           detectedBy: 'user',
           morphospecies: 'mosquito 2',
         },

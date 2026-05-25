@@ -7,8 +7,8 @@ import {
   buildMorphoTaxonomySummary,
   mergeSpeciesTaxonomySummary,
   mergeMorphoTaxonomySummary,
-  nightSummariesStore,
-  type NightSummaryEntity,
+  leafGroupSummariesStore,
+  type LeafGroupSummaryEntity,
   type SpeciesTaxonomySummary,
   type MorphoTaxonomySummary,
 } from '~/stores/entities/night-summaries'
@@ -28,7 +28,7 @@ import { extractMorphospeciesFromShape, normalizeMorphoKey } from '~/models/taxo
 
 type IndexedEntry = { file?: File; handle?: unknown; path: string; name: string; size: number }
 
-type NightSummary = NightSummaryEntity
+type NightSummary = LeafGroupSummaryEntity
 
 type SummarySource = 'placeholder' | 'legacy' | 'canonical'
 
@@ -65,7 +65,7 @@ export function preloadNightSummariesFromIndexed(
   indexed: IndexedEntry[],
 ) {
   try {
-    const initialStore = nightSummariesStore.get() || {}
+    const initialStore = leafGroupSummariesStore.get() || {}
     const placeholdersByNightId: Record<string, NightSummary> = {}
     const sourceByNightId: Record<string, SummarySource> = {}
     const userJsonEntriesByNightId = groupUserJsonEntriesByNightId(indexed)
@@ -78,21 +78,21 @@ export function preloadNightSummariesFromIndexed(
       if (parts.length < 2) continue
       const baseParts = parts.slice(0, -1)
       if (baseParts.length < 3) continue
-      const nightId = normalizeLegacyNightId(baseParts.join('/'))
-      if (!placeholdersByNightId[nightId] && !initialStore[nightId]) {
-        placeholdersByNightId[nightId] = { nightId, totalDetections: 0, totalIdentified: 0 }
-        sourceByNightId[nightId] = 'placeholder'
+      const leafGroupId = normalizeLegacyNightId(baseParts.join('/'))
+      if (!placeholdersByNightId[leafGroupId] && !initialStore[leafGroupId]) {
+        placeholdersByNightId[leafGroupId] = { leafGroupId, totalDetections: 0, totalIdentified: 0 }
+        sourceByNightId[leafGroupId] = 'placeholder'
       }
 
       void ensureTextFromIndexedEntry(it)
         .then((txt) => JSON.parse(txt))
         .then((json) => {
-          const rawNightId = typeof json?.nightId === 'string' ? json.nightId : nightId
+          const rawNightId = typeof json?.leafGroupId === 'string' ? json.leafGroupId : leafGroupId
           const normalizedRawNightId = normalizeLegacyNightId(rawNightId)
-          const sourceNightId = normalizedRawNightId === nightId ? normalizedRawNightId : nightId
+          const sourceNightId = normalizedRawNightId === leafGroupId ? normalizedRawNightId : leafGroupId
           const sourceType: 'legacy' | 'canonical' = isCanonicalNightId(rawNightId) ? 'canonical' : 'legacy'
           const s: NightSummary = {
-            nightId: sourceNightId,
+            leafGroupId: sourceNightId,
             totalDetections: Number(json?.totalDetections) || 0,
             totalIdentified: Number(json?.totalIdentified) || 0,
             updatedAt: typeof json?.updatedAt === 'number' ? json.updatedAt : undefined,
@@ -117,7 +117,7 @@ export function preloadNightSummariesFromIndexed(
                 ? (json.morphoTaxonomyByKey as Record<string, MorphoTaxonomySummary>)
                 : undefined,
           }
-          const current = nightSummariesStore.get() || {}
+          const current = leafGroupSummariesStore.get() || {}
           const existing = current[sourceNightId]
           const existingSource = sourceByNightId[sourceNightId] ?? 'canonical'
           const shouldReplace = shouldReplaceSummary({
@@ -128,20 +128,20 @@ export function preloadNightSummariesFromIndexed(
           })
           if (!shouldReplace) return
           sourceByNightId[sourceNightId] = sourceType
-          nightSummariesStore.set({ ...current, [sourceNightId]: s })
+          leafGroupSummariesStore.set({ ...current, [sourceNightId]: s })
 
           if (shouldBackfillSummaryTaxonomy(s)) {
             const userEntries = userJsonEntriesByNightId[sourceNightId] || []
             if (userEntries.length > 0) {
-              void backfillTaxonomySummariesForNight({ nightId: sourceNightId, entries: userEntries })
+              void backfillTaxonomySummariesForNight({ leafGroupId: sourceNightId, entries: userEntries })
             }
           }
         })
         .catch(() => {})
     }
     if (Object.keys(placeholdersByNightId).length) {
-      const current = nightSummariesStore.get() || {}
-      nightSummariesStore.set({ ...placeholdersByNightId, ...current })
+      const current = leafGroupSummariesStore.get() || {}
+      leafGroupSummariesStore.set({ ...placeholdersByNightId, ...current })
     }
   } catch {
     return
@@ -156,19 +156,19 @@ function groupUserJsonEntriesByNightId(indexed: IndexedEntry[]) {
     const pathNorm = (entry?.path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
     const parts = pathNorm.split('/').filter(Boolean)
     if (parts.length < 4) continue
-    const nightId = normalizeLegacyNightId(parts.slice(0, -1).join('/'))
-    if (!nightId) continue
-    if (!grouped[nightId]) grouped[nightId] = []
-    grouped[nightId].push(entry)
+    const leafGroupId = normalizeLegacyNightId(parts.slice(0, -1).join('/'))
+    if (!leafGroupId) continue
+    if (!grouped[leafGroupId]) grouped[leafGroupId] = []
+    grouped[leafGroupId].push(entry)
   }
   return grouped
 }
 
 async function backfillTaxonomySummariesForNight(params: {
-  nightId: string
+  leafGroupId: string
   entries: IndexedEntry[]
 }) {
-  const { nightId, entries } = params
+  const { leafGroupId, entries } = params
 
   const speciesCounts: Record<string, number> = {}
   const speciesPreviewPatchIds: Record<string, string> = {}
@@ -214,14 +214,14 @@ async function backfillTaxonomySummariesForNight(params: {
 
   if (Object.keys(morphoCounts).length === 0 && Object.keys(speciesCounts).length === 0) return
 
-  const current = nightSummariesStore.get() || {}
-  const existing = current[nightId]
+  const current = leafGroupSummariesStore.get() || {}
+  const existing = current[leafGroupId]
   if (!existing) return
   if (hasCompleteMorphoSummary(existing) && hasCompleteSpeciesSummary(existing)) return
 
-  nightSummariesStore.set({
+  leafGroupSummariesStore.set({
     ...current,
-    [nightId]: {
+    [leafGroupId]: {
       ...existing,
       speciesCounts: hasSpeciesCounts(existing) ? existing.speciesCounts : speciesCounts,
       speciesPreviewPatchIds: hasSpeciesPreviewPatchIds(existing) ? existing.speciesPreviewPatchIds : speciesPreviewPatchIds,
@@ -337,8 +337,8 @@ function extractPatchIdFromShape(shape: any) {
   return parts[parts.length - 1] ?? ''
 }
 
-function isCanonicalNightId(nightId: string) {
-  const normalized = normalizeLegacyNightId(nightId)
-  const parts = (nightId ?? '').replaceAll('\\', '/').replace(/^\/+/, '').split('/').filter(Boolean)
-  return parts.length === 3 && normalized === (nightId ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
+function isCanonicalNightId(leafGroupId: string) {
+  const normalized = normalizeLegacyNightId(leafGroupId)
+  const parts = (leafGroupId ?? '').replaceAll('\\', '/').replace(/^\/+/, '').split('/').filter(Boolean)
+  return parts.length === 3 && normalized === (leafGroupId ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
 }

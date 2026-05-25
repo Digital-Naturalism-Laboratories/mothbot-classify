@@ -10,7 +10,7 @@ export type IndexedFile = {
 export type PhotoEntity = {
   id: string
   name: string
-  nightId: string
+  leafGroupId: string
   imageFile?: IndexedFile
   botDetectionFile?: IndexedFile
   userDetectionFile?: IndexedFile
@@ -18,13 +18,13 @@ export type PhotoEntity = {
 
 export const photosStore = atom<Record<string, PhotoEntity>>({})
 
-export function clearFileObjectsForNight(params: { nightId: string }) {
-  const { nightId } = params
+export function clearFileObjectsForLeafGroup(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
   const current = photosStore.get() || {}
   const updated: Record<string, PhotoEntity> = {}
 
   for (const [id, photo] of Object.entries(current)) {
-    if (photo.nightId === nightId) {
+    if (photo.leafGroupId === leafGroupId) {
       updated[id] = {
         ...photo,
         imageFile: photo.imageFile ? { ...photo.imageFile, file: undefined } : undefined,
