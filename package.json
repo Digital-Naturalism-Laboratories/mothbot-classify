@@ -17,6 +17,7 @@
     "generate-pwa-assets": "pwa-assets-generator --preset minimal public/mothbot.svg"
   },
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@nanostores/react": "^1.0.0",
     "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-avatar": "^1.1.10",

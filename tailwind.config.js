@@ -31,6 +31,9 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        mono: ['"JetBrains Mono Variable"', ...fontFamily.mono],
+      },
       opacity: {
         15: '0.15',
         35: '0.35',
