@@ -4,18 +4,10 @@ import { isPackageArchiveRelativePath } from './reserved-paths'
 import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/package-indexed-access'
 import { isLikelyNightFolderName, parsePathParts } from './ingest-paths'
 import { formatFilesystemError } from '~/utils/fs-error'
-
-type FileSystemFileHandleLike = {
-  getFile: () => Promise<File>
-  name?: string
-}
-
-type FileSystemDirectoryHandleLike = {
-  values: () => AsyncIterable<FileSystemFileHandleLike | FileSystemDirectoryHandleLike>
-  queryPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  requestPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  name?: string
-}
+import type {
+  FileSystemDirectoryHandleLike,
+  FileSystemFileHandleLike,
+} from '~/utils/fs-directory-handle'
 
 export type IndexedPickedFile = {
   file?: File
@@ -33,9 +25,20 @@ export type PickDirectoryFilesResult = {
 }
 
 function isFileHandle(entry: unknown): entry is FileSystemFileHandleLike {
-  const handle = entry as FileSystemFileHandleLike | undefined
-  const hasGetFile = typeof handle?.getFile === 'function'
-  return hasGetFile
+  return typeof (entry as FileSystemFileHandleLike | undefined)?.getFile === 'function'
+}
+
+async function* iterateDirectoryEntries(
+  directoryHandle: FileSystemDirectoryHandleLike,
+): AsyncGenerator<FileSystemDirectoryHandleLike | FileSystemFileHandleLike> {
+  if (directoryHandle.values) {
+    yield* directoryHandle.values()
+    return
+  }
+
+  if (directoryHandle.entries) {
+    for await (const [, entry] of directoryHandle.entries()) yield entry
+  }
 }
 
 export async function collectFilesWithPathsRecursively(params: {
@@ -63,7 +66,7 @@ async function collectDirectoryEntries(params: {
 }) {
   const { directoryHandle, pathToDirectory, items } = params
 
-  for await (const entry of directoryHandle.values()) {
+  for await (const entry of iterateDirectoryEntries(directoryHandle)) {
     const entryName = (entry as unknown as { name?: string })?.name ?? ''
     if (isFileHandle(entry)) {
       const relFromRoot = [...pathToDirectory, entryName].filter(Boolean).join('/')

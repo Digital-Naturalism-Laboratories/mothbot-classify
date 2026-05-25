@@ -26,7 +26,7 @@ export async function runForeignContentMerge(params: {
     throw new Error('Choose your datasets folder from the menu, then try again.')
   }
 
-  let packageHandle: FileSystemDirectoryHandleLike
+  let packageHandle: FileSystemDirectoryHandleLike | undefined
   try {
     packageHandle = await (datasetsRoot as DirectoryWithGet).getDirectoryHandle?.(packageFolderName, {
       create: false,
@@ -35,9 +35,7 @@ export async function runForeignContentMerge(params: {
     throw new Error(`Could not open “${packageFolderName}”.`)
   }
 
-  if (!packageHandle) {
-    throw new Error(`Could not open “${packageFolderName}”.`)
-  }
+  if (!packageHandle) throw new Error(`Could not open “${packageFolderName}”.`)
 
   setContentIntegrationInProgress(true)
 

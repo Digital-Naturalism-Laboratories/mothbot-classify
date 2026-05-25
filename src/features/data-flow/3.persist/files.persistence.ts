@@ -1,4 +1,5 @@
 import { idbDelete, idbGet, idbPut } from '~/utils/index-db'
+import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
 const LOCAL_FLAG_KEY = 'mbl/pickedDir'
 const LOCAL_NAME_KEY = 'mbl/pickedDirName'
@@ -7,15 +8,6 @@ const DATASETS_NAME_KEY = 'mbl/datasetsDirName'
 const LAST_ACTIVE_DATASET_FOLDER_NAME_KEY = 'mbl/lastActiveDatasetFolderName'
 const IDB_NAME = 'mothbox-local'
 const IDB_STORE = 'fs-handles'
-
-type FileSystemDirectoryHandleLike = {
-  values: () => AsyncIterable<unknown>
-  name?: string
-  queryPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  requestPermission?: (options: {
-    mode: 'read' | 'readwrite'
-  }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-}
 
 export async function persistPickedDirectory(handle: FileSystemDirectoryHandleLike) {
   try {

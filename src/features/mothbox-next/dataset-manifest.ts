@@ -1,7 +1,10 @@
+import type { HierarchyDef } from './hierarchy-manifest'
+
 export type MothboxNextDatasetManifest = {
   format: 'mothbox-next-dataset'
   version: number
   dataset_id: string
+  hierarchy?: HierarchyDef
   title?: string
   description?: string
   package_kind?: 'source_managed_working_dataset' | 'lightweight_substrate'
@@ -32,6 +35,7 @@ export type MothboxNextDatasetManifest = {
     patch_sources?: string
     deployments?: string
     camera_days?: string
+    morpho_links?: string
   }
   classification_sources?: string[]
   cloud_upload_default?: {

@@ -1,7 +1,8 @@
 import { useStore } from '@nanostores/react'
 import { Link } from '@tanstack/react-router'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
+import { Loader } from '~/components/atomic/Loader'
 import {
   expandDisclosurePanelId,
   ExpandDisclosurePanel,

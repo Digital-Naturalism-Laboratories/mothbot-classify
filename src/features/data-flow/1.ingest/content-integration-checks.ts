@@ -35,14 +35,20 @@ export async function runContentIntegrationChecks(): Promise<ContentIntegrationP
     const prompted: ContentIntegrationPolicy[] = []
 
     const pendingPolicy = await detectPendingSetupPolicy()
-    if (shouldPromptContentIntegration({ policy: pendingPolicy, integrationInProgress: false })) {
+    if (
+      pendingPolicy &&
+      shouldPromptContentIntegration({ policy: pendingPolicy, integrationInProgress: false })
+    ) {
       openNewDatasetMigrationDialog({ pending: pendingPolicy.pending })
       prompted.push(pendingPolicy)
       return prompted
     }
 
     const foreignPolicy = await detectActiveForeignMergePolicy()
-    if (shouldPromptContentIntegration({ policy: foreignPolicy, integrationInProgress: false })) {
+    if (
+      foreignPolicy &&
+      shouldPromptContentIntegration({ policy: foreignPolicy, integrationInProgress: false })
+    ) {
       openNewForeignContentDialog({
         packageFolderName: foreignPolicy.packageFolderName,
         foreignFolders: foreignPolicy.foreignFolders,
