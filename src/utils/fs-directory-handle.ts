@@ -3,6 +3,12 @@ export type FileSystemDirectoryHandleLike = {
   kind?: string
   getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
   getFileHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandleLike>
+  queryPermission?: (options: {
+    mode: 'read' | 'readwrite'
+  }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
+  requestPermission?: (options: {
+    mode: 'read' | 'readwrite'
+  }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
   entries?: () => AsyncIterable<[string, FileSystemDirectoryHandleLike | FileSystemFileHandleLike]>
   values?: () => AsyncIterable<FileSystemDirectoryHandleLike | FileSystemFileHandleLike>
 }
