@@ -38,6 +38,7 @@ export function resolveManifestPaths(params: { packageRoot: string; manifest: Mo
       : undefined,
     deploymentsNdjson: manifest.records.deployments ? rel(manifest.records.deployments) : undefined,
     cameraDaysNdjson: manifest.records.camera_days ? rel(manifest.records.camera_days) : undefined,
+    morphoLinksNdjson: rel(manifest.records.morpho_links ?? '02_records/morpho-links.ndjson'),
     classificationsDir: rel(manifest.folders.classifications),
     patchesDir: rel(manifest.folders.patches),
     sourceDir: manifest.source?.included && manifest.source.path ? rel(manifest.source.path) : undefined,

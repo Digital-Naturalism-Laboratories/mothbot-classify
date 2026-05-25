@@ -1,9 +1,10 @@
 import type { MothboxNextDatasetManifest } from './dataset-manifest'
 import { parseDatasetManifest } from './dataset-manifest'
 import type { PatchRecord } from './records'
-import { parseNdjsonLines } from './parse-ndjson'
+import { parsePatchRecords } from './parse-package-records'
 import { patchAssetAbsolutePath } from './package-paths'
 import { isPackageIndexedFiles } from './load-package-data'
+import { formatFilesystemError } from '~/utils/fs-error'
 
 export type PackageFileAccess = {
   readText: (absolutePath: string) => Promise<string>
@@ -47,9 +48,9 @@ export async function validateDatasetPackage(params: {
   let patchRows: PatchRecord[] = []
   try {
     const text = await files.readText(patchesPath)
-    patchRows = await parseNdjsonLines<PatchRecord>(text)
+    patchRows = parsePatchRecords(text)
   } catch (err) {
-    return { ok: false, message: `Invalid patches.ndjson: ${String(err)}` }
+    return { ok: false, message: `Invalid patches.ndjson: ${formatFilesystemError(err)}` }
   }
 
   if (!patchRows.length) return { ok: false, message: 'patches.ndjson must contain at least one patch.' }
@@ -66,7 +67,14 @@ export async function validateDatasetPackage(params: {
 
     const assetAbs = patchAssetAbsolutePath({ packageRoot, assetPath: row.asset_path })
     if (!(await files.fileExists(assetAbs))) {
-      return { ok: false, message: `Missing patch asset: ${row.asset_path}` }
+      const staleLayoutHint =
+        manifest.source?.included === true && row.asset_path.replace(/^\/+/, '').startsWith('01_patches/')
+          ? ' This package keeps patch images next to the legacy source tree; records may still point at 01_patches/ from an older setup.'
+          : ''
+      return {
+        ok: false,
+        message: `Missing patch image: ${row.asset_path}. If you moved folders after setup, run Set up or Refresh datasets again.${staleLayoutHint}`,
+      }
     }
   }
 

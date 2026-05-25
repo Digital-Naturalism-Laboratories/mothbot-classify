@@ -6,6 +6,7 @@ import { normalizePackageRelativePath, toPackageRelativePath } from './package-p
 import type { PatchRecord } from './records'
 import type { PackageTextWriter } from './persist/persist-human-classifications'
 import { joinRelativePaths } from './package-paths'
+import { formatFilesystemError, isFilesystemNotFoundError } from '~/utils/fs-error'
 
 export { isPackageIndexedFiles }
 
@@ -38,9 +39,13 @@ export function buildIndexedFileMap(files: Array<{ path: string }>): Record<stri
 export async function readIndexedEntryText(entry: IndexedFile): Promise<string> {
   if (entry.file) return readBlobText(entry.file)
   const handle = entry.handle as { getFile?: () => Promise<File> } | undefined
-  const file = await handle?.getFile?.()
-  if (!file) throw new Error(`Cannot read ${entry.path}`)
-  return readBlobText(file)
+  try {
+    const file = await handle?.getFile?.()
+    if (!file) throw new Error(`Cannot read ${entry.path}`)
+    return readBlobText(file)
+  } catch (err) {
+    throw toIndexedFileReadError({ path: entry.path, err })
+  }
 }
 
 async function readBlobText(file: File | Blob): Promise<string> {
@@ -109,31 +114,93 @@ async function indexedEntryExists(params: {
   filePath: string
 }) {
   const { byPath, packageRoot, filePath } = params
+  const entry = resolveIndexedEntry({ byPath, packageRoot, filePath })
+  if (entry) return indexedFileEntryReadable(entry)
+
+  const directoryPrefix = directoryPrefixForExistsCheck({ packageRoot, filePath })
+  if (!directoryPrefix) return false
+
+  return Object.keys(byPath).some((indexedPath) => indexedPath.startsWith(directoryPrefix))
+}
+
+function directoryPrefixForExistsCheck(params: { packageRoot: string; filePath: string }) {
+  const rel = toPackageRelativePath({ packageRoot: params.packageRoot, filePath: params.filePath })
+  const normalized = normalizePackageRelativePath(rel)
+  if (!normalized.endsWith('/')) return null
+  return normalized
+}
+
+async function indexedFileEntryReadable(entry: IndexedFile) {
+  if (entry.file) return true
+
+  try {
+    const handle = entry.handle as { getFile?: () => Promise<File> } | undefined
+    const file = await handle?.getFile?.()
+    return !!file
+  } catch {
+    return false
+  }
+}
+
+function resolveIndexedEntry(params: {
+  byPath: Record<string, IndexedFile>
+  packageRoot: string
+  filePath: string
+}): IndexedFile | undefined {
+  const { byPath, packageRoot, filePath } = params
   const normalized = normalizePackageRelativePath(filePath)
   const rel = toPackageRelativePath({ packageRoot, filePath: normalized })
-  const entry = byPath[normalized] ?? byPath[rel]
-  if (entry) {
-    if (entry.file) return true
-    const handle = entry.handle as { getFile?: () => Promise<File> } | undefined
-    return !!(await handle?.getFile?.())
+  const candidates = uniqueStrings([
+    normalized,
+    rel,
+    stripLeadingPackageRoot({ packageRoot, path: normalized }),
+    stripLeadingPackageRoot({ packageRoot, path: rel }),
+  ])
+
+  for (const candidate of candidates) {
+    const hit = byPath[candidate]
+    if (hit) return hit
   }
 
-  const dirPrefix = (rel || normalized).replace(/\/+$/, '')
-  if (!dirPrefix) return false
+  return undefined
+}
 
-  return Object.keys(byPath).some((candidate) => candidate.startsWith(`${dirPrefix}/`))
+function stripLeadingPackageRoot(params: { packageRoot: string; path: string }) {
+  const root = params.packageRoot.replace(/\/+$/, '')
+  if (!root) return params.path
+  const prefix = `${root}/`
+  if (params.path.startsWith(prefix)) return params.path.slice(prefix.length)
+  return params.path
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function toIndexedFileReadError(params: { path: string; err: unknown }) {
+  const { path, err } = params
+  if (isFilesystemNotFoundError(err)) {
+    return new Error(
+      `File not found on disk: ${path}. The dataset may be out of date — try Set up or Refresh datasets again.`,
+    )
+  }
+  return new Error(`Cannot read ${path}: ${formatFilesystemError(err)}`)
 }
 
 export function buildAssetPathIndex(params: {
   patches: PatchRecord[]
   byRelativePath: Record<string, IndexedFile>
+  packageRoot?: string
 }): Record<string, IndexedFile> {
-  const { patches, byRelativePath } = params
+  const { patches, byRelativePath, packageRoot = '' } = params
   const indexedByAssetPath: Record<string, IndexedFile> = {}
 
   for (const patch of patches) {
-    const rel = normalizePackageRelativePath(patch.asset_path)
-    const hit = byRelativePath[rel]
+    const hit = resolveIndexedEntry({
+      byPath: byRelativePath,
+      packageRoot,
+      filePath: patch.asset_path,
+    })
     if (hit) indexedByAssetPath[patch.asset_path] = hit
   }
 

@@ -3,12 +3,15 @@ import type { DetectionEntity } from '~/models/detection.types'
 import { classificationFromDetection } from '../classification-to-detection'
 import { mergeClassifierRowsByPatchId } from './merge-classifier-rows'
 import { buildCurrentClassificationsNdjson } from './rebuild-current-classifications'
-import { serializeNdjsonLines, parseNdjsonLines } from '../parse-ndjson'
+import { serializeNdjsonLines } from '../parse-ndjson'
+import { parseClassificationRecords } from '../parse-package-records'
 import type { ClassificationRecord } from '../records'
 import { mothboxNextPackageStore } from '../active-package'
 import { joinRelativePaths, classifierFileName } from '../package-paths'
 import { userSessionStore } from '~/stores/ui'
 import { refreshActivePackageLoadedFromWriter } from '../reload-package'
+import { savePackageSessionCacheFromStores } from '~/features/data-flow/3.persist/save-package-session-cache'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 
 export type PackageTextWriter = {
   readText: (relativePath: string) => Promise<string>
@@ -37,13 +40,16 @@ export async function persistPackageClassifications(params: {
   let existing: ClassificationRecord[] = []
   if (await writer.fileExists(relClassifierPath)) {
     const text = await writer.readText(relClassifierPath)
-    existing = await parseNdjsonLines<ClassificationRecord>(text)
+    existing = parseClassificationRecords(text)
   }
 
   const merged = mergeClassifierRowsByPatchId({ existing, updates })
   await writer.writeText(relClassifierPath, serializeNdjsonLines(merged))
   await rebuildCurrentClassificationsCacheFromDisk({ writer, activePackage: active })
   await refreshActivePackageLoadedFromWriter({ writer })
+
+  const folderName = activeDatasetFolderNameStore.get()
+  if (folderName) await savePackageSessionCacheFromStores({ folderName })
 }
 
 function collectHumanClassificationUpdates(params: { nightId?: string; classifierId: string }) {
@@ -77,7 +83,7 @@ export async function rebuildCurrentClassificationsCacheFromDisk(params: {
 
   for (const rel of relPaths) {
     const text = await writer.readText(rel)
-    const rows = await parseNdjsonLines<ClassificationRecord>(text)
+    const rows = parseClassificationRecords(text)
     classificationFiles.push({ path: rel, rows })
   }
 

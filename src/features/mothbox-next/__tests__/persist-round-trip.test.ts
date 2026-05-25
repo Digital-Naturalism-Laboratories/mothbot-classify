@@ -15,7 +15,7 @@ import {
   walkFixtureFiles,
 } from './node-fixture-access'
 import { persistPackageClassifications } from '../persist/persist-human-classifications'
-import { parseNdjsonLines } from '../parse-ndjson'
+import { parseClassificationRecords } from '../parse-package-records'
 import type { ClassificationRecord } from '../records'
 
 describe('persist round-trip (L4)', () => {
@@ -79,7 +79,7 @@ describe('persist round-trip (L4)', () => {
 
     const userPath = path.join(tempRoot, '03_classifications/user.ndjson')
     const humanText = await readFile(userPath, 'utf8')
-    const humanRows = await parseNdjsonLines<ClassificationRecord>(humanText)
+    const humanRows = parseClassificationRecords(humanText)
 
     expect(humanRows.some((r) => r.classifier_type === 'human')).toBe(true)
 

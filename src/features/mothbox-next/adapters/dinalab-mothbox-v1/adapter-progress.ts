@@ -1,4 +1,4 @@
-export type DinalabAdapterProgressPhase = 'scan' | 'patches' | 'archive' | 'records'
+export type DinalabAdapterProgressPhase = 'relocate' | 'scan' | 'patches' | 'archive' | 'records'
 
 export type DinalabAdapterProgress = {
   phase: DinalabAdapterProgressPhase

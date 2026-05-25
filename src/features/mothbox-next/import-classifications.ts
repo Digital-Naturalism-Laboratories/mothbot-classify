@@ -1,5 +1,4 @@
-import { parseNdjsonLines } from './parse-ndjson'
-import type { ClassificationRecord } from './records'
+import { parseClassificationRecords } from './parse-package-records'
 import type { IndexedFile } from '~/stores/entities/photos'
 import { joinRelativePaths, classifierFileName } from './package-paths'
 import { mothboxNextPackageStore } from './active-package'
@@ -16,7 +15,7 @@ export async function importClassifierNdjsonFile(params: {
   const active = mothboxNextPackageStore.get()
   if (!active) throw new Error('No mothbox-next package is open.')
 
-  await parseNdjsonLines<ClassificationRecord>(ndjsonText)
+  parseClassificationRecords(ndjsonText)
 
   const relPath = joinRelativePaths(active.manifest.folders.classifications, classifierFileName(classifierId))
   await writer.writeText(relPath, ndjsonText)

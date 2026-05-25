@@ -22,7 +22,7 @@
 - Persist human edits: `persist/persist-human-classifications.ts`
 - Import collaborator file: `import-classifications.ts`
 - In-app ingest entry: `../data-flow/1.ingest/package/ingest-package.ts`
-- In-app migrate: `../data-flow/1.ingest/convert-legacy-to-package.ts`
+- In-app setup: `../data-flow/1.ingest/build-mothbox-package-from-folder.ts`, pending/foreign integration dialogs
 - Dinalab adapter (core): `adapters/dinalab-mothbox-v1/run-adapter.ts`
 - Dinalab adapter (browser IO): `adapters/dinalab-mothbox-v1/browser-adapter-io.ts`
 - CLI wrapper: `../../../adapters/dinalab-mothbox-v1/adapter.ts`

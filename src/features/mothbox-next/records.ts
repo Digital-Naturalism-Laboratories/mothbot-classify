@@ -26,6 +26,10 @@ export type DeploymentRecord = {
   deployment_id: string
   site_id?: string
   device_id?: string
+  site_name_from_folder?: string
+  device_id_from_folder?: string
+  deployment_start_from_folder?: string
+  dataset_name_from_folder?: string
 }
 
 export type CameraDayRecord = {
@@ -33,6 +37,12 @@ export type CameraDayRecord = {
   deployment_id?: string
   device_id?: string
   night_date?: string
+}
+
+/** iNaturalist (or other) URLs keyed by normalized morphospecies label. */
+export type MorphoLinkRecord = {
+  morpho_key: string
+  url: string
 }
 
 export type ClassificationRecord = {
