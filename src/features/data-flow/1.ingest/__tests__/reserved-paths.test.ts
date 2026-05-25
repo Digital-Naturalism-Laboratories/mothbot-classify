@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { excludePackageArchiveIndexedFiles, isPackageArchiveRelativePath } from '../reserved-paths'
+import {
+  excludePackageArchiveIndexedFiles,
+  isPackageArchivePatchMediaPath,
+  isPackageArchiveRelativePath,
+} from '../reserved-paths'
 
 describe('reserved-paths', () => {
   it('detects package archive paths', () => {
     expect(isPackageArchiveRelativePath('00_source/Les/night/patches/a.jpg')).toBe(true)
     expect(isPackageArchiveRelativePath('01_patches/a.jpg')).toBe(false)
+    expect(isPackageArchivePatchMediaPath('00_source/Les/night/patches/a.jpg')).toBe(true)
   })
 
   it('excludes archive paths from indexed file lists', () => {
@@ -17,6 +22,7 @@ describe('reserved-paths', () => {
     expect(excludePackageArchiveIndexedFiles(files).map((f) => f.path)).toEqual([
       'dataset.json',
       '01_patches/a.jpg',
+      '00_source/legacy/patches/b.jpg',
     ])
   })
 })

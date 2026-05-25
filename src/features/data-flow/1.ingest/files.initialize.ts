@@ -14,7 +14,11 @@ import {
 } from '~/stores/entities/night-summaries'
 import { loadMorphoCovers } from '~/features/data-flow/3.persist/covers'
 import { loadMorphoLinks } from '~/features/data-flow/3.persist/links'
-import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
+import { setMorphoLinksForActiveDataset } from '~/features/data-flow/3.persist/links'
+import {
+  parseMorphoLinksJson,
+  parseMorphoLinksNdjson,
+} from '~/features/mothbox-next/morpho-links-package'
 import { normalizeLegacyNightId } from './ingest-paths'
 import type { IngestMode } from './ingest-mode'
 import { excludePackageArchiveIndexedFiles } from './reserved-paths'
@@ -45,13 +49,16 @@ export function applyIndexedFilesState(params: {
 
   if (!isPackage) {
     preloadNightSummariesFromIndexed(storedIndexed)
+  }
+
+  if (!isPackage) {
     preloadMorphoLinksFromIndexed(storedIndexed)
+    void loadMorphoLinks()
   }
 
   void ingestSpeciesListsFromFiles({ files: storedIndexed })
   void loadProjectSpeciesSelection()
   void loadMorphoCovers()
-  void loadMorphoLinks()
 }
 
 export function preloadNightSummariesFromIndexed(
@@ -231,18 +238,19 @@ export function preloadMorphoLinksFromIndexed(indexed: IndexedEntry[]) {
     const found: Array<{ entry: IndexedEntry }> = []
     for (const it of indexed) {
       const lower = (it?.name ?? '').toLowerCase()
-      if (lower === 'morpho_links.json') found.push({ entry: it })
+      if (lower === 'morpho_links.json' || lower === 'morpho-links.ndjson') found.push({ entry: it })
     }
     if (!found.length) return
 
     for (const { entry } of found) {
       void ensureTextFromIndexedEntry(entry)
-        .then((txt) => JSON.parse(txt))
-        .then((json) => {
-          if (json && typeof json === 'object') {
-            const current = morphoLinksStore.get() || {}
-            morphoLinksStore.set({ ...current, ...(json as Record<string, string>) })
-          }
+        .then(async (txt) => {
+          const lowerName = (entry?.name ?? '').toLowerCase()
+          if (lowerName === 'morpho-links.ndjson') return parseMorphoLinksNdjson(txt)
+          return parseMorphoLinksJson(txt)
+        })
+        .then((links) => {
+          if (links) setMorphoLinksForActiveDataset({ links, mode: 'merge' })
         })
         .catch(() => {})
     }

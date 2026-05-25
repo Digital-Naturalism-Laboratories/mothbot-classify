@@ -1,8 +1,11 @@
+import { formatFilesystemPathError, isFilesystemNotFoundError } from './fs-error'
+
 export type FileSystemDirectoryHandleLike = {
   name?: string
   kind?: string
   getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
   getFileHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandleLike>
+  removeEntry?: (name: string, options?: { recursive?: boolean }) => Promise<void>
   entries?: () => AsyncIterable<[string, FileSystemDirectoryHandleLike | FileSystemFileHandleLike]>
   values?: () => AsyncIterable<FileSystemDirectoryHandleLike | FileSystemFileHandleLike>
 }
@@ -19,10 +22,14 @@ export async function readTextFile(root: FileSystemDirectoryHandleLike, relative
 }
 
 export async function readFileBlob(root: FileSystemDirectoryHandleLike, relativePath: string): Promise<File> {
-  const fileHandle = await getFileHandle(root, relativePath)
-  const file = await fileHandle?.getFile?.()
-  if (!file) throw new Error(`Missing file: ${relativePath}`)
-  return file
+  try {
+    const fileHandle = await getFileHandle(root, relativePath)
+    const file = await fileHandle?.getFile?.()
+    if (!file) throw new Error(`Missing file: ${relativePath}`)
+    return file
+  } catch (err) {
+    throw new Error(formatFilesystemPathError({ path: relativePath, err }))
+  }
 }
 
 export async function writeTextFile(root: FileSystemDirectoryHandleLike, relativePath: string, text: string): Promise<void> {
@@ -45,8 +52,9 @@ export async function fileExistsAt(root: FileSystemDirectoryHandleLike, relative
   try {
     await getFileHandle(root, relativePath)
     return true
-  } catch {
-    return false
+  } catch (err) {
+    if (isFilesystemNotFoundError(err)) return false
+    throw err
   }
 }
 
@@ -98,4 +106,28 @@ export async function listNdjsonPathsInFolder(
   }
 
   return paths.sort()
+}
+
+export async function removeFileAt(root: FileSystemDirectoryHandleLike, relativePath: string) {
+  const parts = relativePath.replaceAll('\\', '/').replace(/^\/+/, '').split('/').filter(Boolean)
+  if (!parts.length) return
+
+  const fileName = parts[parts.length - 1]
+  const dirParts = parts.slice(0, -1)
+  let dir = root
+
+  try {
+    for (const part of dirParts) {
+      dir = (await dir.getDirectoryHandle?.(part, { create: false })) as FileSystemDirectoryHandleLike
+      if (!dir) throw new Error(`Missing directory for: ${relativePath}`)
+    }
+
+    if (typeof dir.removeEntry !== 'function') {
+      throw new Error(`Cannot remove file: ${relativePath}`)
+    }
+
+    await dir.removeEntry(fileName, { recursive: false })
+  } catch (err) {
+    throw new Error(formatFilesystemPathError({ path: relativePath, err }))
+  }
 }

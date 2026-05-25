@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeLegacyNightId, parsePathParts, resolveNightEntityIdFromRoute } from '../ingest-paths'
+import {
+  buildNightRouteParams,
+  normalizeLegacyNightId,
+  parsePathParts,
+  resolveNightEntityIdFromRoute,
+} from '../ingest-paths'
 
 describe('ingest-paths', () => {
   it('parses dataset/deployment/night patch paths', () => {
@@ -52,10 +57,38 @@ describe('ingest-paths', () => {
       nights,
       projectId: 'Dinacon2025',
       deploymentId: 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23',
+      nightId: '2025-06-23',
+    })
+
+    expect(resolved).toBe(cameraDayId)
+  })
+
+  it('resolves mothbox-next when route night segment is full camera_day_id', () => {
+    const cameraDayId = 'Hoya_168m_doubleParina_2025-01-26__2025-01-26'
+    const nights = { [cameraDayId]: { id: cameraDayId } }
+
+    const resolved = resolveNightEntityIdFromRoute({
+      nights,
+      projectId: 'Hoya',
+      deploymentId: 'Hoya_168m_doubleParina_2025-01-26',
       nightId: cameraDayId,
     })
 
     expect(resolved).toBe(cameraDayId)
+  })
+
+  it('buildNightRouteParams uses night_date for camera_day_id entities', () => {
+    expect(
+      buildNightRouteParams({
+        projectId: 'Hoya',
+        deploymentId: 'Hoya_168m_doubleParina_2025-01-26',
+        night: { id: 'Hoya_168m_doubleParina_2025-01-26__2025-01-26', name: '2025-01-26' },
+      }),
+    ).toEqual({
+      projectId: 'Hoya',
+      deploymentId: 'Hoya_168m_doubleParina_2025-01-26',
+      nightId: '2025-01-26',
+    })
   })
 
   it('resolves legacy project/deployment/night from route params', () => {

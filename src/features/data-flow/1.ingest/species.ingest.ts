@@ -2,8 +2,10 @@ import { speciesListsStore, speciesListsLoadingStore, type SpeciesList } from '~
 import { invalidateSpeciesIndexForListId } from '~/features/data-flow/2.identify/species-search'
 import type { IndexedFile as FolderIndexedFile } from './files.state'
 import type { SpeciesCsvWorkerRequest, SpeciesCsvWorkerResponse } from '~/workers/species-csv.types'
+import { isSpeciesListIndexedPath } from './species-indexed-paths'
 
 export type IndexedFile = FolderIndexedFile
+export { isSpeciesListIndexedPath } from './species-indexed-paths'
 
 let workerInstance: Worker | null = null
 
@@ -28,12 +30,7 @@ export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[]
   speciesListsLoadingStore.set(true)
 
   for (const f of files) {
-    const pathLower = (f?.path ?? '').replaceAll('\\', '/').toLowerCase()
-    const isSpeciesFolder = pathLower.includes('/species/') || pathLower.startsWith('species/')
-    const isCsv = pathLower.endsWith('.csv') || pathLower.endsWith('.tsv')
-    if (isSpeciesFolder && isCsv) {
-      speciesFiles.push(f)
-    }
+    if (isSpeciesListIndexedPath(f?.path ?? '')) speciesFiles.push(f)
   }
 
   if (speciesFiles.length === 0) {
