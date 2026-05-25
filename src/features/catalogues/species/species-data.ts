@@ -1,6 +1,5 @@
 import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
-import { computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
-import type { ScopeType } from '~/features/catalogues/shared/scope-filters'
+import { buildCatalogScopeCounts } from '~/features/catalogues/shared/catalog-utils'
 import {
   buildSpeciesTaxonomySummary,
   mergeSpeciesTaxonomySummary,
@@ -35,20 +34,22 @@ export type SpeciesUsageSummary = {
 
 export function buildSpeciesScopeCounts(params: {
   summaries?: Record<string, NightSummaryEntity>
+  detections?: Record<string, DetectionEntity>
+  nights?: Record<string, NightEntity>
   projectId?: string
   siteId?: string
   deploymentId?: string
   nightId?: string
 }) {
-  const { summaries, projectId, siteId, deploymentId, nightId } = params
+  const { summaries, detections, nights, projectId, siteId, deploymentId, nightId } = params
 
-  return {
-    all: countSpeciesForScope({ usageScope: 'all', summaries }),
-    project: projectId ? countSpeciesForScope({ usageScope: 'project', summaries, projectId }) : 0,
-    site: projectId && siteId ? countSpeciesForScope({ usageScope: 'site', summaries, projectId, siteId }) : 0,
-    deployment: projectId && deploymentId ? countSpeciesForScope({ usageScope: 'deployment', summaries, projectId, deploymentId }) : 0,
-    night: projectId && deploymentId && nightId ? countSpeciesForScope({ usageScope: 'night', summaries, projectId, deploymentId, nightId }) : 0,
-  } satisfies Record<ScopeType, number>
+  return buildCatalogScopeCounts({
+    summaries,
+    nights,
+    scopeIds: { projectId, siteId, deploymentId, nightId },
+    countForScope: (allowedNightIds) =>
+      Object.keys(mergeSpeciesCountSources({ summaries, detections, allowedNightIds })).length,
+  })
 }
 
 export function buildSpeciesCatalogItems(params: {
@@ -57,7 +58,7 @@ export function buildSpeciesCatalogItems(params: {
   detections?: Record<string, DetectionEntity>
 }) {
   const { summaries, allowedNightIds, detections } = params
-  const counts = buildSpeciesCountIndex({ summaries, allowedNightIds })
+  const counts = mergeSpeciesCountSources({ summaries, allowedNightIds, detections })
   const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedNightIds, detections })
 
   return Object.entries(counts)
@@ -189,18 +190,43 @@ export function buildSpeciesUsageSummary(params: {
   }
 }
 
-function countSpeciesForScope(params: {
-  usageScope: ScopeType
+export function mergeSpeciesCountSources(params: {
   summaries?: Record<string, NightSummaryEntity>
-  projectId?: string
-  siteId?: string
-  deploymentId?: string
-  nightId?: string
+  detections?: Record<string, DetectionEntity>
+  allowedNightIds?: Set<string>
 }) {
-  const { usageScope, summaries, projectId, siteId, deploymentId, nightId } = params
-  const allowedNightIds = computeAllowedNightIds({ usageScope, summaries: summaries || {}, projectId, siteId, deploymentId, nightId })
-  const countIndex = buildSpeciesCountIndex({ summaries, allowedNightIds })
-  return Object.keys(countIndex).length
+  const fromSummaries = buildSpeciesCountIndex(params)
+  const fromDetections = buildSpeciesCountIndexFromDetections(params)
+  const counts: Record<string, number> = {}
+  const keys = new Set([...Object.keys(fromSummaries), ...Object.keys(fromDetections)])
+
+  for (const key of keys) {
+    const usageCount = fromDetections[key] || fromSummaries[key] || 0
+    if (usageCount <= 0) continue
+    counts[key] = usageCount
+  }
+
+  return counts
+}
+
+function buildSpeciesCountIndexFromDetections(params: {
+  detections?: Record<string, DetectionEntity>
+  allowedNightIds?: Set<string>
+}) {
+  const { detections, allowedNightIds } = params
+  const counts: Record<string, number> = {}
+
+  for (const detection of Object.values(detections ?? {})) {
+    if (!isCatalogSpeciesDetection(detection)) continue
+    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+
+    const speciesName = normalizeSpeciesName(detection?.taxon?.species)
+    if (!speciesName) continue
+
+    counts[speciesName] = (counts[speciesName] || 0) + 1
+  }
+
+  return counts
 }
 
 function buildSpeciesCountIndex(params: {

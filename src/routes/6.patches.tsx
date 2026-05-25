@@ -6,11 +6,11 @@ import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { ViewContainer } from '~/styles'
 
 export function Patches() {
-  const { isLoading: isLoadingFolders } = useAppLoading()
+  const { isBlockingLoading } = useAppLoading()
   const dataset = useStore(datasetStore)
   const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
 
-  if (isLoadingFolders) return <CenteredLoader>🌀 Loading patches</CenteredLoader>
+  if (isBlockingLoading) return <CenteredLoader>🌀 Loading patches</CenteredLoader>
   if (!dataset) return <p className='text-sm text-neutral-500'>No dataset loaded</p>
   const project = dataset.projects.find((p) => p.id === params.projectId)
   if (!project) return <p className='text-sm text-neutral-500'>Project not found</p>

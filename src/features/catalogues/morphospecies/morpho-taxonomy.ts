@@ -82,6 +82,55 @@ export function buildMorphoCountIndex(params: {
   return counts
 }
 
+export function buildMorphoCountIndexFromDetections(params: {
+  detections?: Record<string, DetectionEntity>
+  allowedNightIds?: Set<string>
+}) {
+  const { detections, allowedNightIds } = params
+  const counts: Record<string, number> = {}
+
+  for (const detection of Object.values(detections ?? {})) {
+    if (detection?.detectedBy !== 'user') continue
+    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+
+    const key = normalizeMorphoKey(detection?.morphospecies ?? '')
+    if (!key) continue
+
+    counts[key] = (counts[key] || 0) + 1
+  }
+
+  return counts
+}
+
+export function mergeMorphoCountSources(params: {
+  summaries?: Record<string, NightSummaryEntity>
+  detections?: Record<string, DetectionEntity>
+  indexedFallbackCounts?: Record<string, number>
+  allowedNightIds?: Set<string>
+}) {
+  const { summaries, detections, indexedFallbackCounts, allowedNightIds } = params
+  const fromSummaries = buildMorphoCountIndex({ summaries, allowedNightIds })
+  const fromDetections = buildMorphoCountIndexFromDetections({ detections, allowedNightIds })
+  const counts: Record<string, number> = {}
+
+  const keys = new Set([
+    ...Object.keys(fromSummaries),
+    ...Object.keys(fromDetections),
+    ...Object.keys(indexedFallbackCounts ?? {}),
+  ])
+
+  for (const key of keys) {
+    const summaryCount = fromSummaries[key] || 0
+    const detectionCount = fromDetections[key] || 0
+    const fallbackCount = indexedFallbackCounts?.[key] || 0
+    const usageCount = detectionCount || summaryCount || fallbackCount
+    if (usageCount <= 0) continue
+    counts[key] = usageCount
+  }
+
+  return counts
+}
+
 export function buildMorphoTaxonomyTree(params: {
   morphoList: MorphoCatalogItem[]
   taxonomyByKey: Map<string, MorphoTaxonomySummary>

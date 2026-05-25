@@ -12,7 +12,8 @@ import { HomeDatasetsPanel } from './home-datasets-panel'
 import { ProjectsSection } from './projects-section'
 
 export function Home() {
-  const { isLoading: isLoadingFolders } = useAppLoading()
+  const { isBlockingLoading, isOpeningDataset } = useAppLoading()
+  const isLoadingProjects = isBlockingLoading || isOpeningDataset
   const pickerError = useStore(pickerErrorStore)
   const projects = useStore(projectsStore)
   const sites = useStore(sitesStore)
@@ -31,7 +32,7 @@ export function Home() {
           <div className='mb-12 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 text-pretty'>{pickerError}</div>
         ) : null}
         <ProjectsSection
-          isLoading={isLoadingFolders}
+          isLoading={isLoadingProjects}
           projects={projects}
           sites={sites}
           deployments={deployments}
@@ -43,5 +44,3 @@ export function Home() {
     </Row>
   )
 }
-
-export {}

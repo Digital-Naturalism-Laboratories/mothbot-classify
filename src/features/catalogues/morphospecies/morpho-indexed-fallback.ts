@@ -24,10 +24,15 @@ type SummaryLike = {
 export function getRelevantNightIdsForMorphoFallback(params: {
   allowedNightIds?: Set<string>
   summaries?: Record<string, SummaryLike>
+  nightIds?: string[]
 }) {
-  const { allowedNightIds, summaries } = params
+  const { allowedNightIds, summaries, nightIds } = params
   if (allowedNightIds?.size) return Array.from(allowedNightIds)
-  return Object.keys(summaries ?? {})
+
+  const fromSummaries = Object.keys(summaries ?? {})
+  if (fromSummaries.length) return fromSummaries
+
+  return nightIds ?? []
 }
 
 export function shouldLoadMorphoIndexedFallback(params: {
