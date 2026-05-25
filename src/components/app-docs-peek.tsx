@@ -91,7 +91,7 @@ export function AppDocsPeek(props: AppDocsPeekProps) {
   )
 }
 
-function useActiveSectionId(params: { scrollRef: React.RefObject<HTMLDivElement>; open: boolean }) {
+function useActiveSectionId(params: { scrollRef: React.RefObject<HTMLDivElement | null>; open: boolean }) {
   const { scrollRef, open } = params
   const [activeId, setActiveId] = useState<string | null>(null)
 
