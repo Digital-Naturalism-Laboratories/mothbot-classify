@@ -6,12 +6,12 @@ import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
 import { parseBotDetectionJsonSafely, extractPatchFilename } from '~/features/data-flow/1.ingest/ingest-json'
 import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
 import {
+  acceptDetection,
   buildDetectionFromBotShape,
   updateDetectionWithTaxon,
   updateDetectionAsMorphospecies,
   updateDetectionAsError,
 } from '~/models/detection-shapes'
-import { toast } from 'sonner'
 import { scheduleSaveForNight } from '~/features/data-flow/3.persist/detection-persistence'
 import { ensureDetectionsLoadedForNight } from '~/features/data-flow/1.ingest/night-detection-loader'
 import { clearMorphoCover } from '~/features/data-flow/3.persist/covers'
@@ -19,7 +19,6 @@ import { setMorphoLink } from '~/features/data-flow/3.persist/links'
 import { buildNightSummary } from './night-summaries'
 import { hasTaxonFields } from '~/models/taxonomy/validate'
 import { getProjectIdFromNightId } from '~/utils/paths'
-import { validateAndGroupDetectionsForAccept, resolveOrderTaxonFromSpeciesList } from '~/features/data-flow/2.identify/accept'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { computeFinalLabel } from '~/models/taxonomy/label'
 
@@ -134,38 +133,25 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
 }
 
 /**
- * Accepts detections by setting detectedBy to 'user'.
- * Validates that order exists and searches species list for order taxon.
+ * Accepts detections by setting detectedBy to 'user' without changing taxonomy.
  */
 export function acceptDetections(params: { detectionIds: string[] }) {
   const { detectionIds } = params
   if (!Array.isArray(detectionIds) || detectionIds.length === 0) return
 
-  const detections = detectionsStore.get() || {}
-  const selectionByProject = projectSpeciesSelectionStore.get() || {}
+  const current = detectionsStore.get() || {}
+  const updated: Record<string, DetectionEntity> = { ...current }
 
-  const { groupedByOrder, errors } = validateAndGroupDetectionsForAccept({
-    detectionIds,
-    detections,
-    selectionByProject,
-  })
+  for (const id of detectionIds) {
+    const existing = current?.[id]
+    if (!existing) continue
 
-  for (const error of errors) {
-    toast.error(error.message)
+    const context = getSpeciesListContextForDetection({ detection: existing })
+    updated[id] = acceptDetection({ existing, ...context })
   }
 
-  for (const group of groupedByOrder) {
-    const result = resolveOrderTaxonFromSpeciesList({ group })
-
-    if (!result.taxon) {
-      for (const id of result.errorIds) {
-        toast.error(result.errorMessage || 'Cannot accept: order not found')
-      }
-      continue
-    }
-
-    labelDetections({ detectionIds: group.ids, taxon: result.taxon })
-  }
+  detectionsStore.set(updated)
+  updateNightSummariesAndScheduleSave({ detectionIds, detections: updated })
 }
 
 /**
