@@ -16,7 +16,7 @@ export async function validateFolderSelection(params: {
   if (!files?.length) return { ok: false, message: 'No files found in the selected folder.' }
 
   if (isPackageIndexedFiles(files)) {
-    return validateMothboxNextIndexedSelection({ files })
+    return await validateMothboxNextIndexedSelection({ files })
   }
 
   if (legacyIngestEnabled) {
@@ -32,7 +32,7 @@ export async function validateFolderSelection(params: {
 
 async function validateMothboxNextIndexedSelection(params: {
   files: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>
-}) {
+}): Promise<{ ok: true } | { ok: false; message: string }> {
   const { files } = params
   const manifestInfo = findPackageManifestInIndexedFiles(files)
   if (!manifestInfo) {

@@ -10,7 +10,7 @@ import type {
 } from './records'
 import { resolveManifestPaths } from './package-paths'
 import { flattenClassificationFiles, resolveCurrentClassifications } from './resolve-classifications'
-import type { ClassificationRowWithSource } from './resolve-classifications'
+import type { CurrentClassificationRecord } from './records'
 
 export type LoadedMothboxNextPackage = {
   packageRoot: string
@@ -21,7 +21,7 @@ export type LoadedMothboxNextPackage = {
   deployments: DeploymentRecord[]
   cameraDays: CameraDayRecord[]
   classificationFiles: Array<{ path: string; rows: ClassificationRecord[] }>
-  resolvedClassifications: ClassificationRowWithSource[]
+  resolvedClassifications: CurrentClassificationRecord[]
 }
 
 export type PackageDataAccess = {

@@ -5,22 +5,7 @@ import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mo
 import { auditMothboxNextPackageHealth, type PackageHealthReport } from '~/features/mothbox-next/package-health'
 import { ensureReadWritePermission, persistenceConstants } from './files.persistence'
 import { idbGet } from '~/utils/index-db'
-
-type FileSystemDirectoryHandleLike = {
-  values: () => AsyncIterable<unknown>
-  queryPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  requestPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
-  getFileHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandleLike>
-}
-
-type FileSystemFileHandleLike = {
-  getFile?: () => Promise<File>
-  createWritable?: () => Promise<{
-    write: (data: string) => Promise<void>
-    close: () => Promise<void>
-  }>
-}
+import type { FileSystemDirectoryHandleLike, FileSystemFileHandleLike } from '~/utils/fs-directory-handle'
 
 type SummaryIssueType = 'invalid-json' | 'missing-night-id' | 'legacy-night-id' | 'mismatched-night-id'
 
