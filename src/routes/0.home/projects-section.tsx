@@ -20,7 +20,7 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
 import { Column } from '~/styles'
 import { cn } from '~/utils/cn'
-import { InlineProgress } from './inline-progress'
+import { DATASET_PROGRESS_BAR_WIDTH_PX, InlineProgress } from './inline-progress'
 import { DatasetHeaderMenu, ProjectsTreeRowContextMenu } from './item-actions'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { buildProgressIndex, type ProgressIndex } from './projects-progress'
@@ -166,7 +166,11 @@ export function ProjectsSection(props: ProjectsSectionProps) {
         </div>
         {!isLoading && hasProjects ? (
           <div className='flex shrink-0 flex-col items-end'>
-            <InlineProgress total={datasetProgress.total} identified={datasetProgress.identified} />
+            <InlineProgress
+              total={datasetProgress.total}
+              identified={datasetProgress.identified}
+              barWidthPx={DATASET_PROGRESS_BAR_WIDTH_PX}
+            />
           </div>
         ) : null}
       </div>
