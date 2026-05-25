@@ -49,8 +49,11 @@ export async function writeDinalabMothboxV1Package(params: {
 
   const manifestBase = {
     format: 'mothbox-next-dataset' as const,
+    version: 3,
     dataset_id: datasetId,
-    package_kind: retainPatchesInSource || archiveSourceTree ? 'source_managed_working_dataset' : 'lightweight_substrate',
+    package_kind: (retainPatchesInSource || archiveSourceTree
+      ? 'source_managed_working_dataset'
+      : 'lightweight_substrate') as 'source_managed_working_dataset' | 'lightweight_substrate',
     classification_unit: 'patch',
     adapter_id: 'dinalab-mothbox-v1',
     source: retainPatchesInSource || archiveSourceTree
@@ -104,7 +107,6 @@ export async function writeDinalabMothboxV1Package(params: {
 
   const manifest = {
     ...manifestBase,
-    version: 3,
     hierarchy,
   }
 
