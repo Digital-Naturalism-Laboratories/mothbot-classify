@@ -8,6 +8,8 @@ import { collectIndexedFromDirectoryHandle } from './files.fs'
 import { singlePassIngest } from './files.single-pass'
 import { formatFilesystemError } from '~/utils/fs-error'
 import { migrateLegacyMorphoLinksInPackage } from '~/features/mothbox-next/morpho-links-package'
+import { migratePackageSourceToArchiveIfNeeded } from '~/features/mothbox-next/migrate-package-source-to-archive'
+import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/package-indexed-access'
 import { tryRestorePackageFromSessionCache } from '~/features/data-flow/3.persist/restore-package-session-cache'
 import { savePackageSessionCacheFromStores } from '~/features/data-flow/3.persist/save-package-session-cache'
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
@@ -40,8 +42,18 @@ export async function openMothboxNextPackageFromHandle(
     resetAllEntityStores()
 
     const indexed = await collectIndexedFromDirectoryHandle(handle, { hydrateFiles: false })
+    const normalizedIndexed = normalizeIndexedPathsToPackageRoot(indexed)
 
-    const restoredFromCache = await tryRestorePackageFromSessionCache({ folderName, indexed })
+    await migratePackageSourceToArchiveIfNeeded({
+      packageHandle: handle,
+      indexedPaths: normalizedIndexed.map((file) => file.path),
+      showToast: showSuccessToast,
+    })
+
+    const restoredFromCache = await tryRestorePackageFromSessionCache({
+      folderName,
+      indexed: normalizedIndexed,
+    })
     if (restoredFromCache) {
       pickerErrorStore.set(null)
       setActiveDatasetFolderName(folderName)
@@ -66,11 +78,11 @@ export async function openMothboxNextPackageFromHandle(
 
     toast.loading('Opening dataset…', {
       id: OPEN_PACKAGE_TOAST_ID,
-      description: `Loading ${indexed.length.toLocaleString()} file${indexed.length === 1 ? '' : 's'}…`,
+      description: `Loading ${normalizedIndexed.length.toLocaleString()} file${normalizedIndexed.length === 1 ? '' : 's'}…`,
     })
 
-    const hydrated = await hydrateIndexedForIngest(indexed)
-    const ingest = await singlePassIngest({ files: hydrated })
+    const hydrated = await hydrateIndexedForIngest(normalizedIndexed)
+    const ingest = await singlePassIngest({ files: hydrated, pathsAlreadyNormalized: true })
     if (!ingest.ok) {
       const message = formatFilesystemError(ingest.message)
       pickerErrorStore.set(message)

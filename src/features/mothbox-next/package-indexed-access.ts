@@ -7,6 +7,10 @@ import type { PatchRecord } from './records'
 import type { PackageTextWriter } from './persist/persist-human-classifications'
 import { joinRelativePaths } from './package-paths'
 import { formatFilesystemError, isFilesystemNotFoundError } from '~/utils/fs-error'
+import {
+  normalizeIngestRelativePath,
+  packageArchivePathCandidates,
+} from '~/features/data-flow/1.ingest/reserved-paths'
 
 export { isPackageIndexedFiles }
 
@@ -150,22 +154,27 @@ async function indexedFileEntryReadable(entry: IndexedFile) {
   }
 }
 
-function resolveIndexedEntry(params: {
+export function resolveIndexedEntry(params: {
   byPath: Record<string, IndexedFile>
   packageRoot: string
   filePath: string
+  archiveFallback?: boolean
 }): IndexedFile | undefined {
-  const { byPath, packageRoot, filePath } = params
+  const { byPath, packageRoot, filePath, archiveFallback = false } = params
   const normalized = normalizePackageRelativePath(filePath)
   const rel = toPackageRelativePath({ packageRoot, filePath: normalized })
-  const candidates = uniqueStrings([
+  const baseCandidates = uniqueStrings([
     normalized,
     rel,
     stripLeadingPackageRoot({ packageRoot, path: normalized }),
     stripLeadingPackageRoot({ packageRoot, path: rel }),
   ])
 
-  for (const candidate of candidates) {
+  const archiveCandidates = archiveFallback
+    ? baseCandidates.flatMap((candidate) => packageArchivePathCandidates(candidate))
+    : []
+
+  for (const candidate of uniqueStrings([...baseCandidates, ...archiveCandidates])) {
     const hit = byPath[candidate]
     if (hit) return hit
   }

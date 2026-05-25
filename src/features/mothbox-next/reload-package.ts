@@ -3,7 +3,7 @@ import type { PatchEntity } from '~/stores/entities/5.patches'
 import { projectsStore } from '~/stores/entities/1.projects'
 import { sitesStore } from '~/stores/entities/2.sites'
 import { deploymentsStore } from '~/stores/entities/3.deployments'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { photosStore } from '~/stores/entities/photos'
 import { patchesStore } from '~/stores/entities/5.patches'
 import { detectionsStore } from '~/stores/entities/detections'
@@ -25,7 +25,7 @@ import { joinRelativePaths } from './package-paths'
 import { restoreSpeciesListSelectionFromPackage } from './restore-species-selection-from-package'
 import { applyMorphoLinksFromPackage } from './morpho-links-package'
 import { applyIndexedFilesState } from '~/features/data-flow/1.ingest/files.initialize'
-import { rebuildNightSummariesFromDetections } from './rebuild-night-summaries'
+import { rebuildLeafGroupSummariesFromDetections } from './rebuild-night-summaries'
 import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
 import { resolveLegacySourceRootForPackage } from './adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
 import { applyActiveHierarchyFromPackageRecords } from './apply-package-hierarchy'
@@ -34,9 +34,10 @@ import { normalizeFlatPatchImagesRecords } from './normalize-flat-patch-images-r
 export async function reloadActivePackageFromWriter(params: {
   writer: PackageTextWriter
   indexedFiles: IndexedFile[]
+  sourceResolutionIndexed?: IndexedFile[]
   rebuildCache?: boolean
 }) {
-  const { writer, indexedFiles, rebuildCache = true } = params
+  const { writer, indexedFiles, sourceResolutionIndexed, rebuildCache = true } = params
   const active = mothboxNextPackageStore.get()
   if (!active) throw new Error('No mothbox-next package is open.')
 
@@ -50,11 +51,18 @@ export async function reloadActivePackageFromWriter(params: {
     manifest: active.manifest,
   })
 
-  await applyLoadedPackageToStores({ loaded, indexedFiles })
+  await applyLoadedPackageToStores({
+    loaded,
+    indexedFiles,
+    sourceResolutionIndexed: sourceResolutionIndexed ?? indexedFiles,
+  })
   return loaded
 }
 
-export async function reloadActivePackageFromIndexedFiles(params: { files: IndexedFile[] }) {
+export async function reloadActivePackageFromIndexedFiles(params: {
+  files: IndexedFile[]
+  sourceResolutionIndexed?: IndexedFile[]
+}) {
   const manifestInfo = findPackageManifestInIndexedFiles(params.files)
   if (!manifestInfo) throw new Error('No dataset.json in indexed files.')
 
@@ -81,7 +89,11 @@ export async function reloadActivePackageFromIndexedFiles(params: { files: Index
     loaded,
   })
 
-  await applyLoadedPackageToStores({ loaded, indexedFiles: params.files })
+  await applyLoadedPackageToStores({
+    loaded,
+    indexedFiles: params.files,
+    sourceResolutionIndexed: params.sourceResolutionIndexed ?? params.files,
+  })
   return loaded
 }
 
@@ -167,8 +179,11 @@ async function readLegacySourceRootFromPackage(params: {
 export async function applyLoadedPackageToStores(params: {
   loaded: LoadedMothboxNextPackage
   indexedFiles: IndexedFile[]
+  sourceResolutionIndexed?: IndexedFile[]
 }) {
   const { loaded, indexedFiles } = params
+  const sourceResolutionIndexed = params.sourceResolutionIndexed ?? indexedFiles
+  const sourceResolutionByPath = buildIndexedFileMap(sourceResolutionIndexed)
   const byPath = buildIndexedFileMap(indexedFiles)
   const indexedByAssetPath = buildAssetPathIndex({
     patches: loaded.patches,
@@ -183,7 +198,7 @@ export async function applyLoadedPackageToStores(params: {
   const legacySourceRootName = await readLegacySourceRootFromPackage({
     access,
     patchSources: loaded.patchSources,
-    indexedPaths: indexedFiles.map((file) => file.path),
+    indexedPaths: sourceResolutionIndexed.map((file) => file.path),
   })
 
   const normalized = normalizeFlatPatchImagesRecords({
@@ -204,18 +219,20 @@ export async function applyLoadedPackageToStores(params: {
     cameraDays: normalized.cameraDays,
     resolvedClassifications: loaded.resolvedClassifications,
     indexedByAssetPath,
+    sourceResolutionByPath,
+    packageRoot: loaded.packageRoot,
     legacySourceRootName,
-    indexedPaths: indexedFiles.map((file) => file.path),
+    indexedPaths: sourceResolutionIndexed.map((file) => file.path),
   })
 
   projectsStore.set(hydrated.projects)
   sitesStore.set(hydrated.sites)
   deploymentsStore.set(hydrated.deployments)
-  nightsStore.set(hydrated.nights)
+  leafGroupsStore.set(hydrated.nights)
   photosStore.set(hydrated.photos)
   patchesStore.set(hydrated.patches)
   detectionsStore.set(hydrated.detections)
-  rebuildNightSummariesFromDetections(hydrated.detections)
+  rebuildLeafGroupSummariesFromDetections(hydrated.detections)
 
   applyActiveHierarchyFromPackageRecords({
     manifest: loaded.manifest,

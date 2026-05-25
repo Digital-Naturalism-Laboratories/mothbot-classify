@@ -1,9 +1,12 @@
 import type { IndexedFile } from '~/stores/entities/photos'
 import { reloadActivePackageFromIndexedFiles } from '~/features/mothbox-next/reload-package'
 import { findPackageManifestInIndexedFiles } from '~/features/mothbox-next/load-package-data'
-import { buildIndexedFileMap, readIndexedEntryText } from '~/features/mothbox-next/package-indexed-access'
+import {
+  buildIndexedFileMap,
+  normalizeIndexedPathsToPackageRoot,
+  readIndexedEntryText,
+} from '~/features/mothbox-next/package-indexed-access'
 import { parseDatasetManifest } from '~/features/mothbox-next/dataset-manifest'
-
 export async function ingestMothboxNextPackageFromIndexedFiles(params: {
   files: IndexedFile[]
 }) {
@@ -17,7 +20,12 @@ export async function ingestMothboxNextPackageFromIndexedFiles(params: {
   if (!manifestEntry) return { ok: false as const, message: 'dataset.json not readable.' }
 
   try {
-    const loaded = await reloadActivePackageFromIndexedFiles({ files })
+    const normalizedFiles = normalizeIndexedPathsToPackageRoot(files)
+
+    const loaded = await reloadActivePackageFromIndexedFiles({
+      files: normalizedFiles,
+      sourceResolutionIndexed: normalizedFiles,
+    })
 
     console.log('✅ ingestMothboxNextPackage: complete', {
       datasetId: loaded.manifest.dataset_id,

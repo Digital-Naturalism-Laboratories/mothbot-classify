@@ -1,5 +1,11 @@
 import type { CameraDayRecord, DeploymentRecord, PatchRecord, PatchSourceRecord } from '../../records'
 import { DEFAULT_SITE_SEGMENT, isIsoDateOnly } from '../../hierarchy-display-labels'
+import {
+  normalizeIngestRelativePath,
+  PACKAGE_ARCHIVE_DIR,
+  stripPackageArchivePrefix,
+} from '~/features/data-flow/1.ingest/reserved-paths'
+import { patchIdFromImageFileName } from './adapter-patch-assets'
 
 export type ParsedDinalabDeploymentFolder = {
   deploymentId: string
@@ -119,7 +125,7 @@ export function resolveDeploymentContextFromPatchPath(params: {
   const siteName = parsed.siteName ?? (isIsoDateOnly(deploymentFolder) ? DEFAULT_SITE_SEGMENT : deploymentFolder)
   const siteId = siteIdForDeployment({ datasetId, siteName })
 
-  const patchIdStem = fileName.replace(/\.(jpg|jpeg|png)$/i, '.pt')
+  const patchIdStem = patchIdFromImageFileName(fileName)
   const nightDate =
     (nightSegment && isIsoDateOnly(nightSegment) ? nightSegment : undefined) ??
     inferNightDateFromPatchId(patchIdStem) ??
@@ -228,19 +234,31 @@ export function enrichPatchesFromPatchSources(params: {
 }
 
 export function inferLegacySourceRootFromIndexedPaths(paths: string[]): string | undefined {
-  const normalized = paths.map((path) => path.replaceAll('\\', '/').replace(/^\/+/, '')).filter(Boolean)
+  const normalized = paths.map((path) => normalizeIngestRelativePath(path)).filter(Boolean)
   const topLevelDirs = new Set<string>()
 
   for (const path of normalized) {
-    const firstSegment = path.split('/').filter(Boolean)[0]
-    if (firstSegment) topLevelDirs.add(firstSegment)
+    const parts = path.split('/').filter(Boolean)
+    const firstSegment = parts[0]
+    if (!firstSegment) continue
+
+    const rootCandidate =
+      firstSegment.toLowerCase() === PACKAGE_ARCHIVE_DIR.toLowerCase() ? parts[1] : firstSegment
+    if (rootCandidate && !isIsoDateOnly(rootCandidate)) topLevelDirs.add(rootCandidate)
   }
 
   const candidates = [...topLevelDirs].filter((segment) => !isIsoDateOnly(segment))
   const withDateNightFolders = candidates.filter((root) =>
     normalized.some((path) => {
       const parts = path.split('/').filter(Boolean)
-      return parts[0] === root && parts.length >= 2 && isIsoDateOnly(parts[1])
+      const deployIndex =
+        parts[0]?.toLowerCase() === PACKAGE_ARCHIVE_DIR.toLowerCase() ? 1 : 0
+      const nightIndex = deployIndex + 1
+      return (
+        parts[deployIndex] === root &&
+        parts.length > nightIndex &&
+        isIsoDateOnly(parts[nightIndex] ?? '')
+      )
     }),
   )
 
@@ -263,9 +281,14 @@ export function inferLegacySourceRootNameFromPatchSources(
     const path = source.original_bot_detection_path?.replaceAll('\\', '/').replace(/^\/+/, '')
     if (!path) continue
 
-    const firstSegment = path.split('/').filter(Boolean)[0]
+    const segments = path.split('/').filter(Boolean)
+    const firstSegment = segments[0]
     if (!firstSegment || isIsoDateOnly(firstSegment)) continue
-    deploymentRoots.add(firstSegment)
+
+    const deploymentSegment =
+      firstSegment.toLowerCase() === PACKAGE_ARCHIVE_DIR.toLowerCase() ? segments[1] : firstSegment
+    if (!deploymentSegment || isIsoDateOnly(deploymentSegment)) continue
+    deploymentRoots.add(deploymentSegment)
   }
 
   if (deploymentRoots.size !== 1) return undefined
@@ -311,7 +334,8 @@ function resolveNightDateFromBotPath(params: {
 
 function botPathRelativeToLegacyRoot(params: { botPath: string; legacySourceRootName?: string }) {
   const { botPath, legacySourceRootName } = params
-  const normalized = botPath.replaceAll('\\', '/').replace(/^\/+/, '')
+  const normalized = stripPackageArchivePrefix(botPath)
+
   const legacyRoot = legacySourceRootName?.trim()
   if (!legacyRoot) return normalized
 
