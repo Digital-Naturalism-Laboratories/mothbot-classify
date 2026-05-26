@@ -8,6 +8,7 @@ import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
 import { detectionsStore } from '~/stores/entities/detections'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
+import { Number } from '~/components/atomic/number'
 import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
 import { PatchSizeControl } from '~/components/atomic/patch-size-control'
 import type { LeafGroupLeftPanelProps } from './left-panel.types'
@@ -44,22 +45,22 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   ).length
 
   return (
-    <Column className={cn('px-16 py-20 pt-12', className)}>
+    <Column className={cn('bg-sidebar pl-14 pr-16 py-20 pt-12', className)}>
       <WarningsBox warnings={warnings} className='mb-16' />
       <div className='mb-16'>
         <PanelHeading className='mb-6'>Summary</PanelHeading>
         <div className='space-y-4 text-13 text-neutral-700'>
           <div className='flex items-center justify-between'>
             <span>Total patches</span>
-            <span className='font-medium'>{totalPatches}</span>
+            <Number value={totalPatches} mono format className='font-medium' />
           </div>
           <div className='flex items-center justify-between'>
             <span>Total detections</span>
-            <span className='font-medium'>{totalDetections}</span>
+            <Number value={totalDetections} mono format className='font-medium' />
           </div>
           <div className='flex items-center justify-between'>
             <span>Identified</span>
-            <span className='font-medium'>{totalIdentified}</span>
+            <Number value={totalIdentified} mono format className='font-medium' />
           </div>
           <div className='pt-4'>
             <Progress value={totalDetections ? Math.round((totalIdentified / totalDetections) * 100) : 0} />

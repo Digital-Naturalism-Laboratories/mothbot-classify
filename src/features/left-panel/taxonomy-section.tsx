@@ -13,9 +13,11 @@ import { clearPatchSelection } from '~/stores/ui'
 import { PanelHeading } from '~/styles'
 import { collapsedKeysStore, collapseMany, expandMany, makeKey, toggleKey } from './collapse.store'
 import { CountsRow } from './counts-row'
+import { ClickableRow } from './clickable-row'
 import type { TaxonomyNode } from './left-panel.types'
 import { TaxonomyRow } from './taxonomy-row'
 import { cn } from '~/styles/classed'
+import { getBranchSpineProps } from './taxonomy-tree-lines'
 
 export type TaxonomySectionProps = {
   title: string
@@ -70,6 +72,8 @@ export function TaxonomySection(props: TaxonomySectionProps) {
   const allCount = aggregateCount ?? (nodes || []).reduce((acc, n) => acc + (n?.count || 0), 0)
   const isAllSelected = !selectedTaxon && selectedBucket === bucket
   const isErrorsSelected = selectedBucket === 'user' && selectedTaxon?.name === 'ERROR'
+  const errorsRowIsLast = bucket === 'user' && hasErrors
+  const lastNodeIndex = (nodes?.length || 0) - 1
 
   return (
     <div className={className}>
@@ -83,10 +87,11 @@ export function TaxonomySection(props: TaxonomySectionProps) {
 
       <div>
         {showAggregate ? (
-          <CountsRow
-            label={aggregateLabel}
+          <ClickableRow
+            name={aggregateLabel}
             count={allCount}
             selected={isAllSelected}
+            className='w-full'
             onSelect={() => {
               clearPatchSelection()
               onSelectTaxon({ taxon: undefined, bucket })
@@ -94,12 +99,14 @@ export function TaxonomySection(props: TaxonomySectionProps) {
           />
         ) : null}
 
-        {(nodes || []).map((node) =>
-          node.rank === 'class' ? (
+        {(nodes || []).map((node, index) => {
+          const isInLastBranch = !errorsRowIsLast && index === lastNodeIndex
+          return node.rank === 'class' ? (
             <ClassNode
               key={`class-${node.name}`}
               bucket={bucket}
               classNode={node}
+              isInLastBranch={isInLastBranch}
               selectedTaxon={selectedTaxon}
               selectedBucket={selectedBucket}
               onSelectTaxon={onSelectTaxon}
@@ -109,18 +116,20 @@ export function TaxonomySection(props: TaxonomySectionProps) {
               key={`order-${node.name}`}
               bucket={bucket}
               orderNode={node}
+              isInLastBranch={isInLastBranch}
               selectedTaxon={selectedTaxon}
               selectedBucket={selectedBucket}
               onSelectTaxon={onSelectTaxon}
             />
-          ),
-        )}
+          )
+        })}
 
-        {bucket === 'user' && hasErrors ? (
+        {errorsRowIsLast ? (
           <CountsRow
             label='Errors'
             count={errorsCount || 0}
             selected={isErrorsSelected}
+            isAbsoluteLast
             onSelect={() => {
               clearPatchSelection()
               onSelectTaxon({ taxon: { rank: 'species', name: 'ERROR' }, bucket: 'user' })
@@ -187,6 +196,7 @@ function SectionMoreMenu(props: {
 function ClassNode(props: {
   bucket: 'auto' | 'user'
   classNode: TaxonomyNode
+  isInLastBranch?: boolean
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
@@ -194,11 +204,13 @@ function ClassNode(props: {
     bucket: 'auto' | 'user'
   }) => void
 }) {
-  const { bucket, classNode, selectedTaxon, selectedBucket, onSelectTaxon } = props
+  const { bucket, classNode, isInLastBranch, selectedTaxon, selectedBucket, onSelectTaxon } = props
   const collapsedSet = useStore(collapsedKeysStore)
   const classKey = makeKey({ bucket, rank: 'class', path: `${classNode.name}` })
   const classExpanded = !collapsedSet.has(classKey)
   const hasChildren = !!(classNode.children && classNode.children.length)
+  const hasExpandedChildren = hasChildren && classExpanded
+  const lastChildIndex = (classNode.children?.length || 0) - 1
   return (
     <div>
       <TaxonomyRow
@@ -211,19 +223,22 @@ function ClassNode(props: {
           onSelectTaxon({ taxon: { rank: 'class', name: classNode.name }, bucket })
         }}
         canToggle={hasChildren}
+        hasChildren={hasChildren}
         expanded={classExpanded}
         onToggleExpanded={() => toggleKey(classKey)}
+        hasExpandedChildren={hasExpandedChildren}
+        isAbsoluteLast={isInLastBranch && !hasExpandedChildren}
       />
 
-      {hasChildren && classExpanded ? (
-        <IndentedBranch>
+      {hasExpandedChildren ? (
+        <IndentedBranch directRowCount={classNode.children?.length ?? 0}>
           {(classNode.children || []).map((orderNode, index) => (
             <OrderNode
               key={`order-${classNode.name}-${orderNode.name}`}
               bucket={bucket}
               orderNode={orderNode}
               className={classNode.name}
-              isFirstOfClass={index === 0}
+              isInLastBranch={!!isInLastBranch && index === lastChildIndex}
               selectedTaxon={selectedTaxon}
               selectedBucket={selectedBucket}
               onSelectTaxon={onSelectTaxon}
@@ -239,7 +254,7 @@ function OrderNode(props: {
   bucket: 'auto' | 'user'
   orderNode: TaxonomyNode
   className?: string
-  isFirstOfClass?: boolean
+  isInLastBranch?: boolean
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
@@ -247,11 +262,13 @@ function OrderNode(props: {
     bucket: 'auto' | 'user'
   }) => void
 }) {
-  const { bucket, orderNode, className, isFirstOfClass, selectedTaxon, selectedBucket, onSelectTaxon } = props
+  const { bucket, orderNode, className, isInLastBranch, selectedTaxon, selectedBucket, onSelectTaxon } = props
   const collapsedSet = useStore(collapsedKeysStore)
   const orderKey = makeKey({ bucket, rank: 'order', path: `${className ? `${className}/` : ''}${orderNode.name}` })
   const orderExpanded = !collapsedSet.has(orderKey)
   const hasChildren = !!(orderNode.children && orderNode.children.length)
+  const hasExpandedChildren = hasChildren && orderExpanded
+  const lastChildIndex = (orderNode.children?.length || 0) - 1
   return (
     <div>
       <TaxonomyRow
@@ -263,22 +280,24 @@ function OrderNode(props: {
           clearPatchSelection()
           onSelectTaxon({ taxon: { rank: 'order', name: orderNode.name }, bucket })
         }}
-        withConnector={!!className}
-        isFirstChild={!!className && !!isFirstOfClass}
+        inBranch={!!className}
         canToggle={hasChildren}
+        hasChildren={hasChildren}
         expanded={orderExpanded}
         onToggleExpanded={() => toggleKey(orderKey)}
+        hasExpandedChildren={hasExpandedChildren}
+        isAbsoluteLast={isInLastBranch && !hasExpandedChildren}
       />
 
-      {hasChildren && orderExpanded ? (
-        <IndentedBranch>
+      {hasExpandedChildren ? (
+        <IndentedBranch directRowCount={orderNode.children?.length ?? 0}>
           {(orderNode.children || []).map((familyNode, index) => (
             <FamilyNode
               key={`family-${className ? `${className}-` : ''}${orderNode.name}-${familyNode.name}`}
               bucket={bucket}
               orderName={orderNode.name}
               familyNode={familyNode}
-              isFirstChild={index === 0}
+              isInLastBranch={!!isInLastBranch && index === lastChildIndex}
               selectedTaxon={selectedTaxon}
               selectedBucket={selectedBucket}
               onSelectTaxon={onSelectTaxon}
@@ -294,7 +313,7 @@ function FamilyNode(props: {
   bucket: 'auto' | 'user'
   orderName: string
   familyNode: TaxonomyNode
-  isFirstChild?: boolean
+  isInLastBranch?: boolean
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
@@ -302,12 +321,14 @@ function FamilyNode(props: {
     bucket: 'auto' | 'user'
   }) => void
 }) {
-  const { bucket, orderName, familyNode, isFirstChild, selectedTaxon, selectedBucket, onSelectTaxon } = props
+  const { bucket, orderName, familyNode, isInLastBranch, selectedTaxon, selectedBucket, onSelectTaxon } = props
   const collapsedSet = useStore(collapsedKeysStore)
   const familyPath = `${orderName}/${familyNode.name}`
   const familyKey = makeKey({ bucket, rank: 'family', path: familyPath })
   const familyExpanded = !collapsedSet.has(familyKey)
   const hasChildren = !!(familyNode.children && familyNode.children.length)
+  const hasExpandedChildren = hasChildren && familyExpanded
+  const lastChildIndex = (familyNode.children?.length || 0) - 1
   return (
     <div className='relative'>
       <TaxonomyRow
@@ -319,15 +340,17 @@ function FamilyNode(props: {
           clearPatchSelection()
           onSelectTaxon({ taxon: { rank: 'family', name: familyNode.name }, bucket })
         }}
-        withConnector
-        isFirstChild={isFirstChild}
+        inBranch
         canToggle={hasChildren}
+        hasChildren={hasChildren}
         expanded={familyExpanded}
         onToggleExpanded={() => toggleKey(familyKey)}
+        hasExpandedChildren={hasExpandedChildren}
+        isAbsoluteLast={isInLastBranch && !hasExpandedChildren}
       />
 
-      {hasChildren && familyExpanded ? (
-        <IndentedBranch>
+      {hasExpandedChildren ? (
+        <IndentedBranch directRowCount={familyNode.children?.length ?? 0}>
           {(familyNode.children || []).map((genusNode, index) => (
             <GenusNode
               key={`genus-${orderName}-${familyNode.name}-${genusNode.name}`}
@@ -335,7 +358,7 @@ function FamilyNode(props: {
               orderName={orderName}
               familyName={familyNode.name}
               genusNode={genusNode}
-              isFirstChild={index === 0}
+              isInLastBranch={!!isInLastBranch && index === lastChildIndex}
               selectedTaxon={selectedTaxon}
               selectedBucket={selectedBucket}
               onSelectTaxon={onSelectTaxon}
@@ -352,7 +375,7 @@ function GenusNode(props: {
   orderName: string
   familyName: string
   genusNode: TaxonomyNode
-  isFirstChild?: boolean
+  isInLastBranch?: boolean
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
@@ -360,12 +383,14 @@ function GenusNode(props: {
     bucket: 'auto' | 'user'
   }) => void
 }) {
-  const { bucket, orderName, familyName, genusNode, isFirstChild, selectedTaxon, selectedBucket, onSelectTaxon } = props
+  const { bucket, orderName, familyName, genusNode, isInLastBranch, selectedTaxon, selectedBucket, onSelectTaxon } = props
   const collapsedSet = useStore(collapsedKeysStore)
   const genusPath = `${orderName}/${familyName}/${genusNode.name}`
   const genusKey = makeKey({ bucket, rank: 'genus', path: genusPath })
   const genusExpanded = !collapsedSet.has(genusKey)
   const hasChildren = !!(genusNode.children && genusNode.children.length)
+  const hasExpandedChildren = hasChildren && genusExpanded
+  const lastChildIndex = (genusNode.children?.length || 0) - 1
   return (
     <div className='relative'>
       <TaxonomyRow
@@ -377,15 +402,17 @@ function GenusNode(props: {
           clearPatchSelection()
           onSelectTaxon({ taxon: { rank: 'genus', name: genusNode.name }, bucket })
         }}
-        withConnector
-        isFirstChild={isFirstChild}
+        inBranch
         canToggle={hasChildren}
+        hasChildren={hasChildren}
         expanded={genusExpanded}
         onToggleExpanded={() => toggleKey(genusKey)}
+        hasExpandedChildren={hasExpandedChildren}
+        isAbsoluteLast={isInLastBranch && !hasExpandedChildren}
       />
 
-      {hasChildren && genusExpanded ? (
-        <IndentedBranch>
+      {hasExpandedChildren ? (
+        <IndentedBranch directRowCount={genusNode.children?.length ?? 0}>
           {(genusNode.children || []).map((speciesNode, index) => (
             <div key={`species-${orderName}-${familyName}-${genusNode.name}-${speciesNode.name}`} className='relative'>
               <TaxonomyRow
@@ -397,9 +424,9 @@ function GenusNode(props: {
                   clearPatchSelection()
                   onSelectTaxon({ taxon: { rank: 'species', name: speciesNode.name }, bucket })
                 }}
-                withConnector
-                isFirstChild={index === 0}
+                inBranch
                 isMorphoSpecies={speciesNode.isMorpho}
+                isAbsoluteLast={!!isInLastBranch && index === lastChildIndex}
               />
             </div>
           ))}
@@ -462,14 +489,13 @@ function allKeysFor(nodes: TaxonomyNode[], bucket: 'auto' | 'user'): string[] {
   return keys
 }
 
-function IndentedBranch(props: { className?: string; children: React.ReactNode }) {
-  const { className, children } = props
-  const childCount = React.Children.count(children)
+function IndentedBranch(props: { directRowCount: number; className?: string; children: React.ReactNode }) {
+  const { directRowCount, className, children } = props
+  const spine = getBranchSpineProps(directRowCount)
+
   return (
     <div className={cn('relative ml-8 pl-16', className)}>
-      {childCount > 1 ? (
-        <div className='pointer-events-none absolute left-[1.5px] -top-6 h-[70%] w-1 bg-gradient-to-b from-ink-300 via-ink-200 to-ink-300'></div>
-      ) : null}
+      {spine ? <div className={spine.className} style={spine.style} aria-hidden /> : null}
       {children}
     </div>
   )
