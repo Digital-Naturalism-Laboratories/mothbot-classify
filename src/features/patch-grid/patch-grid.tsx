@@ -8,6 +8,7 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import { detectionsStore } from '~/stores/entities/detections'
 import { patchColumnsStore } from '~/components/atomic/patch-size-control'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
+import { Number } from '~/components/atomic/number'
 import { TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
 import { PatchItem } from './patch-item'
 import { selectedPatchIdsStore, selectionLeafGroupIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
@@ -131,15 +132,26 @@ export function PatchGrid(props: PatchGridProps) {
     return buildVisualIndexMap({ visualOrderIds })
   }, [visualOrderIds])
 
+  const blockStartOffsets = useMemo(() => {
+    return computeBlockStartOffsets({ blocks, rowHeight, gapPx })
+  }, [blocks, rowHeight, gapPx])
+
+  const [scrollTop, setScrollTop] = useState(0)
+
+  const activeHeaderBlockIndex = useMemo(() => {
+    return findActiveHeaderBlockIndex({ blocks, blockStartOffsets, scrollTop })
+  }, [blocks, blockStartOffsets, scrollTop])
+
+  const activeHeaderBlock =
+    activeHeaderBlockIndex >= 0 && blocks[activeHeaderBlockIndex]?.kind === 'header'
+      ? blocks[activeHeaderBlockIndex]
+      : null
+
   const rowVirtualizer = useVirtualizer({
     count: blocks.length,
     getScrollElement: () => containerRef.current,
     estimateSize: (i) => {
-      const base = blocks[i]?.kind === 'row' ? rowHeight : HEADER_BASE_HEIGHT
-      const nextIsHeader = blocks[i + 1]?.kind === 'header'
-      const extra = nextIsHeader ? HEADER_TOP_MARGIN : 0
-      const size = base + extra
-      return size
+      return estimateBlockSize({ block: blocks[i], nextBlock: blocks[i + 1], rowHeight, gapPx })
     },
     overscan: 5,
     measureElement: (el) => {
@@ -152,8 +164,7 @@ export function PatchGrid(props: PatchGridProps) {
       const kind = node?.getAttribute('data-kind')
       const rowGapExtra = kind === 'row' ? gapPx : 0
       const extra = (nextIsHeader ? HEADER_TOP_MARGIN : 0) + rowGapExtra
-      const h = base + extra
-      return h
+      return base + extra
     },
   })
 
@@ -176,6 +187,7 @@ export function PatchGrid(props: PatchGridProps) {
 
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
+    setScrollTop(0)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
   }, [orderedIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
@@ -183,6 +195,7 @@ export function PatchGrid(props: PatchGridProps) {
   useEffect(() => {
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
+    setScrollTop(0)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
   }, [desiredColumns, rowVirtualizer, columns, rowHeight])
@@ -306,14 +319,26 @@ export function PatchGrid(props: PatchGridProps) {
   if (loading) return <CenteredLoader>🌀 Loading patches</CenteredLoader>
 
   return (
-    <GridContainer
-      ref={containerRef}
-      className={className}
-      onKeyDown={onKeyDown}
-      onMouseDown={onMouseDownContainer}
-      onMouseMove={onMouseMoveContainer}
-      onMouseLeave={onMouseLeaveContainer}
-    >
+    <div className={cn('flex h-full min-h-0 flex-col', className)}>
+      {activeHeaderBlock ? (
+        <div className='shrink-0 px-8 pt-8 bg-neutral-50'>
+          <GroupHeader
+            title={activeHeaderBlock.title}
+            rank={activeHeaderBlock.rank}
+            count={activeHeaderBlock.count}
+            className='px-8 py-6'
+          />
+        </div>
+      ) : null}
+      <GridContainer
+        ref={containerRef}
+        className='min-h-0 flex-1 scroll-mask-top-32'
+        onKeyDown={onKeyDown}
+        onMouseDown={onMouseDownContainer}
+        onMouseMove={onMouseMoveContainer}
+        onMouseLeave={onMouseLeaveContainer}
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      >
       <div style={{ height: rowVirtualizer.getTotalSize() + 88, width: '100%', position: 'relative' }}>
         {!orderedIds.length ? <div className='p-8 text-sm text-neutral-500'>No patches found</div> : null}
 
@@ -328,7 +353,9 @@ export function PatchGrid(props: PatchGridProps) {
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${stripe.start}px)` }}
             >
               {block?.kind === 'header' ? (
-                <GroupHeader title={block.title} rank={block.rank} count={block.count} className='px-8 py-6' />
+                activeHeaderBlockIndex === stripe.index ? null : (
+                  <GroupHeader title={block.title} rank={block.rank} count={block.count} className='px-8 py-6' />
+                )
               ) : block?.kind === 'row' ? (
                 <RowGrid
                   itemIds={block.itemIds}
@@ -346,7 +373,8 @@ export function PatchGrid(props: PatchGridProps) {
         })}
         <div style={{ position: 'absolute', top: rowVirtualizer.getTotalSize(), left: 0, width: '100%', height: '88px' }} />
       </div>
-    </GridContainer>
+      </GridContainer>
+    </div>
   )
 }
 
@@ -357,10 +385,11 @@ type GridContainerProps = {
   onMouseMove: (e: React.MouseEvent) => void
   onKeyDown: (e: React.KeyboardEvent) => void
   onMouseLeave: (e: React.MouseEvent) => void
+  onScroll: (e: React.UIEvent<HTMLDivElement>) => void
 }
 
 const GridContainer = React.forwardRef<HTMLDivElement, GridContainerProps>(function GridContainer(props, ref) {
-  const { className, children, onMouseDown, onMouseMove, onKeyDown, onMouseLeave } = props
+  const { className, children, onMouseDown, onMouseMove, onKeyDown, onMouseLeave, onScroll } = props
   return (
     <div
       ref={ref}
@@ -369,7 +398,8 @@ const GridContainer = React.forwardRef<HTMLDivElement, GridContainerProps>(funct
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
-      className={cn('relative overflow-y-auto p-8 outline-none', className)}
+      onScroll={onScroll}
+      className={cn('relative overflow-y-auto px-8 pb-8 pt-0 outline-none', className)}
     >
       {children}
     </div>
@@ -677,6 +707,45 @@ function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<stri
   return ids
 }
 
+function estimateBlockSize(params: {
+  block: GridBlock | undefined
+  nextBlock: GridBlock | undefined
+  rowHeight: number
+  gapPx: number
+}) {
+  const { block, nextBlock, rowHeight, gapPx } = params
+  const base = block?.kind === 'row' ? rowHeight : HEADER_BASE_HEIGHT
+  const nextIsHeader = nextBlock?.kind === 'header'
+  const extra = nextIsHeader ? HEADER_TOP_MARGIN : 0
+  const rowGapExtra = block?.kind === 'row' ? gapPx : 0
+  return base + extra + rowGapExtra
+}
+
+function computeBlockStartOffsets(params: { blocks: GridBlock[]; rowHeight: number; gapPx: number }) {
+  const { blocks, rowHeight, gapPx } = params
+  const starts: number[] = []
+  let y = 0
+  for (let i = 0; i < blocks.length; i++) {
+    starts.push(y)
+    y += estimateBlockSize({ block: blocks[i], nextBlock: blocks[i + 1], rowHeight, gapPx })
+  }
+  return starts
+}
+
+function findActiveHeaderBlockIndex(params: {
+  blocks: GridBlock[]
+  blockStartOffsets: number[]
+  scrollTop: number
+}) {
+  const { blocks, blockStartOffsets, scrollTop } = params
+  let active = -1
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i]?.kind !== 'header') continue
+    if ((blockStartOffsets[i] ?? 0) <= scrollTop) active = i
+  }
+  return active
+}
+
 function computeItemWidth(params: { containerWidth: number; columns: number; gap: number }) {
   const { containerWidth, columns, gap } = params
   if (!containerWidth || containerWidth <= 0 || !columns) return 0
@@ -698,12 +767,12 @@ function GroupHeader(props: {
   const colorClass = colorVariantsMap[colorVariant as keyof typeof colorVariantsMap]
 
   return (
-    <div className={cn('flex items-center ring-1 ring-inset rounded-sm justify-between', colorClass, className)}>
+    <div className={cn('flex items-center ring-1 ring-inset rounded-sm items-center  gap-6', colorClass, className)}>
       <div className='flex items-center gap-6'>
         <TaxonRankLetterBadge rank={rank} size='xsm' />
-        <span className='text-13 font-semibold text-ink-primary'>{title}</span>
+        <span className='text-13 relative -top-1 font-semibold text-ink-primary'>{title}</span>
       </div>
-      <span className='text-12 text-neutral-600'>{count}</span>
+      <Number value={count} mono format className='text-[10px] text-black/60' />
     </div>
   )
 }
