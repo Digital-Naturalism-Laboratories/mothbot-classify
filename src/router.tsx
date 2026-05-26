@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { Night } from './routes/5.night'
 import { TestIdentification } from './routes/test-identification'
+import { DesignSystemColors } from './routes/ad/ds'
+import { DesignSystemTaxonTree } from './routes/ad/ds/taxon-tree'
 import { RootLayout } from '~/root-layout'
 import { Home } from '~/routes/0.home'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
@@ -78,12 +80,26 @@ export const testIdentificationRoute = createRoute({
   component: TestIdentification,
 })
 
+export const designSystemColorsRoute = createRoute({
+  getParentRoute,
+  path: '/ad/ds',
+  component: DesignSystemColors,
+})
+
+export const designSystemTaxonTreeRoute = createRoute({
+  getParentRoute,
+  path: '/ad/ds/taxon-tree',
+  component: DesignSystemTaxonTree,
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   datasetSingleLeafRoute,
   leafGroupRoute,
   nightRoute,
   testIdentificationRoute,
+  designSystemColorsRoute,
+  designSystemTaxonTreeRoute,
 ])
 
 export const router = createRouter({
