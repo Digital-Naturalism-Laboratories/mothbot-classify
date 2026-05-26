@@ -167,7 +167,7 @@ function SectionMoreMenu(props: {
         <Button size='icon-sm' variant='ghostMuted' aria-label='Taxonomy actions' icon={EllipsisIcon} />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align='end' sideOffset={4}>
+      <DropdownMenuContent side='right' align='start' sideOffset={4}>
         {bucket === 'auto' ? (
           <DropdownMenuCheckboxItem
             checked={sortByClusters}
