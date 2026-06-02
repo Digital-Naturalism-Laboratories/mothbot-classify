@@ -52,6 +52,17 @@ describe('classifyDatasetFolder', () => {
     await expect(classifyDatasetFolder({ directory, folderName: 'ami_abms' })).resolves.toBe('ami')
   })
 
+  it('classifies AMI metadata plus _crops_ folders before generic patch images', async () => {
+    const directory = createDirectoryHandle([
+      'snapshot_abms_denmark_2025_25.10.0.parquet',
+      'snapshot_abms_denmark_2025_toke_special.csv',
+      'abms/2025/_crops_/denmark/F1/20250501231959-snapshot_crop_0403014a-ef2b-40ef-bdc1-2d72c55d1b3d.jpg',
+      'abms/2025/denmark/F1/20250501231959-snapshot.jpg',
+    ])
+
+    await expect(classifyDatasetFolder({ directory, folderName: 'ami_abms' })).resolves.toBe('ami')
+  })
+
   it('classifies processed crop images without AMI metadata as patch images only', async () => {
     const directory = createDirectoryHandle([
       'abms/_processed/2025/denmark/F1/20250501231959-snapshot_crop_0403014a-ef2b-40ef-bdc1-2d72c55d1b3d.jpg',

@@ -356,6 +356,73 @@ describe('buildAmiAdapterRecords', () => {
     })
   })
 
+  it('keeps AMI source-photo traces package-relative when source files are archived', async () => {
+    const detectionId = '0403014a-ef2b-40ef-bdc1-2d72c55d1b3d'
+    const files = new Map<string, string>([
+      [
+        `snapshot_abms_denmark_2025_toke_special.csv`,
+        [
+          `"deploymentyear","deploymentcode","timestamp","orderlabel","orderscore","detectionid","cropurl","sourceimageid"`,
+          `2025,"F1","2025-05-01 23:19:59+00","Diptera Brachycera","13.27","${detectionId}","https://example.test/abms/2025/_processed/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg","source-image-1"`,
+        ].join('\n'),
+      ],
+      [`abms/_processed/2025/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg`, ''],
+      [`abms/2025/denmark/F1/20250501231959-snapshot.jpg`, ''],
+    ])
+
+    const built = await buildAmiAdapterRecords({
+      datasetId: 'ami_abms',
+      io: createMemoryIo(files),
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '00_source',
+      packageSourceLayout: 'archive',
+    })
+
+    expect(built.patches[0]?.asset_path).toBe(
+      `00_source/abms/_processed/2025/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg`,
+    )
+    expect(built.patchSources[0]?.source_photo_asset_path).toBe(
+      '00_source/abms/2025/denmark/F1/20250501231959-snapshot.jpg',
+    )
+    expect(built.patchSources[0]?.original_patch_path).toBe(
+      `00_source/abms/_processed/2025/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg`,
+    )
+  })
+
+  it('builds patches from AMI _crops_ folders', async () => {
+    const detectionId = '0403014a-ef2b-40ef-bdc1-2d72c55d1b3d'
+    const files = new Map<string, string>([
+      [
+        `snapshot_abms_denmark_2025_toke_special.csv`,
+        [
+          `"deploymentyear","deploymentcode","timestamp","orderlabel","orderscore","detectionid","cropurl","sourceimageid"`,
+          `2025,"F1","2025-05-01 23:19:59+00","Diptera Brachycera","13.27","${detectionId}","https://example.test/abms/2025/_crops_/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg","source-image-1"`,
+        ].join('\n'),
+      ],
+      [`abms/2025/_crops_/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg`, ''],
+      [`abms/2025/denmark/F1/20250501231959-snapshot.jpg`, ''],
+    ])
+
+    const built = await buildAmiAdapterRecords({
+      datasetId: 'ami_abms',
+      io: createMemoryIo(files),
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '',
+      packageSourceLayout: 'in_place',
+    })
+
+    expect(built.patches[0]).toMatchObject({
+      patch_id: detectionId,
+      asset_path: `abms/2025/_crops_/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg`,
+      deployment_id: 'abms_denmark_F1_2025',
+      camera_day_id: 'abms_denmark_F1_2025__2025-05-01',
+    })
+    expect(built.patchSources[0]).toMatchObject({
+      source_photo_asset_path: 'abms/2025/denmark/F1/20250501231959-snapshot.jpg',
+      original_patch_path: `abms/2025/_crops_/denmark/F1/20250501231959-snapshot_crop_${detectionId}.jpg`,
+    })
+  })
+
   it('links AMI crops to source images with the matching image extension', async () => {
     const detectionId = '0403014a-ef2b-40ef-bdc1-2d72c55d1b3d'
     const files = new Map<string, string>([

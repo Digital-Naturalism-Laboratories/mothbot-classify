@@ -9,6 +9,7 @@
  */
 import path from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
+import { isAmiCropImagePath } from '../../src/features/data-flow/1.ingest/classify-dataset-folder'
 import { runDinalabMothboxV1Adapter } from '../../src/features/mothbox-next/adapters/dinalab-mothbox-v1/run-adapter'
 import { createNodeDinalabAdapterIO } from '../../src/features/mothbox-next/adapters/dinalab-mothbox-v1/node-adapter-io'
 
@@ -59,6 +60,14 @@ async function resolveCliSourceLayout(root: string): Promise<{
         folderKind: 'source-only',
       }
     }
+    if (sourceFiles.some(isAmiMetadataFileName) && sourceFiles.some(isAmiCropImagePath)) {
+      return {
+        sourceDir,
+        packageRelativeSourcePrefix: '00_source',
+        packageSourceLayout: 'archive',
+        folderKind: 'ami',
+      }
+    }
     if (sourceFiles.some(isPatchImageFileName)) {
       return {
         sourceDir,
@@ -78,7 +87,7 @@ async function resolveCliSourceLayout(root: string): Promise<{
       folderKind: 'mothbox-processed',
     }
   }
-  if (rootFiles.some(isAmiMetadataFileName) && rootFiles.some(isAmiProcessedCropPath)) {
+  if (rootFiles.some(isAmiMetadataFileName) && rootFiles.some(isAmiCropImagePath)) {
     return {
       sourceDir: root,
       packageRelativeSourcePrefix: '',
@@ -138,12 +147,6 @@ function isMothboxProcessedBotPath(fileName: string) {
 
 function isAmiMetadataFileName(fileName: string) {
   return /\.(parquet|csv)$/i.test(fileName)
-}
-
-function isAmiProcessedCropPath(fileName: string) {
-  const normalized = fileName.replaceAll('\\', '/')
-  return normalized.split('/').some((part) => part.toLowerCase() === '_processed') &&
-    /_crop_[^/]+\.(jpg|jpeg|png)$/i.test(normalized)
 }
 
 async function exists(filePath: string): Promise<boolean> {

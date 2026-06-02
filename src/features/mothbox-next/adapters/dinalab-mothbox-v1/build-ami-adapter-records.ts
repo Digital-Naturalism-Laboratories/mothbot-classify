@@ -103,7 +103,7 @@ export async function buildAmiAdapterRecords(params: {
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
 
   if (!crops.length) {
-    throw new Error('No AMI processed crop images found under a _processed/ folder.')
+    throw new Error('No AMI crop images found under a _processed/ or _crops_ folder.')
   }
 
   const cropIds = new Set(crops.map((crop) => crop.detectionId))
@@ -158,7 +158,10 @@ export async function buildAmiAdapterRecords(params: {
       patch_id: crop.detectionId,
       source_type: 'ami_crop',
       source_photo_id: representative?.sourceimageid || crop.sourceFileName.replace(/\.(jpg|jpeg|png)$/i, ''),
-      source_photo_asset_path: crop.sourcePhotoRelativePath,
+      source_photo_asset_path: toPackageRelativeAssetPath({
+        sourcePrefix: packageRelativeSourcePrefix,
+        pathRelativeToSource: crop.sourcePhotoRelativePath,
+      }),
       original_patch_path: assetPath,
       source_bot_detection_id: crop.detectionId,
       metadata_path: representative?.metadataPath,
@@ -582,13 +585,32 @@ function amiClassifierPriority(algorithm: string) {
 function parseAmiCropPath(relativePath: string): AmiCrop | null {
   const normalized = relativePath.replaceAll('\\', '/')
   const parts = normalized.split('/').filter(Boolean)
-  const processedIndex = parts.findIndex((part) => part.toLowerCase() === '_processed')
-  if (processedIndex < 1) return null
 
   const patchFileName = parts[parts.length - 1] ?? ''
   const match = patchFileName.match(/^(.*)_crop_([0-9a-fA-F-]+)\.(jpg|jpeg|png)$/i)
   if (!match) return null
 
+  const processedIndex = parts.findIndex((part) => part.toLowerCase() === '_processed')
+  if (processedIndex >= 1) {
+    return parseAmiProcessedCropPath({ normalized, parts, processedIndex, patchFileName, match })
+  }
+
+  const cropsIndex = parts.findIndex((part) => part.toLowerCase() === '_crops_')
+  if (cropsIndex >= 2) {
+    return parseAmiCropsCropPath({ normalized, parts, cropsIndex, patchFileName, match })
+  }
+
+  return null
+}
+
+function parseAmiProcessedCropPath(params: {
+  normalized: string
+  parts: string[]
+  processedIndex: number
+  patchFileName: string
+  match: RegExpMatchArray
+}): AmiCrop | null {
+  const { normalized, parts, processedIndex, patchFileName, match } = params
   const projectId = parts[processedIndex - 1]
   const year = parts[processedIndex + 1]
   const country = parts[processedIndex + 2]
@@ -597,6 +619,36 @@ function parseAmiCropPath(relativePath: string): AmiCrop | null {
 
   const sourceFileName = `${match[1]}.${match[3]}`
   const sourcePhotoRelativePath = joinRelative(...parts.slice(0, processedIndex), year, country, code, sourceFileName)
+
+  return {
+    relativePath: normalized,
+    patchFileName,
+    detectionId: match[2],
+    projectId,
+    year,
+    country,
+    code,
+    sourceFileName,
+    sourcePhotoRelativePath,
+  }
+}
+
+function parseAmiCropsCropPath(params: {
+  normalized: string
+  parts: string[]
+  cropsIndex: number
+  patchFileName: string
+  match: RegExpMatchArray
+}): AmiCrop | null {
+  const { normalized, parts, cropsIndex, patchFileName, match } = params
+  const projectId = parts[cropsIndex - 2]
+  const year = parts[cropsIndex - 1]
+  const country = parts[cropsIndex + 1]
+  const code = parts[cropsIndex + 2]
+  if (!projectId || !year || !country || !code) return null
+
+  const sourceFileName = `${match[1]}.${match[3]}`
+  const sourcePhotoRelativePath = joinRelative(...parts.slice(0, cropsIndex), country, code, sourceFileName)
 
   return {
     relativePath: normalized,
