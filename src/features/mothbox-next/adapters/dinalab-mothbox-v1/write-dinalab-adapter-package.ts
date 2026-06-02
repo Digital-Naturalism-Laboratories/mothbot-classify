@@ -38,6 +38,7 @@ export async function writeDinalabMothboxV1Package(params: {
     io,
     built,
     humanClassifierPath,
+    clearPreviousGeneratedHumanClassifierFiles: true,
   })
 
   const sourcePathLabel =
@@ -143,6 +144,7 @@ export async function writeMergedPackageRecords(params: {
     io,
     built,
     humanClassifierPath,
+    clearPreviousGeneratedHumanClassifierFiles: false,
   })
 
   await io.package.writeText(
@@ -165,21 +167,69 @@ async function writeBuiltPackageRecordFiles(params: {
   io: DinalabAdapterIO
   built: BuiltDinalabAdapterRecords
   humanClassifierPath: string
+  clearPreviousGeneratedHumanClassifierFiles: boolean
 }) {
-  const { io, built, humanClassifierPath } = params
+  const { io, built, clearPreviousGeneratedHumanClassifierFiles, humanClassifierPath } = params
+
+  if (clearPreviousGeneratedHumanClassifierFiles) {
+    await clearPreviousGeneratedHumanClassifierFilesFromManifest({ io, humanClassifierPath })
+  }
 
   await io.package.writeText('02_records/patches.ndjson', serializeNdjsonLines(built.patches))
   await io.package.writeText('02_records/patch-sources.ndjson', serializeNdjsonLines(built.patchSources))
   await io.package.writeText('02_records/deployments.ndjson', serializeNdjsonLines(built.deployments))
   await io.package.writeText('02_records/camera-days.ndjson', serializeNdjsonLines(built.cameraDays))
   await io.package.writeText('03_classifications/_bot.ndjson', serializeNdjsonLines(built.botRows))
-
-  if (built.humanRows.length) {
-    await io.package.writeText(humanClassifierPath, serializeNdjsonLines(built.humanRows))
-  }
+  await io.package.writeText(humanClassifierPath, serializeNdjsonLines(built.humanRows))
 
   await io.package.writeText(
     '02_records/current-classifications.ndjson',
     serializeNdjsonLines(built.resolvedClassifications),
   )
+}
+
+async function clearPreviousGeneratedHumanClassifierFilesFromManifest(params: {
+  io: DinalabAdapterIO
+  humanClassifierPath: string
+}) {
+  const { io, humanClassifierPath } = params
+  const stalePaths = (await readPreviousGeneratedHumanClassifierPaths(io)).filter(
+    (path) => path !== normalizeClassificationPath(humanClassifierPath),
+  )
+
+  for (const path of stalePaths) {
+    await io.package.writeText(path, '')
+  }
+}
+
+async function readPreviousGeneratedHumanClassifierPaths(io: DinalabAdapterIO): Promise<string[]> {
+  let raw: unknown
+  try {
+    raw = JSON.parse(await io.package.readText('dataset.json'))
+  } catch {
+    return []
+  }
+
+  const sources = (raw as { classification_sources?: unknown })?.classification_sources
+  if (!Array.isArray(sources)) return []
+
+  return uniqueStrings(
+    sources
+      .map((path) => (typeof path === 'string' ? normalizeClassificationPath(path) : ''))
+      .filter(isHumanClassificationPath),
+  )
+}
+
+function isHumanClassificationPath(path: string) {
+  if (!path.startsWith('03_classifications/') || !path.endsWith('.ndjson')) return false
+  const fileName = path.split('/').pop()
+  return !!fileName && fileName !== '_bot.ndjson'
+}
+
+function normalizeClassificationPath(path: string) {
+  return path.replaceAll('\\', '/').replace(/^\/+/, '')
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))]
 }

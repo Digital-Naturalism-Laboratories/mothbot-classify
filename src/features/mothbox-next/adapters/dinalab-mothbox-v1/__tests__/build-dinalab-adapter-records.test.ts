@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { buildDinalabMothboxV1Records } from '../build-dinalab-adapter-records'
 import { buildAmiAdapterRecords } from '../build-ami-adapter-records'
+import { runDinalabMothboxV1Adapter } from '../run-adapter'
+import { loadMothboxNextPackageData } from '../../../load-package-data'
 import type { DinalabAdapterIO } from '../adapter-io'
 
 describe('buildDinalabMothboxV1Records', () => {
@@ -89,6 +91,102 @@ describe('buildDinalabMothboxV1Records', () => {
       source_photo_asset_path: 'Deployment_A/2025-01-01/photo.jpg',
     })
   })
+
+  it('does not keep stale generated human classifications after a source rerun removes identified rows', async () => {
+    const patchFileName = 'photo_0_Mothbot_model.pt.jpg'
+    const botDetectionPath = `_processed/Deployment_A/2025-01-01/photo_botdetection.json`
+    const identifiedPath = `_processed/Deployment_A/2025-01-01/photo_identified.json`
+    const files = new Map<string, string>([
+      [botDetectionPath, JSON.stringify({ shapes: [shape({ patchFileName, label: 'ORDER_Diptera' })] })],
+      [identifiedPath, JSON.stringify({ shapes: [shape({ patchFileName, label: 'ORDER_Lepidoptera' })] })],
+      [`_processed/Deployment_A/2025-01-01/${patchFileName}`, ''],
+      [`Deployment_A/2025-01-01/photo.jpg`, ''],
+    ])
+
+    const io = createMemoryIo(files)
+    const runParams = {
+      datasetId: 'Dataset_A',
+      io,
+      humanClassifierId: 'bf',
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '',
+      packageSourceLayout: 'in_place' as const,
+      folderKind: 'mothbox-processed' as const,
+    }
+
+    await runDinalabMothboxV1Adapter(runParams)
+    files.delete(identifiedPath)
+    const result = await runDinalabMothboxV1Adapter(runParams)
+    const loaded = await loadMothboxNextPackageData({
+      packageRoot: '',
+      readManifestText: async () => files.get('dataset.json') ?? '',
+      access: {
+        readPackageFile: async (relativePath) => files.get(relativePath) ?? '',
+        listClassificationFiles: async (classificationsDir) => {
+          const prefix = `${classificationsDir.replace(/\/+$/, '')}/`
+          return [...files.keys()].filter((path) => path.startsWith(prefix) && path.endsWith('.ndjson')).sort()
+        },
+      },
+    })
+
+    expect(result.humanRowCount).toBe(0)
+    expect(loaded?.resolvedClassifications).toEqual([
+      expect.objectContaining({
+        patch_id: 'photo_0_Mothbot_model.pt',
+        classifier_id: 'model.pt',
+        classifier_type: 'bot',
+        label: 'ORDER_Diptera',
+      }),
+    ])
+  })
+
+  it('clears previous generated human classification files when rerun uses a different classifier id', async () => {
+    const patchFileName = 'photo_0_Mothbot_model.pt.jpg'
+    const botDetectionPath = `_processed/Deployment_A/2025-01-01/photo_botdetection.json`
+    const identifiedPath = `_processed/Deployment_A/2025-01-01/photo_identified.json`
+    const files = new Map<string, string>([
+      [botDetectionPath, JSON.stringify({ shapes: [shape({ patchFileName, label: 'ORDER_Diptera' })] })],
+      [identifiedPath, JSON.stringify({ shapes: [shape({ patchFileName, label: 'ORDER_Lepidoptera' })] })],
+      [`_processed/Deployment_A/2025-01-01/${patchFileName}`, ''],
+      [`Deployment_A/2025-01-01/photo.jpg`, ''],
+    ])
+
+    const io = createMemoryIo(files)
+    const runParams = {
+      datasetId: 'Dataset_A',
+      io,
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '',
+      packageSourceLayout: 'in_place' as const,
+      folderKind: 'mothbox-processed' as const,
+    }
+
+    await runDinalabMothboxV1Adapter({ ...runParams, humanClassifierId: 'ana' })
+    files.delete(identifiedPath)
+    const result = await runDinalabMothboxV1Adapter({ ...runParams, humanClassifierId: 'bf' })
+    const loaded = await loadMothboxNextPackageData({
+      packageRoot: '',
+      readManifestText: async () => files.get('dataset.json') ?? '',
+      access: {
+        readPackageFile: async (relativePath) => files.get(relativePath) ?? '',
+        listClassificationFiles: async (classificationsDir) => {
+          const prefix = `${classificationsDir.replace(/\/+$/, '')}/`
+          return [...files.keys()].filter((path) => path.startsWith(prefix) && path.endsWith('.ndjson')).sort()
+        },
+      },
+    })
+
+    expect(result.humanRowCount).toBe(0)
+    expect(files.get('03_classifications/ana.ndjson')).toBe('')
+    expect(loaded?.resolvedClassifications).toEqual([
+      expect.objectContaining({
+        patch_id: 'photo_0_Mothbot_model.pt',
+        classifier_id: 'model.pt',
+        classifier_type: 'bot',
+        label: 'ORDER_Diptera',
+      }),
+    ])
+  })
 })
 
 describe('buildAmiAdapterRecords', () => {
@@ -167,7 +265,10 @@ function createMemoryIo(files: Map<string, string>): DinalabAdapterIO {
       findFiles: async (predicate) => [...files.keys()].filter((path) => predicate(path.split('/').pop() ?? path)),
     },
     package: {
-      writeText: async () => undefined,
+      readText: async (relativePath) => files.get(relativePath) ?? '',
+      writeText: async (relativePath, text) => {
+        files.set(relativePath, text)
+      },
       copyFromSource: async () => undefined,
     },
   }

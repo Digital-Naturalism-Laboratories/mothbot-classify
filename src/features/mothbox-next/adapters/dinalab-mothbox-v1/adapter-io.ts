@@ -6,6 +6,7 @@ export type DinalabAdapterSourceIO = {
 }
 
 export type DinalabAdapterPackageIO = {
+  readText: (relativePath: string) => Promise<string>
   writeText: (relativePath: string, text: string) => Promise<void>
   copyFromSource: (params: { sourceRelativePath: string; packageRelativePath: string }) => Promise<void>
 }

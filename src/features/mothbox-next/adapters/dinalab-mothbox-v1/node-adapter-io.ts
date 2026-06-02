@@ -21,6 +21,7 @@ export function createNodeDinalabAdapterIO(params: {
       findFiles: async (predicate) => findFilesUnder(sourceRoot, predicate),
     },
     package: {
+      readText: async (relativePath) => readFile(path.join(packageRoot, relativePath), 'utf8'),
       writeText: async (relativePath, text) => {
         const abs = path.join(packageRoot, relativePath)
         await mkdir(path.dirname(abs), { recursive: true })

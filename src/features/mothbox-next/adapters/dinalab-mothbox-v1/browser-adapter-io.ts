@@ -25,6 +25,7 @@ export function createBrowserDinalabAdapterIO(params: {
       findFiles: (predicate) => findRelativeFilesUnderDirectory(sourceHandle, predicate),
     },
     package: {
+      readText: (relativePath) => readTextFile(packageHandle, relativePath),
       writeText: (relativePath, text) => writeTextFile(packageHandle, relativePath, text),
       copyFromSource: async ({ sourceRelativePath, packageRelativePath }) => {
         const file = await readFileBlob(sourceHandle, sourceRelativePath)
