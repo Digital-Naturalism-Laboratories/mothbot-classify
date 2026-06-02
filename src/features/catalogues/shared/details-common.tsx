@@ -112,7 +112,7 @@ function navigateToNightWithSearch(params: {
 
   router.navigate({
     to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
-    params: { projectId, deploymentId, leafGroupId },
+    params: { projectId, deploymentId, nightId: leafGroupId },
     search,
   })
 }
@@ -128,7 +128,7 @@ function navigateToNight(params: {
 
   router.navigate({
     to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
-    params: { projectId, deploymentId, leafGroupId },
+    params: { projectId, deploymentId, nightId: leafGroupId },
   })
 }
 

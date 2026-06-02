@@ -23,6 +23,7 @@ export function detectionFromClassification(params: {
     morphospecies: row.morphospecies ?? undefined,
     score: typeof row.confidence === 'number' ? row.confidence : undefined,
     classificationType: row.classification_type,
+    botClassifierId: row.classifier_type === 'bot' ? row.classifier_id : undefined,
   }
 }
 

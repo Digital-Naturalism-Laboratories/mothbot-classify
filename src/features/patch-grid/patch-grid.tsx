@@ -8,7 +8,7 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import { detectionsStore } from '~/stores/entities/detections'
 import { patchColumnsStore } from '~/components/atomic/patch-size-control'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
-import { Number } from '~/components/atomic/number'
+import { Number as NumberBadge } from '~/components/atomic/number'
 import { TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
 import { PatchItem } from './patch-item'
 import { selectedPatchIdsStore, selectionLeafGroupIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
@@ -772,7 +772,7 @@ function GroupHeader(props: {
         <TaxonRankLetterBadge rank={rank} size='xsm' />
         <span className='text-13 relative -top-1 font-semibold text-ink-primary'>{title}</span>
       </div>
-      <Number value={count} mono format className='text-[10px] text-black/60' />
+      <NumberBadge value={count} mono format className='text-[10px] text-black/60' />
     </div>
   )
 }

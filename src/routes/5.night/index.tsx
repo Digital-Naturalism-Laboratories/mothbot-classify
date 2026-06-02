@@ -16,7 +16,6 @@ export function Night() {
     leafGroupId?: string
     projectId?: string
     deploymentId?: string
-    leafGroupId?: string
   }
   const nights = useStore(leafGroupsStore)
   const resolvedHierarchy = useStore(activeHierarchyStore)

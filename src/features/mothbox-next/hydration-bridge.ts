@@ -187,6 +187,7 @@ export function hydratePackageEntities(params: {
   deployments: DeploymentRecord[]
   cameraDays: CameraDayRecord[]
   resolvedClassifications: ClassificationRecord[]
+  classificationFiles?: Array<{ path: string; rows: ClassificationRecord[] }>
   indexedByAssetPath: Record<string, IndexedFile>
   sourceResolutionByPath?: Record<string, IndexedFile>
   packageRoot?: string
@@ -198,6 +199,7 @@ export function hydratePackageEntities(params: {
     manifest,
     patchSources = [],
     resolvedClassifications,
+    classificationFiles = [],
     indexedByAssetPath,
     sourceResolutionByPath = {},
     packageRoot = '',
@@ -259,6 +261,7 @@ export function hydratePackageEntities(params: {
   const detections: Record<string, DetectionEntity> = {}
 
   const classificationByPatch = new Map(resolvedClassifications.map((r) => [r.patch_id, r]))
+  const botMetadataByPatch = buildBotMetadataByPatch({ classificationFiles })
 
   for (const patch of patches) {
     const leafGroupId = patch.camera_day_id && hierarchy.nights[patch.camera_day_id]
@@ -287,16 +290,25 @@ export function hydratePackageEntities(params: {
       name: patch.patch_id,
       leafGroupId,
       photoId,
+      ...(patch.captured_at ? { capturedAt: patch.captured_at } : {}),
       imageFile,
     }
 
+    const patchDetectionMetadata = detectionMetadataFromPatch({
+      patch,
+      patchSource: patchSourcesById[patch.patch_id],
+      botMetadata: botMetadataByPatch.get(patch.patch_id),
+    })
     const classification = classificationByPatch.get(patch.patch_id)
     if (classification) {
-      detections[patch.patch_id] = detectionFromClassification({
-        row: classification,
-        leafGroupId,
-        photoId,
-      })
+      detections[patch.patch_id] = {
+        ...detectionFromClassification({
+          row: classification,
+          leafGroupId,
+          photoId,
+        }),
+        ...patchDetectionMetadata,
+      }
     } else {
       detections[patch.patch_id] = {
         id: patch.patch_id,
@@ -304,6 +316,7 @@ export function hydratePackageEntities(params: {
         photoId,
         leafGroupId,
         detectedBy: 'auto',
+        ...patchDetectionMetadata,
       }
     }
   }
@@ -317,4 +330,110 @@ export function hydratePackageEntities(params: {
     patches: patchesOut,
     detections,
   }
+}
+
+function clusterIdFromPatchRecord(patch: PatchRecord) {
+  const value = patch.cluster_id
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function detectionMetadataFromPatch(params: {
+  patch: PatchRecord
+  patchSource?: PatchSourceRecord
+  botMetadata?: BotClassificationMetadata
+}): Partial<DetectionEntity> {
+  const clusterId = clusterIdFromPatchRecord(params.patch)
+  const points = cropPointsFromPatchSource(params.patchSource)
+  const direction = cropDirectionFromPatchSource(params.patchSource)
+  const shapeType = cropShapeTypeFromPatchSource(params.patchSource)
+  const botClassifierId = params.botMetadata?.classifierId
+  const botScore = params.botMetadata?.confidence
+
+  return {
+    ...(clusterId !== undefined ? { clusterId } : {}),
+    ...(points ? { points } : {}),
+    ...(direction !== undefined ? { direction } : {}),
+    ...(shapeType ? { shapeType } : {}),
+    ...(botClassifierId ? { botClassifierId } : {}),
+    ...(botScore !== undefined ? { score: botScore } : {}),
+  }
+}
+
+type BotClassificationMetadata = {
+  classifierId?: string
+  confidence?: number
+}
+
+function buildBotMetadataByPatch(params: {
+  classificationFiles: Array<{ path: string; rows: ClassificationRecord[] }>
+}) {
+  const botRowByPatch = new Map<string, ClassificationRecord>()
+  for (const file of params.classificationFiles) {
+    for (const row of file.rows ?? []) {
+      if (row?.classifier_type !== 'bot') continue
+      if (!row.patch_id) continue
+
+      const current = botRowByPatch.get(row.patch_id)
+      if (isNewerBotMetadataRow({ candidate: row, current })) botRowByPatch.set(row.patch_id, row)
+    }
+  }
+
+  const out = new Map<string, BotClassificationMetadata>()
+  for (const [patchId, row] of botRowByPatch.entries()) {
+    const classifierId = row.classifier_id?.trim() || undefined
+    const confidence = typeof row.confidence === 'number' && Number.isFinite(row.confidence)
+      ? row.confidence
+      : undefined
+    if (classifierId || confidence !== undefined) out.set(patchId, { classifierId, confidence })
+  }
+
+  return out
+}
+
+function isNewerBotMetadataRow(params: {
+  candidate: ClassificationRecord
+  current?: ClassificationRecord
+}) {
+  const { candidate, current } = params
+  if (!current) return true
+
+  const candidateTs = classificationTimestamp(candidate)
+  const currentTs = classificationTimestamp(current)
+
+  if (candidateTs !== null && currentTs === null) return true
+  if (candidateTs === null && currentTs !== null) return false
+  if (candidateTs !== null && currentTs !== null) return candidateTs > currentTs
+
+  return false
+}
+
+function classificationTimestamp(row: ClassificationRecord) {
+  return typeof row.classified_at === 'number' && Number.isFinite(row.classified_at) ? row.classified_at : null
+}
+
+function cropPointsFromPatchSource(source?: PatchSourceRecord) {
+  const points = source?.crop_points
+  if (!Array.isArray(points) || points.length < 2) return undefined
+
+  const parsed: number[][] = []
+  for (const point of points) {
+    if (!Array.isArray(point) || point.length < 2) return undefined
+    const x = point[0]
+    const y = point[1]
+    if (typeof x !== 'number' || !Number.isFinite(x)) return undefined
+    if (typeof y !== 'number' || !Number.isFinite(y)) return undefined
+    parsed.push([x, y])
+  }
+
+  return parsed
+}
+
+function cropDirectionFromPatchSource(source?: PatchSourceRecord) {
+  const value = source?.crop_direction
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function cropShapeTypeFromPatchSource(source?: PatchSourceRecord) {
+  const value = source?.crop_shape_type
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }

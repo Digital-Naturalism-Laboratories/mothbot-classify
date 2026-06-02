@@ -6,6 +6,7 @@ export type PatchEntity = {
   name: string
   leafGroupId: string
   photoId: string
+  capturedAt?: string
   imageFile?: IndexedFile
 }
 

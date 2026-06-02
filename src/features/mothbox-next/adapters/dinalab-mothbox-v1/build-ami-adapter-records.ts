@@ -5,6 +5,7 @@ import { flattenClassificationFiles, resolveCurrentClassifications } from '../..
 import { isPatchImageFileName, isCsvFileName, isParquetFileName } from '~/features/data-flow/1.ingest/classify-dataset-folder'
 import { toPackageRelativeAssetPath, type PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-package-source-layout'
 import type { DinalabAdapterIO, DinalabAdapterProgressCallback } from './adapter-io'
+import { imageMediaTypeFromPath } from './adapter-media-type'
 import { formatProgressFraction } from './adapter-progress'
 import { joinRelative } from './adapter-path-utils'
 import type { BuiltDinalabAdapterRecords } from './build-dinalab-adapter-records'
@@ -136,7 +137,7 @@ export async function buildAmiAdapterRecords(params: {
       patch_id: crop.detectionId,
       dataset_id: datasetId,
       asset_path: assetPath,
-      media_type: 'image/jpeg',
+      media_type: imageMediaTypeFromPath(crop.patchFileName),
       captured_at: capturedAt,
       deployment_id: deploymentId,
       camera_day_id: cameraDayId,
@@ -158,7 +159,7 @@ export async function buildAmiAdapterRecords(params: {
         ? {
             ami_detection_id: crop.detectionId,
             ami_deployment_id: representative.deploymentid,
-            ami_project_id: representative.projectid,
+            ami_project_id: representative.projectid || crop.projectId,
             ami_code: representative.code,
             ami_country: crop.country,
             ami_year: representative.year ?? crop.year,
@@ -290,11 +291,15 @@ function readAmiCsvMetadataRows(params: {
         cropurl: record.cropurl,
         code: record.code || record.deploymentcode,
         year: record.year || record.deploymentyear,
-        projectid: record.projectid || 'abms',
+        projectid: record.projectid,
         filename: sourceFileNameFromCropUrl(record.cropurl),
         deploymentid: record.deploymentid,
         url: record.url,
         timestamp: record.timestamp,
+        x1: record.x1,
+        x2: record.x2,
+        y1: record.y1,
+        y2: record.y2,
       },
       metadataPath,
     })
@@ -362,15 +367,20 @@ function classificationFromAmiRows(params: {
     : selectedRows[0]
   if (!primary?.label) return null
 
-  const taxon = buildTaxonRecord({
-    ...taxonFieldForAmiPrimary({ rank: primaryRank, label: primary.label }),
-    metadata: {
-      extras: {
-        ami_detection_id: patchId,
-        ami_algorithms: uniqueStrings(rows.map((row) => row.algorithm)),
-        ami_selected_algorithm: primary.algorithm,
+  const taxonFields = taxonFieldsFromAmiRows(selectedRows)
+  const taxon = normalizeAmiTaxonSpecies({
+    taxon: buildTaxonRecord({
+      ...taxonFields,
+      metadata: {
+        extras: {
+          ami_detection_id: patchId,
+          ami_algorithms: uniqueStrings(rows.map((row) => row.algorithm)),
+          ami_selected_algorithm: primary.algorithm,
+        },
       },
-    },
+    }),
+    speciesLabel: taxonFields.species,
+    genus: taxonFields.genus,
   })
 
   return {
@@ -388,19 +398,38 @@ function classificationFromAmiRows(params: {
   }
 }
 
-function taxonFieldForAmiPrimary(params: {
-  rank?: string
-  label: string
+function normalizeAmiTaxonSpecies(params: {
+  taxon: ReturnType<typeof buildTaxonRecord>
+  speciesLabel?: string
+  genus?: string
 }) {
-  const { rank, label } = params
-  if (rank === 'kingdom') return { kingdom: label }
-  if (rank === 'phylum') return { phylum: label }
-  if (rank === 'class') return { class: label }
-  if (rank === 'order') return { order: label }
-  if (rank === 'family') return { family: label }
-  if (rank === 'genus') return { genus: label }
-  if (rank === 'species') return { species: label }
-  return {}
+  const { taxon, speciesLabel, genus } = params
+  if (!taxon || !speciesLabel || !genus) return taxon
+
+  const normalizedSpecies = speciesLabel.trim()
+  const normalizedGenus = genus.trim()
+  const prefix = `${normalizedGenus} `
+  if (!normalizedSpecies.toLowerCase().startsWith(prefix.toLowerCase())) return taxon
+
+  const epithet = normalizedSpecies.slice(prefix.length).trim()
+  if (!epithet) return taxon
+
+  return {
+    ...taxon,
+    scientificName: normalizedSpecies,
+    species: epithet,
+  }
+}
+
+function taxonFieldsFromAmiRows(rows: AmiMetadataRow[]) {
+  const out: Record<string, string> = {}
+  for (const rank of TAXON_RANK_ORDER) {
+    const row = rows
+      .filter((candidate) => normalizeTaxonLevel(candidate.taxonlevel) === rank && candidate.label)
+      .sort((a, b) => (b.score ?? Number.NEGATIVE_INFINITY) - (a.score ?? Number.NEGATIVE_INFINITY))[0]
+    if (row?.label) out[rank] = row.label
+  }
+  return out
 }
 
 function selectAmiClassifierRows(rows: AmiMetadataRow[]) {
@@ -451,7 +480,7 @@ function parseAmiCropPath(relativePath: string): AmiCrop | null {
   const code = parts[processedIndex + 3]
   if (!projectId || !year || !country || !code) return null
 
-  const sourceFileName = `${match[1]}.jpg`
+  const sourceFileName = `${match[1]}.${match[3]}`
   const sourcePhotoRelativePath = joinRelative(...parts.slice(0, processedIndex), year, country, code, sourceFileName)
 
   return {
@@ -523,7 +552,7 @@ function cropPointsFromAmiRow(row?: AmiMetadataRow) {
 function sourceFileNameFromCropUrl(value?: string) {
   const fileName = value?.split('/').pop() ?? ''
   const match = fileName.match(/^(.*)_crop_[^.]+\.(jpg|jpeg|png)$/i)
-  return match ? `${match[1]}.jpg` : ''
+  return match ? `${match[1]}.${match[2]}` : ''
 }
 
 function normalizeTaxonLevel(value?: string) {

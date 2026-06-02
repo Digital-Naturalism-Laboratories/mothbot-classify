@@ -239,7 +239,12 @@ function resolvePackageBotDetection(params: {
   const leafGroupId = existing.leafGroupId
   if (!photoId || !leafGroupId) return undefined
 
-  return detectionFromClassification({ row: botRow, leafGroupId, photoId })
+  const detection = detectionFromClassification({ row: botRow, leafGroupId, photoId })
+  if (typeof existing.clusterId === 'number') detection.clusterId = existing.clusterId
+  if (Array.isArray(existing.points)) detection.points = existing.points
+  if (typeof existing.direction === 'number') detection.direction = existing.direction
+  if (typeof existing.shapeType === 'string') detection.shapeType = existing.shapeType
+  return detection
 }
 
 function clearHumanIdentificationFlags(params: { existing: DetectionEntity }): DetectionEntity {

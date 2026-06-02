@@ -1,6 +1,7 @@
 import { exportNightDarwinCSV } from '~/features/data-flow/4.export/darwin-csv'
 import { exportNightSummaryRS } from '~/features/data-flow/4.export/rs-summary'
 import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
+import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
@@ -52,7 +53,7 @@ export function collectNightIdsForScope(params: { scope: ExportScope; id: string
 
   if (scope === 'deployment') return nightValues.filter((n) => n.deploymentId === id).map((n) => n.id)
   if (scope === 'site') return nightValues.filter((n) => n.siteId === id).map((n) => n.id)
-  if (scope === 'project') return nightValues.filter((n) => n.projectId === id).map((n) => n.id)
+  if (scope === 'project') return nightValues.filter((n) => resolveDatasetId(n) === id).map((n) => n.id)
 
   return []
 }

@@ -266,7 +266,8 @@ export function buildDarwinShapeFromDetection(params: {
 }): DarwinRow {
   const { detection, patch, photo, leafGroupId, nightDiskPath } = params
   const baseName = getPhotoBaseFromPhotoId(photo?.id || '')
-  const verbatimEventDate = extractVerbatimEventDateFromPhotoBase({ baseName })
+  const capturedAt = typeof patch?.capturedAt === 'string' ? patch.capturedAt.trim() : ''
+  const verbatimEventDate = extractVerbatimEventDateFromPhotoBase({ baseName }) || capturedAt
   const { eventDate, eventTime, utcOffset } = deriveEventDateTime({ verbatimEventDate })
   const filepath = patch?.imageFile?.path || ''
   const image_id = patch?.id || ''
@@ -309,7 +310,7 @@ export function buildDarwinShapeFromDetection(params: {
   // Deployment is datasetID without the trailing night date segment
   const deployment = extractDeploymentFromDatasetID({ datasetID })
   const mothbox = extractMothboxFromNightDiskPath({ nightDiskPath })
-  const detectionBy = extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
+  const detectionBy = detection?.botClassifierId || extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
   const detection_confidence = detection?.score != null ? String(detection.score) : ''
   const userInitials = userSessionStore.get()?.initials || ''
   const identifiedBy = detection?.detectedBy === 'user' ? userInitials : ''
@@ -369,7 +370,7 @@ function deriveEventDateTime(params: { verbatimEventDate: string }): { eventDate
 
   if (!verbatimEventDate) return { eventDate: '', eventTime: '', utcOffset: '' }
   const m = verbatimEventDate.match(/(\d{4})_(\d{2})_(\d{2})__([0-9]{2})_([0-9]{2})_([0-9]{2})/)
-  if (!m) return { eventDate: '', eventTime: '', utcOffset: '' }
+  if (!m) return deriveIsoEventDateTime({ verbatimEventDate })
   const yyyy = m[1]
   const MM = m[2]
   const dd = m[3]
@@ -380,6 +381,38 @@ function deriveEventDateTime(params: { verbatimEventDate: string }): { eventDate
   const eventTime = `${hh}:${mm}:${ss}`
   const utcOffset = ''
   return { eventDate, eventTime, utcOffset }
+}
+
+function deriveIsoEventDateTime(params: { verbatimEventDate: string }): { eventDate: string; eventTime: string; utcOffset: string } {
+  const trimmed = params.verbatimEventDate.trim()
+  const match = trimmed.match(
+    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:\s*(Z)|([+-]\d{2}(?::?\d{2})?))?$/i,
+  )
+  if (match) {
+    return {
+      eventDate: match[1],
+      eventTime: match[2],
+      utcOffset: match[3] ? '+00:00' : normalizeUtcOffset(match[4]),
+    }
+  }
+
+  const parsed = Date.parse(trimmed)
+  if (!Number.isFinite(parsed)) return { eventDate: '', eventTime: '', utcOffset: '' }
+
+  const iso = new Date(parsed).toISOString()
+  return {
+    eventDate: iso.slice(0, 10),
+    eventTime: iso.slice(11, 19),
+    utcOffset: '',
+  }
+}
+
+function normalizeUtcOffset(value?: string): string {
+  if (!value) return ''
+  if (/^[+-]\d{2}$/.test(value)) return `${value}:00`
+  const compact = value.match(/^([+-]\d{2})(\d{2})$/)
+  if (compact) return `${compact[1]}:${compact[2]}`
+  return value
 }
 
 function extractMothboxFromNightDiskPath(params: { nightDiskPath: string }): string {

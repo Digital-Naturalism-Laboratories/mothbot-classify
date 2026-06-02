@@ -8,6 +8,7 @@ import {
 } from '~/stores/entities/night-summaries'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
+import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 
 export type SpeciesCatalogItem = {
   speciesName: string
@@ -178,7 +179,7 @@ export function buildSpeciesUsageSummary(params: {
     leafGroupIds.push(leafGroupId)
     instanceCount += count
 
-    const projectId = nights?.[leafGroupId]?.projectId
+    const projectId = resolveDatasetId(nights?.[leafGroupId])
     if (projectId) projectIds.add(projectId)
   }
 
