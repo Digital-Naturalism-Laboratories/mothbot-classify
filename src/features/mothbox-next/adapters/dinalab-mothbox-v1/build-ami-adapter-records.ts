@@ -1,4 +1,4 @@
-import { parquetReadObjects } from 'hyparquet'
+import { parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import { buildTaxonRecord } from '~/models/taxonomy/builder'
 import type { ClassificationRecord, PatchRecord, PatchSourceRecord, DeploymentRecord, CameraDayRecord } from '../../records'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
@@ -14,13 +14,17 @@ const AMI_METADATA_COLUMNS = [
   'detectionid',
   'taxonlevel',
   'label',
+  'labelid',
   'score',
+  'abovethreshold',
   'algorithm',
   'sourceimageid',
   'cropurl',
   'code',
   'year',
   'projectid',
+  'partnerid',
+  'wktposition',
   'filename',
   'deploymentid',
   'url',
@@ -31,20 +35,26 @@ const AMI_METADATA_COLUMNS = [
   'y2',
 ]
 
+const AMI_PARQUET_ROW_BATCH_SIZE = 50_000
+const AMI_CLASSIFIER_PRIORITY = ['uk-denmark-moths', 'fastai-species', 'mcc24', 'ami-csv', 'ami'] as const
 const TAXON_RANK_ORDER = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species'] as const
 const DEEPEST_RANK_FIRST = [...TAXON_RANK_ORDER].reverse()
 
-type AmiMetadataRow = {
+export type AmiMetadataRow = {
   detectionid: string
   taxonlevel?: string
   label?: string
+  labelid?: string
   score?: number
+  abovethreshold?: boolean
   algorithm?: string
   sourceimageid?: string
   cropurl?: string
   code?: string
   year?: number | string
   projectid?: string
+  partnerid?: string
+  wktposition?: string
   filename?: string
   deploymentid?: string
   url?: string
@@ -54,6 +64,7 @@ type AmiMetadataRow = {
   y1?: number
   y2?: number
   metadataPath: string
+  supplementalMetadataPath?: string
 }
 
 type AmiCrop = {
@@ -92,7 +103,7 @@ export async function buildAmiAdapterRecords(params: {
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
 
   if (!crops.length) {
-    throw new Error('No AMI processed crop images found under a _processed/ folder.')
+    throw new Error('No AMI crop images found under a _processed/ or _crops_ folder.')
   }
 
   const cropIds = new Set(crops.map((crop) => crop.detectionId))
@@ -147,7 +158,10 @@ export async function buildAmiAdapterRecords(params: {
       patch_id: crop.detectionId,
       source_type: 'ami_crop',
       source_photo_id: representative?.sourceimageid || crop.sourceFileName.replace(/\.(jpg|jpeg|png)$/i, ''),
-      source_photo_asset_path: crop.sourcePhotoRelativePath,
+      source_photo_asset_path: toPackageRelativeAssetPath({
+        sourcePrefix: packageRelativeSourcePrefix,
+        pathRelativeToSource: crop.sourcePhotoRelativePath,
+      }),
       original_patch_path: assetPath,
       source_bot_detection_id: crop.detectionId,
       metadata_path: representative?.metadataPath,
@@ -163,6 +177,14 @@ export async function buildAmiAdapterRecords(params: {
             ami_code: representative.code,
             ami_country: crop.country,
             ami_year: representative.year ?? crop.year,
+            ami_partner_id: representative.partnerid,
+            ami_wkt_position: representative.wktposition,
+            ami_source_filename: representative.filename,
+            ami_source_url: representative.url,
+            ami_label_ids: uniqueStrings(rows.map((row) => row.labelid)),
+            ami_algorithms: uniqueStrings(rows.map((row) => row.algorithm)),
+            ami_metadata_paths: metadataPathsFromAmiRows(rows),
+            ...(rows.some((row) => row.abovethreshold === true) ? { ami_above_threshold: true } : {}),
           }
         : undefined,
     })
@@ -229,7 +251,13 @@ async function readAmiMetadataRows(params: {
     parquetRows.push(...rows)
   }
 
-  if (parquetRows.length > 0) return parquetRows
+  const parquetDetectionIds = new Set(parquetRows.map((row) => row.detectionid))
+  const needsCsvSupplement =
+    parquetRows.length === 0 ||
+    parquetRows.some((row) => !row.cropurl) ||
+    [...cropIds].some((cropId) => !parquetDetectionIds.has(cropId))
+
+  if (!needsCsvSupplement) return parquetRows
 
   const csvRows: AmiMetadataRow[] = []
   for (const metadataPath of csvPaths) {
@@ -246,7 +274,10 @@ async function readAmiMetadataRows(params: {
     }))
   }
 
-  return csvRows
+  return mergeAmiPrimaryAndSupplementalRows({
+    primaryRows: parquetRows,
+    supplementalRows: csvRows,
+  })
 }
 
 async function readAmiParquetMetadataRows(params: {
@@ -260,14 +291,26 @@ async function readAmiParquetMetadataRows(params: {
     byteLength: buffer.byteLength,
     slice: async (start: number, end?: number) => buffer.slice(start, end),
   }
-  const rows = await parquetReadObjects({
-    file,
-    columns: AMI_METADATA_COLUMNS,
-  })
+  const metadata = await parquetMetadataAsync(file)
+  const rowCount = Number(metadata.num_rows ?? 0)
+  const out: AmiMetadataRow[] = []
 
-  return rows
-    .map((row) => normalizeAmiMetadataRow({ row, metadataPath }))
-    .filter((row): row is AmiMetadataRow => !!row && cropIds.has(row.detectionid))
+  for (let rowStart = 0; rowStart < rowCount; rowStart += AMI_PARQUET_ROW_BATCH_SIZE) {
+    const rows = await parquetReadObjects({
+      file,
+      metadata,
+      columns: AMI_METADATA_COLUMNS,
+      rowStart,
+      rowEnd: Math.min(rowStart + AMI_PARQUET_ROW_BATCH_SIZE, rowCount),
+    })
+
+    for (const rawRow of rows) {
+      const row = normalizeAmiMetadataRow({ row: rawRow, metadataPath })
+      if (row && cropIds.has(row.detectionid)) out.push(row)
+    }
+  }
+
+  return out
 }
 
 function readAmiCsvMetadataRows(params: {
@@ -285,13 +328,17 @@ function readAmiCsvMetadataRows(params: {
         detectionid: record.detectionid,
         taxonlevel: record.taxonlevel || (record.orderlabel ? 'order' : ''),
         label: record.label || record.orderlabel,
+        labelid: record.labelid,
         score: record.score || record.orderscore,
+        abovethreshold: record.abovethreshold,
         algorithm: record.algorithm || 'ami-csv',
         sourceimageid: record.sourceimageid,
         cropurl: record.cropurl,
         code: record.code || record.deploymentcode,
         year: record.year || record.deploymentyear,
         projectid: record.projectid,
+        partnerid: record.partnerid,
+        wktposition: record.wktposition,
         filename: sourceFileNameFromCropUrl(record.cropurl),
         deploymentid: record.deploymentid,
         url: record.url,
@@ -321,13 +368,17 @@ function normalizeAmiMetadataRow(params: {
     detectionid,
     taxonlevel: stringValue(row.taxonlevel),
     label: stringValue(row.label),
+    labelid: stringValue(row.labelid),
     score: numberValue(row.score),
+    abovethreshold: booleanValue(row.abovethreshold),
     algorithm: stringValue(row.algorithm),
     sourceimageid: stringValue(row.sourceimageid),
     cropurl: stringValue(row.cropurl),
     code: stringValue(row.code),
     year: stringValue(row.year) || numberValue(row.year),
     projectid: stringValue(row.projectid),
+    partnerid: stringValue(row.partnerid),
+    wktposition: stringValue(row.wktposition),
     filename: stringValue(row.filename),
     deploymentid: stringValue(row.deploymentid),
     url: stringValue(row.url),
@@ -337,6 +388,56 @@ function normalizeAmiMetadataRow(params: {
     y1: numberValue(row.y1),
     y2: numberValue(row.y2),
     metadataPath,
+  }
+}
+
+export function mergeAmiPrimaryAndSupplementalRows(params: {
+  primaryRows: AmiMetadataRow[]
+  supplementalRows: AmiMetadataRow[]
+}): AmiMetadataRow[] {
+  const { primaryRows, supplementalRows } = params
+  if (!primaryRows.length) return supplementalRows
+  if (!supplementalRows.length) return primaryRows
+
+  const supplementalByDetectionId = groupRowsByDetectionId(supplementalRows)
+  const primaryDetectionIds = new Set(primaryRows.map((row) => row.detectionid))
+  const merged = primaryRows.map((row) => {
+    const supplemental = supplementalByDetectionId.get(row.detectionid)?.[0]
+    return supplemental ? mergeMissingAmiRowFields({ primary: row, supplemental }) : row
+  })
+
+  for (const supplemental of supplementalRows) {
+    if (!primaryDetectionIds.has(supplemental.detectionid)) merged.push(supplemental)
+  }
+
+  return merged
+}
+
+function mergeMissingAmiRowFields(params: {
+  primary: AmiMetadataRow
+  supplemental: AmiMetadataRow
+}): AmiMetadataRow {
+  const { primary, supplemental } = params
+  return {
+    ...primary,
+    labelid: primary.labelid ?? supplemental.labelid,
+    abovethreshold: primary.abovethreshold ?? supplemental.abovethreshold,
+    sourceimageid: primary.sourceimageid ?? supplemental.sourceimageid,
+    cropurl: primary.cropurl ?? supplemental.cropurl,
+    code: primary.code ?? supplemental.code,
+    year: primary.year ?? supplemental.year,
+    projectid: primary.projectid ?? supplemental.projectid,
+    partnerid: primary.partnerid ?? supplemental.partnerid,
+    wktposition: primary.wktposition ?? supplemental.wktposition,
+    filename: primary.filename ?? supplemental.filename,
+    deploymentid: primary.deploymentid ?? supplemental.deploymentid,
+    url: primary.url ?? supplemental.url,
+    timestamp: primary.timestamp ?? supplemental.timestamp,
+    x1: primary.x1 ?? supplemental.x1,
+    x2: primary.x2 ?? supplemental.x2,
+    y1: primary.y1 ?? supplemental.y1,
+    y2: primary.y2 ?? supplemental.y2,
+    supplementalMetadataPath: primary.supplementalMetadataPath ?? supplemental.metadataPath,
   }
 }
 
@@ -375,6 +476,7 @@ function classificationFromAmiRows(params: {
         extras: {
           ami_detection_id: patchId,
           ami_algorithms: uniqueStrings(rows.map((row) => row.algorithm)),
+          ami_label_ids: uniqueStrings(rows.map((row) => row.labelid)),
           ami_selected_algorithm: primary.algorithm,
         },
       },
@@ -403,22 +505,25 @@ function normalizeAmiTaxonSpecies(params: {
   speciesLabel?: string
   genus?: string
 }) {
-  const { taxon, speciesLabel, genus } = params
-  if (!taxon || !speciesLabel || !genus) return taxon
+  const { taxon, speciesLabel } = params
+  if (!taxon || !speciesLabel) return taxon
 
-  const normalizedSpecies = speciesLabel.trim()
-  const normalizedGenus = genus.trim()
-  const prefix = `${normalizedGenus} `
-  if (!normalizedSpecies.toLowerCase().startsWith(prefix.toLowerCase())) return taxon
-
-  const epithet = normalizedSpecies.slice(prefix.length).trim()
-  if (!epithet) return taxon
+  const parsed = parseBinomialSpeciesLabel(speciesLabel)
+  if (!parsed) return taxon
 
   return {
     ...taxon,
-    scientificName: normalizedSpecies,
-    species: epithet,
+    scientificName: `${parsed.genus} ${parsed.epithet}`,
+    genus: parsed.genus,
+    species: parsed.epithet,
   }
+}
+
+function parseBinomialSpeciesLabel(value: string) {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  const match = normalized.match(/^([A-Z][A-Za-z-]+)\s+([a-z][A-Za-z-]+)\b/)
+  if (!match?.[1] || !match?.[2]) return null
+  return { genus: match[1], epithet: match[2] }
 }
 
 function taxonFieldsFromAmiRows(rows: AmiMetadataRow[]) {
@@ -452,11 +557,19 @@ function selectAmiClassifierRows(rows: AmiMetadataRow[]) {
               .map((row) => row.score ?? Number.NEGATIVE_INFINITY),
           )
         : Number.NEGATIVE_INFINITY
-      return { algorithm, rows: algorithmRows, rankCount: ranks.length, deepestRankIndex, primaryScore }
+      return {
+        algorithm,
+        rows: algorithmRows,
+        rankCount: ranks.length,
+        deepestRankIndex,
+        primaryScore,
+        classifierPriority: amiClassifierPriority(algorithm),
+      }
     })
     .sort((a, b) => {
-      if (a.rankCount !== b.rankCount) return b.rankCount - a.rankCount
       if (a.deepestRankIndex !== b.deepestRankIndex) return b.deepestRankIndex - a.deepestRankIndex
+      if (a.classifierPriority !== b.classifierPriority) return a.classifierPriority - b.classifierPriority
+      if (a.rankCount !== b.rankCount) return b.rankCount - a.rankCount
       if (a.primaryScore !== b.primaryScore) return b.primaryScore - a.primaryScore
       return a.algorithm.localeCompare(b.algorithm)
     })
@@ -464,16 +577,40 @@ function selectAmiClassifierRows(rows: AmiMetadataRow[]) {
   return ranked[0]?.rows ?? rows
 }
 
+function amiClassifierPriority(algorithm: string) {
+  const index = AMI_CLASSIFIER_PRIORITY.indexOf(algorithm as (typeof AMI_CLASSIFIER_PRIORITY)[number])
+  return index >= 0 ? index : AMI_CLASSIFIER_PRIORITY.length
+}
+
 function parseAmiCropPath(relativePath: string): AmiCrop | null {
   const normalized = relativePath.replaceAll('\\', '/')
   const parts = normalized.split('/').filter(Boolean)
-  const processedIndex = parts.findIndex((part) => part.toLowerCase() === '_processed')
-  if (processedIndex < 1) return null
 
   const patchFileName = parts[parts.length - 1] ?? ''
   const match = patchFileName.match(/^(.*)_crop_([0-9a-fA-F-]+)\.(jpg|jpeg|png)$/i)
   if (!match) return null
 
+  const processedIndex = parts.findIndex((part) => part.toLowerCase() === '_processed')
+  if (processedIndex >= 1) {
+    return parseAmiProcessedCropPath({ normalized, parts, processedIndex, patchFileName, match })
+  }
+
+  const cropsIndex = parts.findIndex((part) => part.toLowerCase() === '_crops_')
+  if (cropsIndex >= 2) {
+    return parseAmiCropsCropPath({ normalized, parts, cropsIndex, patchFileName, match })
+  }
+
+  return null
+}
+
+function parseAmiProcessedCropPath(params: {
+  normalized: string
+  parts: string[]
+  processedIndex: number
+  patchFileName: string
+  match: RegExpMatchArray
+}): AmiCrop | null {
+  const { normalized, parts, processedIndex, patchFileName, match } = params
   const projectId = parts[processedIndex - 1]
   const year = parts[processedIndex + 1]
   const country = parts[processedIndex + 2]
@@ -482,6 +619,36 @@ function parseAmiCropPath(relativePath: string): AmiCrop | null {
 
   const sourceFileName = `${match[1]}.${match[3]}`
   const sourcePhotoRelativePath = joinRelative(...parts.slice(0, processedIndex), year, country, code, sourceFileName)
+
+  return {
+    relativePath: normalized,
+    patchFileName,
+    detectionId: match[2],
+    projectId,
+    year,
+    country,
+    code,
+    sourceFileName,
+    sourcePhotoRelativePath,
+  }
+}
+
+function parseAmiCropsCropPath(params: {
+  normalized: string
+  parts: string[]
+  cropsIndex: number
+  patchFileName: string
+  match: RegExpMatchArray
+}): AmiCrop | null {
+  const { normalized, parts, cropsIndex, patchFileName, match } = params
+  const projectId = parts[cropsIndex - 2]
+  const year = parts[cropsIndex - 1]
+  const country = parts[cropsIndex + 1]
+  const code = parts[cropsIndex + 2]
+  if (!projectId || !year || !country || !code) return null
+
+  const sourceFileName = `${match[1]}.${match[3]}`
+  const sourcePhotoRelativePath = joinRelative(...parts.slice(0, cropsIndex), country, code, sourceFileName)
 
   return {
     relativePath: normalized,
@@ -549,6 +716,10 @@ function cropPointsFromAmiRow(row?: AmiMetadataRow) {
   ]
 }
 
+function metadataPathsFromAmiRows(rows: AmiMetadataRow[]) {
+  return uniqueStrings(rows.flatMap((row) => [row.metadataPath, row.supplementalMetadataPath]))
+}
+
 function sourceFileNameFromCropUrl(value?: string) {
   const fileName = value?.split('/').pop() ?? ''
   const match = fileName.match(/^(.*)_crop_[^.]+\.(jpg|jpeg|png)$/i)
@@ -613,9 +784,12 @@ function parseCsvRows(text: string) {
 }
 
 function stringValue(value: unknown) {
-  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
   if (typeof value === 'number' || typeof value === 'bigint') return String(value)
-  return ''
+  return undefined
 }
 
 function numberValue(value: unknown) {
@@ -624,6 +798,16 @@ function numberValue(value: unknown) {
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function booleanValue(value: unknown) {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string' && value.trim()) {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
   }
   return undefined
 }

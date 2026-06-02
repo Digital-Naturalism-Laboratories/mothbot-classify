@@ -47,10 +47,7 @@ export async function classifyDatasetFolder(params: {
 
   const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
   const metadataPaths = await findRelativeFilesUnderDirectory(directory, (name) => isParquetFileName(name) || isCsvFileName(name))
-  if (
-    metadataPaths.length > 0 &&
-    imagePaths.some((path) => isUnderProcessedMirror(path) && /_crop_[^/]+\.(jpg|jpeg|png)$/i.test(path))
-  ) {
+  if (metadataPaths.length > 0 && imagePaths.some(isAmiCropImagePath)) {
     return 'ami'
   }
 
@@ -76,4 +73,10 @@ export function isUnderPackageSource(relativePath: string) {
 export function isUnderProcessedMirror(relativePath: string) {
   const parts = normalizeIngestRelativePath(relativePath).toLowerCase().split('/').filter(Boolean)
   return parts.includes('_processed')
+}
+
+export function isAmiCropImagePath(relativePath: string) {
+  if (!/_crop_[^/]+\.(jpg|jpeg|png)$/i.test(relativePath)) return false
+  const parts = normalizeIngestRelativePath(relativePath).toLowerCase().split('/').filter(Boolean)
+  return parts.includes('_processed') || parts.includes('_crops_')
 }
