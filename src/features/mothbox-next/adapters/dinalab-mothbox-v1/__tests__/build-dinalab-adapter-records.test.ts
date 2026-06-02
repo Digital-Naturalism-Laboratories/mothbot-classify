@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildDinalabMothboxV1Records } from '../build-dinalab-adapter-records'
-import { buildAmiAdapterRecords } from '../build-ami-adapter-records'
+import { buildAmiAdapterRecords, mergeAmiPrimaryAndSupplementalRows } from '../build-ami-adapter-records'
 import { buildPatchImagesOnlyRecords } from '../build-patch-images-only-records'
 import { runDinalabMothboxV1Adapter } from '../run-adapter'
 import { loadMothboxNextPackageData } from '../../../load-package-data'
@@ -412,6 +412,55 @@ describe('buildAmiAdapterRecords', () => {
       family: 'Crambidae',
       genus: 'Agriphila',
       species: 'geniculea',
+    })
+  })
+
+  it('keeps parquet taxonomy primary while supplementing missing CSV crop provenance', () => {
+    const detectionId = '0403014a-ef2b-40ef-bdc1-2d72c55d1b3d'
+    const merged = mergeAmiPrimaryAndSupplementalRows({
+      primaryRows: [
+        {
+          detectionid: detectionId,
+          taxonlevel: 'species',
+          label: 'Agriphila geniculea',
+          score: 0.13,
+          algorithm: 'fastai-species',
+          sourceimageid: 'source-from-parquet',
+          metadataPath: 'snapshot.parquet',
+        },
+      ],
+      supplementalRows: [
+        {
+          detectionid: detectionId,
+          taxonlevel: 'order',
+          label: 'Diptera Brachycera',
+          score: 13.27,
+          algorithm: 'ami-csv',
+          sourceimageid: 'source-from-csv',
+          cropurl: 'https://example.test/crop.jpg',
+          x1: 10,
+          x2: 30,
+          y1: 20,
+          y2: 50,
+          metadataPath: 'snapshot.csv',
+        },
+      ],
+    })
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      detectionid: detectionId,
+      taxonlevel: 'species',
+      label: 'Agriphila geniculea',
+      algorithm: 'fastai-species',
+      sourceimageid: 'source-from-parquet',
+      cropurl: 'https://example.test/crop.jpg',
+      supplementalMetadataPath: 'snapshot.csv',
+      x1: 10,
+      x2: 30,
+      y1: 20,
+      y2: 50,
+      metadataPath: 'snapshot.parquet',
     })
   })
 

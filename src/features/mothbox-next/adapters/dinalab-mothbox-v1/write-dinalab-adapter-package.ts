@@ -97,7 +97,7 @@ export async function writeDinalabMothboxV1Package(params: {
     },
     classification_sources: [
       '03_classifications/_bot.ndjson',
-      ...(built.humanRows.length ? [humanClassifierPath] : []),
+      humanClassifierPath,
     ],
   }
 
