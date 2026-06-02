@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { cp, mkdtemp, readFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
 import { detectionsStore, resetDetections } from '~/stores/entities/detections'
@@ -134,12 +134,23 @@ describe('persist round-trip (L4)', () => {
     const before = detectionsStore.get()?.[foliumPatchId]
     expect(before?.detectedBy).toBe('user')
     expect(before?.taxon?.species).toBe('folium')
+    expect(Array.isArray(before?.points)).toBe(true)
+    const beforePoints = before?.points
+    detectionsStore.set({
+      ...(detectionsStore.get() || {}),
+      [foliumPatchId]: {
+        ...before!,
+        botClassifierId: 'stale-classifier',
+      },
+    })
 
     await resetDetections({ detectionIds: [foliumPatchId] })
 
     const afterReset = detectionsStore.get()?.[foliumPatchId]
     expect(afterReset?.detectedBy).toBe('auto')
     expect(afterReset?.taxon?.order).toBe('Diptera')
+    expect(afterReset?.botClassifierId).toBe('Mothbot_yolo11m_4500_imgsz1600_b1_2024-01-18.pt')
+    expect(afterReset?.points).toEqual(beforePoints)
 
     const writer = createNodePackageTextWriter(tempRoot)
     const leafGroupId = afterReset?.leafGroupId
@@ -149,5 +160,56 @@ describe('persist round-trip (L4)', () => {
     const humanText = await readFile(userPath, 'utf8')
     const humanRows = parseClassificationRecords(humanText)
     expect(humanRows.some((row) => row.patch_id === foliumPatchId)).toBe(false)
+  })
+
+  it('preserves human rows from other leaf groups when saving one leaf group', async () => {
+    const src = fixturePackageRoot('04_dinacon_lightweight_substrate')
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'mothbox-next-'))
+    await cp(src, tempRoot, { recursive: true })
+
+    const walked = await walkFixtureFiles(tempRoot)
+    const indexed = await Promise.all(
+      walked.map(async (f) => {
+        const bytes = await readFile(path.join(tempRoot, f.path))
+        const textContent = bytes.toString('utf8')
+        return {
+          path: f.path,
+          name: f.name,
+          size: f.size,
+          file: { text: async () => textContent } as File,
+        }
+      }),
+    )
+    await ingestMothboxNextPackageFromIndexedFiles({ files: indexed as any })
+    userSessionStore.set({ initials: 'bf' })
+
+    const current = detectionsStore.get() || {}
+    const currentLeafPatchId = 'hopeCobo_2025_06_22__04_58_06_HDR0_0_Mothbot_yolo11m_4500_imgsz1600_b1_2024-01-18.pt'
+    const otherLeafPatchId = 'grupoKite_2025_06_23__04_56_19_HDR0_0_Mothbot_last.pt'
+    const leafGroupId = current[currentLeafPatchId]?.leafGroupId
+    expect(leafGroupId).toBeTruthy()
+    expect(current[otherLeafPatchId]?.leafGroupId).not.toBe(leafGroupId)
+
+    const classifierPath = path.join(tempRoot, '03_classifications/bf.ndjson')
+    const existingText = await readFile(classifierPath, 'utf8')
+    const otherLeafRow: ClassificationRecord = {
+      patch_id: otherLeafPatchId,
+      classifier_id: 'bf',
+      classifier_type: 'human',
+      classification_type: 'taxon',
+      label: 'Coleoptera',
+      taxon: { kingdom: 'Animalia', phylum: 'Arthropoda', class: 'Insecta', order: 'Coleoptera', scientificName: 'Coleoptera' },
+      morphospecies: null,
+      is_error: false,
+      classified_at: Date.now() + 10_000_000_000_000,
+    }
+    await writeFile(classifierPath, `${existingText.trim()}\n${JSON.stringify(otherLeafRow)}\n`)
+
+    const writer = createNodePackageTextWriter(tempRoot)
+    await persistPackageClassifications({ writer, leafGroupId })
+
+    const humanRows = parseClassificationRecords(await readFile(classifierPath, 'utf8'))
+    expect(humanRows.some((row) => row.patch_id === currentLeafPatchId)).toBe(true)
+    expect(humanRows.some((row) => row.patch_id === otherLeafPatchId)).toBe(true)
   })
 })

@@ -218,6 +218,7 @@ export async function applyLoadedPackageToStores(params: {
     deployments: normalized.deployments,
     cameraDays: normalized.cameraDays,
     resolvedClassifications: loaded.resolvedClassifications,
+    classificationFiles: loaded.classificationFiles,
     indexedByAssetPath,
     sourceResolutionByPath,
     packageRoot: loaded.packageRoot,

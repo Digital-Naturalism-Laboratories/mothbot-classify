@@ -12,6 +12,7 @@ import { Dialog, DialogContent } from '~/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 import { buildLeafGroupLinkParams, isSingleLeafHierarchy } from '~/features/mothbox-next/hierarchy-routes'
 import { useCatalogScopeContext } from '~/features/catalogues/shared/catalog-scope-context'
 import { getLabelForMorphoKey } from '~/features/catalogues/shared/details-common'
@@ -394,7 +395,7 @@ function handleLoadInNight(params: {
 
   const link = buildLeafGroupLinkParams({
     folderName: activeDatasetFolderNameStore.get(),
-    projectId: nightEntity.projectId,
+    projectId: resolveDatasetId(nightEntity) ?? '',
     deploymentId: nightEntity.deploymentId,
     night: nightEntity,
     singleLeafDataset: isSingleLeafHierarchy(activeHierarchyStore.get()),
@@ -449,7 +450,7 @@ function computePrimaryProjectIdForMorphoKey(params: {
     const count = summary?.morphoCounts?.[normalizedMorphoKey]
     if (!count) continue
 
-    const projectId = nights?.[leafGroupId]?.projectId
+    const projectId = resolveDatasetId(nights?.[leafGroupId])
     if (projectId) projectIds.add(projectId)
   }
 
@@ -468,4 +469,3 @@ function findFirstNightForMorphoKey(params: { summaries?: Record<string, LeafGro
   out.sort()
   return out[0]
 }
-

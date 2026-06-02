@@ -236,6 +236,75 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
       expect(row.area).toBe('')
     })
 
+    it('should export event date and time from patch capture time when photo id is not timestamp-shaped', () => {
+      const detection: DetectionEntity = {
+        ...BASE_DETECTION,
+        label: 'Diptera',
+        photoId: '73f3569e-f78c-4091-9214-ec757b0102e2.jpg',
+      }
+
+      const row = buildDarwinShapeFromDetection({
+        detection,
+        ...BASE_PARAMS,
+        patch: {
+          ...BASE_PATCH,
+          capturedAt: '2025-05-01T23:19:59.000Z',
+        } as any,
+        photo: {
+          id: '73f3569e-f78c-4091-9214-ec757b0102e2.jpg',
+        } as any,
+      })
+
+      expect(row.verbatimEventDate).toBe('2025-05-01T23:19:59.000Z')
+      expect(row.eventDate).toBe('2025-05-01')
+      expect(row.eventTime).toBe('23:19:59')
+    })
+
+    it('should preserve timezone offsets from ISO patch capture times', () => {
+      const detection: DetectionEntity = {
+        ...BASE_DETECTION,
+        label: 'Diptera',
+        photoId: '73f3569e-f78c-4091-9214-ec757b0102e2.jpg',
+      }
+
+      const row = buildDarwinShapeFromDetection({
+        detection,
+        ...BASE_PARAMS,
+        patch: {
+          ...BASE_PATCH,
+          capturedAt: '2025-05-01T23:19:59+02:00',
+        } as any,
+        photo: {
+          id: '73f3569e-f78c-4091-9214-ec757b0102e2.jpg',
+        } as any,
+      })
+
+      expect(row.eventDate).toBe('2025-05-01')
+      expect(row.eventTime).toBe('23:19:59')
+      expect(row.UTCOFFSET).toBe('+02:00')
+    })
+
+    it('should export the bot classifier id when patch ids are opaque detection ids', () => {
+      const detection: DetectionEntity = {
+        ...BASE_DETECTION,
+        id: '11f4a909-1d1f-470b-8d99-9d2f473df1dc',
+        patchId: '11f4a909-1d1f-470b-8d99-9d2f473df1dc',
+        label: 'Scythris sinensis',
+        botClassifierId: 'fastai-species',
+      }
+
+      const row = buildDarwinShapeFromDetection({
+        detection,
+        ...BASE_PARAMS,
+        patch: {
+          id: '11f4a909-1d1f-470b-8d99-9d2f473df1dc',
+          imageFile: { path: 'abms/_processed/crop.jpg' },
+        } as any,
+      })
+
+      expect(row.detectionBy).toBe('fastai-species')
+    })
+
     it('should populate all taxonomy columns correctly with full species', () => {
       const detection: DetectionEntity = {
         ...BASE_DETECTION,

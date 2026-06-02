@@ -1,4 +1,4 @@
-import { detectionsStore, getIdentifiedDetectionsForLeafGroup } from '~/stores/entities/detections'
+import { detectionsStore, getDetectionsForLeafGroup, getIdentifiedDetectionsForLeafGroup } from '~/stores/entities/detections'
 import type { DetectionEntity } from '~/models/detection.types'
 import { classificationFromDetection } from '../classification-to-detection'
 import { mergeClassifierRowsByPatchId } from './merge-classifier-rows'
@@ -36,6 +36,7 @@ export async function persistPackageClassifications(params: {
 
   const updates = collectHumanClassificationUpdates({ leafGroupId, classifierId })
   const desiredPatchIds = new Set(updates.map((row) => row.patch_id).filter(Boolean))
+  const pruneScopePatchIds = leafGroupId ? collectPatchIdsForLeafGroup({ leafGroupId }) : null
 
   let existing: ClassificationRecord[] = []
   if (await writer.fileExists(relClassifierPath)) {
@@ -43,10 +44,15 @@ export async function persistPackageClassifications(params: {
     existing = parseClassificationRecords(text)
   }
 
-  const hasStaleHumanRows = existing.some((row) => row.patch_id && !desiredPatchIds.has(row.patch_id))
+  const shouldPruneExistingRow = (row: ClassificationRecord) =>
+    row.patch_id &&
+    !desiredPatchIds.has(row.patch_id) &&
+    (!pruneScopePatchIds || pruneScopePatchIds.has(row.patch_id))
+
+  const hasStaleHumanRows = existing.some(shouldPruneExistingRow)
   if (!updates.length && !hasStaleHumanRows) return
 
-  const prunedExisting = existing.filter((row) => !row.patch_id || desiredPatchIds.has(row.patch_id))
+  const prunedExisting = existing.filter((row) => !shouldPruneExistingRow(row))
   const merged = mergeClassifierRowsByPatchId({ existing: prunedExisting, updates })
   await writer.writeText(relClassifierPath, serializeNdjsonLines(merged))
   await rebuildCurrentClassificationsCacheFromDisk({ writer, activePackage: active })
@@ -72,6 +78,10 @@ function collectHumanClassificationUpdates(params: { leafGroupId?: string; class
 function getAllIdentifiedDetections(): DetectionEntity[] {
   const all = detectionsStore.get() || {}
   return Object.values(all).filter((d) => d.detectedBy === 'user')
+}
+
+function collectPatchIdsForLeafGroup(params: { leafGroupId: string }): Set<string> {
+  return new Set(getDetectionsForLeafGroup(params.leafGroupId).map((detection) => detection.patchId).filter(Boolean))
 }
 
 export async function rebuildCurrentClassificationsCacheFromDisk(params: {

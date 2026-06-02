@@ -29,6 +29,7 @@ export type DetectionEntity = {
   identifiedAt?: number
   isError?: boolean
   clusterId?: number
+  botClassifierId?: string
   // When user types free text identification, store the morphospecies string
   morphospecies?: string
   speciesListId?: string
@@ -37,4 +38,3 @@ export type DetectionEntity = {
   originalMothboxLabel?: string
   classificationType?: DetectionClassificationType
 }
-

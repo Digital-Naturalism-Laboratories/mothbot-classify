@@ -1,6 +1,7 @@
 import type { PatchRecord, PatchSourceRecord, ClassificationRecord } from '../../records'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
 import type { DinalabAdapterIO, DinalabAdapterProgressCallback } from './adapter-io'
+import { imageMediaTypeFromPath } from './adapter-media-type'
 import { formatProgressFraction } from './adapter-progress'
 import { defaultLeafCameraDayId } from '~/features/mothbox-next/hierarchy-manifest'
 import { FLAT_PATCH_IMAGES_LEAF_LABEL } from '~/features/mothbox-next/normalize-flat-patch-images-records'
@@ -14,7 +15,6 @@ import { basenameRelative } from './adapter-path-utils'
 import {
   packageSourceLocationLabel,
   patchIdFromImageFileName,
-  photoBaseFromPatchFileName,
   resolvePatchAssetInPackage,
 } from './adapter-patch-assets'
 
@@ -54,6 +54,7 @@ export async function buildPatchImagesOnlyRecords(params: {
   const patches: PatchRecord[] = []
   const patchSources: PatchSourceRecord[] = []
   const cameraDayId = defaultLeafCameraDayId(datasetId)
+  const usedPatchIds = new Set<string>()
 
   for (let imageIndex = 0; imageIndex < imagePaths.length; imageIndex++) {
     const patchRelativePath = imagePaths[imageIndex]
@@ -69,7 +70,11 @@ export async function buildPatchImagesOnlyRecords(params: {
     }
 
     const patchFileName = basenameRelative(patchRelativePath)
-    const patchId = patchIdFromImageFileName(patchFileName)
+    const patchId = uniquePatchImageOnlyId({
+      basePatchId: patchIdFromImageFileName(patchFileName),
+      patchRelativePath,
+      usedPatchIds,
+    })
 
     const assetPath = await resolvePatchAssetInPackage({
       io,
@@ -79,20 +84,18 @@ export async function buildPatchImagesOnlyRecords(params: {
       packageRelativeSourcePrefix,
     })
 
-    const photoBase = photoBaseFromPatchFileName(patchFileName)
-
     patches.push({
       patch_id: patchId,
       dataset_id: datasetId,
       asset_path: assetPath,
-      media_type: 'image/jpeg',
+      media_type: imageMediaTypeFromPath(patchFileName),
       camera_day_id: cameraDayId,
     })
 
     patchSources.push({
       patch_id: patchId,
       source_type: 'patch_image_only',
-      source_photo_id: photoBase || patchId,
+      source_photo_id: patchId,
       original_patch_path: toPackageRelativeAssetPath({
         sourcePrefix: packageRelativeSourcePrefix,
         pathRelativeToSource: patchRelativePath,
@@ -134,4 +137,33 @@ export async function buildPatchImagesOnlyRecords(params: {
     deployments,
     cameraDays,
   }
+}
+
+function uniquePatchImageOnlyId(params: {
+  basePatchId: string
+  patchRelativePath: string
+  usedPatchIds: Set<string>
+}) {
+  const { basePatchId, patchRelativePath, usedPatchIds } = params
+  if (!usedPatchIds.has(basePatchId)) {
+    usedPatchIds.add(basePatchId)
+    return basePatchId
+  }
+
+  const scopedBase = `${basePatchId}@${patchRelativePath
+    .replaceAll('\\', '/')
+    .replace(/\.(jpg|jpeg|png)$/i, '')
+    .split('/')
+    .filter(Boolean)
+    .join('__')}`
+  let candidate = scopedBase
+  let index = 2
+
+  while (usedPatchIds.has(candidate)) {
+    candidate = `${scopedBase}__${index}`
+    index += 1
+  }
+
+  usedPatchIds.add(candidate)
+  return candidate
 }

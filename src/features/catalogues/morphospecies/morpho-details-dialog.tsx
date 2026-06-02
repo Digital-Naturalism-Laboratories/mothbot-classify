@@ -18,6 +18,7 @@ import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { TaxonomyDisplay, UsageStatsDisplay, ProjectsListDisplay, NightsListDisplay } from '~/features/catalogues/shared/details-common'
 import { buildMorphoBulkIdentifyConfirmText, buildMorphoBulkIdentifySuccessText } from './morpho-bulk-identify-copy'
 import { buildFallbackPreviewPairs, buildSummaryPreviewPairs, selectMorphoPreviewPairs } from './morpho-preview'
+import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 
 export type MorphoSpeciesDetailsDialogProps = PropsWithChildren<{
   morphoKey: string
@@ -48,7 +49,7 @@ export function MorphoSpeciesDetailsDialog(props: MorphoSpeciesDetailsDialogProp
       const count = summary?.morphoCounts?.[normalizedMorphoKey]
       if (!count) continue
       leafGroupIds.push(leafGroupId)
-      const projectId = nights?.[leafGroupId]?.projectId
+      const projectId = resolveDatasetId(nights?.[leafGroupId])
       if (projectId) projectIds.add(projectId)
     }
     return { leafGroupIds, projectIds: Array.from(projectIds), previewPairs }

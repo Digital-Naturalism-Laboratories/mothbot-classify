@@ -9,6 +9,8 @@ export type PatchRecord = {
   captured_at?: string
   deployment_id?: string
   camera_day_id?: string
+  cluster_id?: number
+  clustered_at?: string
 }
 
 export type PatchSourceRecord = {
@@ -20,6 +22,8 @@ export type PatchSourceRecord = {
   original_bot_detection_path?: string
   source_bot_detection_id?: string
   crop_points?: number[][]
+  crop_direction?: number
+  crop_shape_type?: string
   metadata_path?: string
   source_image_id?: string
   source_photo_url?: string

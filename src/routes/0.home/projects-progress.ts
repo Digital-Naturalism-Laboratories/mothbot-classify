@@ -1,4 +1,5 @@
 import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
+import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import { buildLeafGroupSummary, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 
@@ -73,7 +74,8 @@ function rollupProgressFromLeafGroups(params: {
     const progress = byLeafGroup[night.id] ?? { total: 0, identified: 0 }
     if (night.deploymentId) addProgressCounts({ bucket: byDeployment, id: night.deploymentId, progress })
     if (night.siteId) addProgressCounts({ bucket: bySite, id: night.siteId, progress })
-    if (night.projectId) addProgressCounts({ bucket: byProject, id: night.projectId, progress })
+    const datasetId = resolveDatasetId(night)
+    if (datasetId) addProgressCounts({ bucket: byProject, id: datasetId, progress })
   }
 
   return { byDeployment, bySite, byProject }
