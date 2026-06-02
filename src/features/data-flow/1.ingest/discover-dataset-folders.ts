@@ -67,7 +67,7 @@ export async function discoverDatasetFoldersUnderRoot(
       }
 
       const kind = await classifyDatasetFolder({ directory, folderName })
-      if (kind === 'legacy-root' || kind === 'source-only' || kind === 'patch-images-only') {
+      if (kind !== 'package' && kind !== 'skip') {
         return { package: null, pending: { folderName, kind } }
       }
 

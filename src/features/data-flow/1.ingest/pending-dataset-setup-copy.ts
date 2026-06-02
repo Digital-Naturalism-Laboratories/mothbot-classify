@@ -40,7 +40,7 @@ export function buildPendingDatasetSetupCopy(params: {
     return {
       title,
       lead: `“${folderNames[0]}” is in your datasets folder but is not ready to open yet.`,
-      detail: 'Setup indexes detections in place and adds it to the sidebar.',
+      detail: 'Setup indexes detections and processed patches in place, then adds it to the sidebar.',
       confirmLabel: 'Set up',
     }
   }
@@ -48,7 +48,7 @@ export function buildPendingDatasetSetupCopy(params: {
   return {
     title,
     lead: `${count} folders in your datasets directory are not ready to open yet.`,
-    detail: 'Setup indexes detections in place and adds them to the sidebar.',
+    detail: 'Setup indexes detections and processed patches in place, then adds them to the sidebar.',
     confirmLabel: 'Set up',
   }
 }

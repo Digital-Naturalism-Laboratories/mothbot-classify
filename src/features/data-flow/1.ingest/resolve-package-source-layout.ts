@@ -34,6 +34,14 @@ export async function resolvePackageSourceLayout(params: {
     }
   }
 
+  if (kind === 'mothbox-processed' || kind === 'ami') {
+    return {
+      sourceHandle: packageHandle,
+      packageRelativeSourcePrefix: '',
+      layout: 'in_place',
+    }
+  }
+
   const legacyRoot =
     kind === 'patch-images-only'
       ? await resolveLegacyContentRootHandleFromPaths({

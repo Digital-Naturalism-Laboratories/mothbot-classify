@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -91,13 +92,27 @@ function runAdapterLayer(): LayerResult {
     return { layer: 'L2', status: 'fail', durationMs: 0, message: proc.stderr || proc.stdout }
   }
 
-  const validator = path.join(process.env.HOME || '', '.agents/skills/dataset-adapter/scripts/validate_adapter_output.py')
+  const validator = resolveAdapterValidator()
+  if (!validator) {
+    return { layer: 'L2', status: 'skip', durationMs: 0, message: 'dataset-adapter validator not present' }
+  }
+
   const py = spawnSync('python3', [validator, miniSource], { stdio: 'pipe', encoding: 'utf8' })
   if (py.status !== 0) {
     return { layer: 'L2', status: 'fail', durationMs: 0, message: py.stderr || py.stdout }
   }
 
   return { layer: 'L2', status: 'pass', durationMs: 0 }
+}
+
+function resolveAdapterValidator(): string | null {
+  const home = process.env.HOME || ''
+  const candidates = [
+    path.join(process.cwd(), '.agents/skills/dataset-adapter/scripts/validate_adapter_output.py'),
+    home ? path.join(home, '.agents/skills/dataset-adapter/scripts/validate_adapter_output.py') : '',
+  ].filter(Boolean)
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null
 }
 
 main()

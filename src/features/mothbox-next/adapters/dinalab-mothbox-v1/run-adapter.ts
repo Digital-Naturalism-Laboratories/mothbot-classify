@@ -2,6 +2,7 @@ import type { DinalabAdapterIO, DinalabAdapterResult, DinalabAdapterProgressCall
 import { formatProgressFraction } from './adapter-progress'
 import { buildDinalabMothboxV1Records } from './build-dinalab-adapter-records'
 import { buildPatchImagesOnlyRecords } from './build-patch-images-only-records'
+import { buildAmiAdapterRecords } from './build-ami-adapter-records'
 import type { DatasetFolderKind } from '~/features/data-flow/1.ingest/classify-dataset-folder'
 import { writeDinalabMothboxV1Package } from './write-dinalab-adapter-package'
 import { PACKAGE_ARCHIVE_DIR } from '~/features/data-flow/1.ingest/reserved-paths'
@@ -45,7 +46,13 @@ export async function runDinalabMothboxV1Adapter(params: {
   const built =
     folderKind === 'patch-images-only'
       ? await buildPatchImagesOnlyRecords(buildParams)
-      : await buildDinalabMothboxV1Records({ ...buildParams, humanClassifierId })
+      : folderKind === 'ami'
+        ? await buildAmiAdapterRecords(buildParams)
+        : await buildDinalabMothboxV1Records({
+            ...buildParams,
+            humanClassifierId,
+            processedMirrorRoot: folderKind === 'mothbox-processed' ? '_processed' : undefined,
+          })
 
   if (archiveSourceTree && !retainPatchesInSource) {
     await archiveLegacySourceTree({ io, onProgress, progressMessage })

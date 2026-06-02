@@ -21,6 +21,7 @@ export function createBrowserDinalabAdapterIO(params: {
     source: {
       exists: (relativePath) => fileExistsAt(sourceHandle, relativePath),
       readText: (relativePath) => readTextFile(sourceHandle, relativePath),
+      readBinary: async (relativePath) => (await readFileBlob(sourceHandle, relativePath)).arrayBuffer(),
       findFiles: (predicate) => findRelativeFilesUnderDirectory(sourceHandle, predicate),
     },
     package: {

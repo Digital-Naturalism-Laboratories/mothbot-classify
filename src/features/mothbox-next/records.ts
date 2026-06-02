@@ -20,6 +20,11 @@ export type PatchSourceRecord = {
   original_bot_detection_path?: string
   source_bot_detection_id?: string
   crop_points?: number[][]
+  metadata_path?: string
+  source_image_id?: string
+  source_photo_url?: string
+  crop_url?: string
+  source_metadata?: Record<string, unknown>
 }
 
 export type DeploymentRecord = {

@@ -1,6 +1,7 @@
 export type DinalabAdapterSourceIO = {
   exists: (relativePath: string) => Promise<boolean>
   readText: (relativePath: string) => Promise<string>
+  readBinary: (relativePath: string) => Promise<ArrayBuffer>
   findFiles: (predicate: (fileName: string) => boolean) => Promise<string[]>
 }
 

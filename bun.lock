@@ -29,6 +29,7 @@
         "cmdk": "^1.1.1",
         "fflate": "^0.8.2",
         "fuzzysort": "^3.1.0",
+        "hyparquet": "^1.26.0",
         "lucide-react": "^0.542.0",
         "nanostores": "^1.0.1",
         "next-themes": "^0.4.6",
@@ -996,6 +997,8 @@
     "http-proxy-agent": ["http-proxy-agent@7.0.2", "", { "dependencies": { "agent-base": "^7.1.0", "debug": "^4.3.4" } }, "sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig=="],
 
     "https-proxy-agent": ["https-proxy-agent@7.0.6", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "4" } }, "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="],
+
+    "hyparquet": ["hyparquet@1.26.0", "", {}, "sha512-yxUiViPZ+z5h+xdX4rA1G+k30jXoEsG9I2xEpjaM84imGznbKjZzxuZFsdzqg6C4LxNnnAlDFvzpk4uxQWTbTQ=="],
 
     "ico-endec": ["ico-endec@0.1.6", "", {}, "sha512-ZdLU38ZoED3g1j3iEyzcQj+wAkY2xfWNkymszfJPoxucIUhK7NayQ+/C4Kv0nDFMIsbtbEHldv3V8PU494/ueQ=="],
 

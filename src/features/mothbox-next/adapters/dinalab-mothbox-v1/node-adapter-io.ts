@@ -14,6 +14,10 @@ export function createNodeDinalabAdapterIO(params: {
     source: {
       exists: async (relativePath) => existsAt(path.join(sourceRoot, relativePath)),
       readText: async (relativePath) => readFile(path.join(sourceRoot, relativePath), 'utf8'),
+      readBinary: async (relativePath) => {
+        const buffer = await readFile(path.join(sourceRoot, relativePath))
+        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+      },
       findFiles: async (predicate) => findFilesUnder(sourceRoot, predicate),
     },
     package: {
@@ -40,7 +44,7 @@ async function findFilesUnder(dir: string, predicate: (name: string) => boolean)
     for (const entry of entries) {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name
       const abs = path.join(current, entry.name)
-      if (entry.isDirectory) await walk(abs, rel)
+      if (entry.isDirectory()) await walk(abs, rel)
       else if (predicate(entry.name)) out.push(rel.replaceAll('\\', '/'))
     }
   }

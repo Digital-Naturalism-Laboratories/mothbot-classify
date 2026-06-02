@@ -41,6 +41,7 @@ export async function buildDinalabMothboxV1Records(params: {
   packageRelativeSourcePrefix: string
   packageSourceLayout: PackageSourceLayout
   legacySourceRootName?: string
+  processedMirrorRoot?: string
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<BuiltDinalabAdapterRecords> {
   const {
@@ -51,6 +52,7 @@ export async function buildDinalabMothboxV1Records(params: {
     retainPatchesInSource,
     packageRelativeSourcePrefix,
     packageSourceLayout,
+    processedMirrorRoot,
   } = params
   const humanClassifierId = params.humanClassifierId?.trim() || 'bf'
   const progressMessage = 'Converting legacy dataset…'
@@ -77,6 +79,7 @@ export async function buildDinalabMothboxV1Records(params: {
 
   for (let botFileIndex = 0; botFileIndex < botJsonPaths.length; botFileIndex++) {
     const botRelativePath = botJsonPaths[botFileIndex]
+    const patchIdByPatchFileName = new Map<string, string>()
     const shouldReportPatchProgress =
       botJsonPaths.length <= 20 || botFileIndex === 0 || botFileIndex === botJsonPaths.length - 1 || botFileIndex % 5 === 0
 
@@ -96,13 +99,23 @@ export async function buildDinalabMothboxV1Records(params: {
 
       const basePatchId = patchIdFromImageFileName(patchFileName)
       const botDir = dirnameRelative(botRelativePath)
-      const sourcePatchRelative = joinRelative(botDir, 'patches', patchFileName)
-      if (!(await io.source.exists(sourcePatchRelative))) continue
+      const sourcePatchRelative = await resolveSourcePatchRelative({
+        io,
+        botDir,
+        patchFileName,
+        shapePatchPath: String(shape.patch_path ?? ''),
+      })
+      if (!sourcePatchRelative) continue
 
-      const hierarchy = resolveDeploymentContext({ botRelativePath, datasetId, legacySourceRootName })
+      const hierarchy = resolveDeploymentContext({
+        botRelativePath: stripProcessedMirrorSegment(botRelativePath, processedMirrorRoot),
+        datasetId,
+        legacySourceRootName,
+      })
       const nightDate = hierarchy.nightDate ?? inferNightDateFromPatchId(basePatchId) ?? 'unknown-night'
       const cameraDayId = buildCameraDayIdFromParts({ deploymentId: hierarchy.deploymentId, nightDate })
       const patchId = disambiguatePatchId({ basePatchId, cameraDayId, usedPatchIds })
+      patchIdByPatchFileName.set(patchFileName, patchId)
 
       const assetPath = await resolvePatchAssetInPackage({
         io,
@@ -127,7 +140,10 @@ export async function buildDinalabMothboxV1Records(params: {
         sourcePrefix: packageRelativeSourcePrefix,
         pathRelativeToSource: botRelativePath,
       })
-      const photoAssetPath = botRelativePath.replace(/_botdetection\.json$/i, '.jpg')
+      const photoAssetPath = stripProcessedMirrorSegment(
+        botRelativePath.replace(/_botdetection\.json$/i, '.jpg'),
+        processedMirrorRoot,
+      )
 
       patchSources.push({
         patch_id: patchId,
@@ -160,7 +176,8 @@ export async function buildDinalabMothboxV1Records(params: {
       for (const shape of identifiedShapes) {
         const patchFileName = extractPatchFilename({ patchPath: String(shape.patch_path ?? '') })
         if (!patchFileName) continue
-        const patchId = patchIdFromImageFileName(patchFileName)
+        const patchId = patchIdByPatchFileName.get(patchFileName)
+        if (!patchId) continue
         const row = classificationFromIdentifiedShape({
           shape,
           patchId,
@@ -206,6 +223,41 @@ export async function buildDinalabMothboxV1Records(params: {
     deployments,
     cameraDays,
   }
+}
+
+async function resolveSourcePatchRelative(params: {
+  io: DinalabAdapterIO
+  botDir: string
+  patchFileName: string
+  shapePatchPath: string
+}): Promise<string | null> {
+  const { io, botDir, patchFileName } = params
+  const shapePatchPath = params.shapePatchPath.replaceAll('\\', '/').replace(/^\/+/, '').trim()
+  const candidates = uniqueStrings([
+    shapePatchPath ? joinRelative(botDir, shapePatchPath) : '',
+    joinRelative(botDir, 'patches', patchFileName),
+    joinRelative(botDir, patchFileName),
+  ])
+
+  for (const candidate of candidates) {
+    if (candidate && (await io.source.exists(candidate))) return candidate
+  }
+
+  return null
+}
+
+export function stripProcessedMirrorSegment(relativePath: string, processedMirrorRoot = '') {
+  const mirrorRoot = processedMirrorRoot.trim().toLowerCase()
+  if (!mirrorRoot) return relativePath
+
+  const parts = relativePath.replaceAll('\\', '/').split('/').filter(Boolean)
+  const index = parts.findIndex((part) => part.toLowerCase() === mirrorRoot)
+  if (index < 0) return relativePath
+  return [...parts.slice(0, index), ...parts.slice(index + 1)].join('/')
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))]
 }
 
 function extractClassifierIdFromPatch(patchId: string): string {

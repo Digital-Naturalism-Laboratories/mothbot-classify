@@ -5,10 +5,25 @@ import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
 export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species'])
 
-export type DatasetFolderKind = 'package' | 'legacy-root' | 'source-only' | 'patch-images-only' | 'skip'
+export type DatasetFolderKind =
+  | 'package'
+  | 'legacy-root'
+  | 'source-only'
+  | 'mothbox-processed'
+  | 'ami'
+  | 'patch-images-only'
+  | 'skip'
 
 export function isPatchImageFileName(fileName: string) {
   return /\.(jpg|jpeg|png)$/i.test(fileName ?? '')
+}
+
+export function isParquetFileName(fileName: string) {
+  return /\.parquet$/i.test(fileName ?? '')
+}
+
+export function isCsvFileName(fileName: string) {
+  return /\.csv$/i.test(fileName ?? '')
 }
 
 export function isReservedDatasetsChildFolderName(folderName: string) {
@@ -27,8 +42,19 @@ export async function classifyDatasetFolder(params: {
   if (await directoryHasDatasetManifest(directory)) return 'package'
 
   const botPaths = await findRelativeFilesUnderDirectory(directory, (name) => name.endsWith('_botdetection.json'))
+  const processedBotPaths = botPaths.filter((path) => isUnderProcessedMirror(path))
+  if (processedBotPaths.length > 0) return 'mothbox-processed'
+
+  const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
+  const metadataPaths = await findRelativeFilesUnderDirectory(directory, (name) => isParquetFileName(name) || isCsvFileName(name))
+  if (
+    metadataPaths.length > 0 &&
+    imagePaths.some((path) => isUnderProcessedMirror(path) && /_crop_[^/]+\.(jpg|jpeg|png)$/i.test(path))
+  ) {
+    return 'ami'
+  }
+
   if (!botPaths.length) {
-    const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
     if (imagePaths.length > 0) return 'patch-images-only'
     return 'skip'
   }
@@ -45,4 +71,9 @@ export async function classifyDatasetFolder(params: {
 export function isUnderPackageSource(relativePath: string) {
   const normalized = normalizeIngestRelativePath(relativePath).toLowerCase()
   return normalized === PACKAGE_ARCHIVE_DIR || normalized.startsWith(`${PACKAGE_ARCHIVE_DIR}/`)
+}
+
+export function isUnderProcessedMirror(relativePath: string) {
+  const parts = normalizeIngestRelativePath(relativePath).toLowerCase().split('/').filter(Boolean)
+  return parts.includes('_processed')
 }

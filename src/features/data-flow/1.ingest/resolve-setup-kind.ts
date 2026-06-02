@@ -20,7 +20,7 @@ export async function resolveDatasetSetupKind(params: {
 
   if (classified === 'skip') {
     throw new Error(
-      'No supported files found. Add patch images (.jpg, .jpeg, .png) or legacy *_botdetection.json files.',
+      'No supported files found. Add patch images, legacy *_botdetection.json files, Mothbox _processed outputs, or AMI parquet/CSV metadata with processed crops.',
     )
   }
 

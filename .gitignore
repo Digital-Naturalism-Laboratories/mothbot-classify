@@ -33,6 +33,7 @@ coverage/
 *.local
 *.log
 verify-report.json
+.dataset-adapter-audit/
 
 # Cache
 .cache/
