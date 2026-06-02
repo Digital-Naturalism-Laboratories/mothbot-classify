@@ -30,11 +30,20 @@ export function buildPackageExportRows(params: {
       photo_id: patch.photoId,
       scientific_name: deriveTaxonNameFromDetection({ detection }) ?? detection.label ?? '',
       detected_by: detection.detectedBy ?? 'auto',
-      classification_type: detection.isError ? 'error' : detection.morphospecies ? 'morphospecies' : 'taxon',
+      classification_type: packageExportClassificationType({ detection }),
     })
   }
 
   return rows.sort((a, b) => a.patch_id.localeCompare(b.patch_id))
+}
+
+function packageExportClassificationType(params: { detection: DetectionEntity }): string {
+  const { detection } = params
+  if (detection.classificationType) return detection.classificationType
+  if (detection.isError) return 'error'
+  if (detection.morphospecies) return 'morphospecies'
+
+  return 'taxon'
 }
 
 export const PACKAGE_EXPORT_CSV_HEADERS = [

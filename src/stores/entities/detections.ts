@@ -21,6 +21,7 @@ import { hasTaxonFields } from '~/models/taxonomy/validate'
 import { resolveDatasetIdForLeafGroup } from '~/features/mothbox-next/dataset-scope'
 import { isMothboxNextPackageOpen, mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
+import { currentHumanClassifierId } from '~/features/mothbox-next/human-classifier-id'
 import { findBotClassificationForPatch } from '~/features/mothbox-next/resolve-classifications'
 import { leafGroupsStore } from './leaf-groups'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
@@ -102,6 +103,7 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
 
   const current = detectionsStore.get() || {}
   const updated: Record<string, DetectionEntity> = { ...current }
+  const humanClassifierId = currentHumanClassifierId()
 
   for (const id of detectionIds) {
     const existing = current?.[id]
@@ -110,27 +112,33 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
     const context = getSpeciesListContextForDetection({ detection: existing })
 
     if (isError) {
-      updated[id] = updateDetectionAsError({ existing, ...context })
+      updated[id] = withHumanClassifier({
+        detection: updateDetectionAsError({ existing, ...context }),
+        humanClassifierId,
+      })
       continue
     }
 
     if (hasTaxon && taxon && isMorphospeciesLabelWithTaxon({ label: trimmed, taxon })) {
       const morphoResult = updateDetectionAsMorphospecies({ existing, morphospecies: trimmed, taxon, ...context })
       if (morphoResult) {
-        updated[id] = morphoResult
+        updated[id] = withHumanClassifier({ detection: morphoResult, humanClassifierId })
       }
       continue
     }
 
     if (hasTaxon && taxon) {
-      updated[id] = updateDetectionWithTaxon({ existing, taxon, label: trimmed, ...context })
+      updated[id] = withHumanClassifier({
+        detection: updateDetectionWithTaxon({ existing, taxon, label: trimmed, ...context }),
+        humanClassifierId,
+      })
       continue
     }
 
     // Morphospecies case - free text without taxon
     const morphoResult = updateDetectionAsMorphospecies({ existing, morphospecies: trimmed, ...context })
     if (morphoResult) {
-      updated[id] = morphoResult
+      updated[id] = withHumanClassifier({ detection: morphoResult, humanClassifierId })
     }
     // If morphoResult is null, the detection lacks required context - skip it
   }
@@ -148,13 +156,17 @@ export function acceptDetections(params: { detectionIds: string[] }) {
 
   const current = detectionsStore.get() || {}
   const updated: Record<string, DetectionEntity> = { ...current }
+  const humanClassifierId = currentHumanClassifierId()
 
   for (const id of detectionIds) {
     const existing = current?.[id]
     if (!existing) continue
 
     const context = getSpeciesListContextForDetection({ detection: existing })
-    updated[id] = acceptDetection({ existing, ...context })
+    updated[id] = withHumanClassifier({
+      detection: acceptDetection({ existing, ...context }),
+      humanClassifierId,
+    })
   }
 
   detectionsStore.set(updated)
@@ -252,12 +264,28 @@ function clearHumanIdentificationFlags(params: { existing: DetectionEntity }): D
 
   return {
     ...existing,
+    label: undefined,
+    taxon: undefined,
+    score: undefined,
     detectedBy: 'auto',
     identifiedAt: undefined,
     isError: undefined,
     morphospecies: undefined,
     speciesListId: undefined,
     speciesListDOI: undefined,
+    originalMothboxLabel: undefined,
+    classificationType: undefined,
+    botClassifierId: undefined,
+    humanClassifierId: undefined,
+  }
+}
+
+function withHumanClassifier(params: { detection: DetectionEntity; humanClassifierId: string }): DetectionEntity {
+  const { detection, humanClassifierId } = params
+
+  return {
+    ...detection,
+    humanClassifierId,
   }
 }
 

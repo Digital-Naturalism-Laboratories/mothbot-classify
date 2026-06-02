@@ -4,6 +4,7 @@ import path from 'node:path'
 import { tmpdir } from 'node:os'
 import { detectionsStore, resetDetections } from '~/stores/entities/detections'
 import { patchesStore } from '~/stores/entities/5.patches'
+import { photosStore } from '~/stores/entities/photos'
 import { acceptDetection, updateDetectionWithTaxon } from '~/models/detection-shapes'
 import { loadMothboxNextPackageData } from '../load-package-data'
 import { ingestMothboxNextPackageFromIndexedFiles } from '~/features/data-flow/1.ingest/package/ingest-package'
@@ -23,7 +24,9 @@ describe('persist round-trip (L4)', () => {
   beforeEach(() => {
     detectionsStore.set({})
     patchesStore.set({})
+    photosStore.set({})
     mothboxNextPackageStore.set(null)
+    userSessionStore.set({ initials: 'user' })
   })
 
   it('writes human classifications and reloads', async () => {
@@ -60,6 +63,7 @@ describe('persist round-trip (L4)', () => {
         }),
         detectedBy: 'user',
         identifiedAt: Date.now() + 10_000_000_000_000,
+        humanClassifierId: 'user',
       }
     }
 
@@ -69,6 +73,7 @@ describe('persist round-trip (L4)', () => {
         ...acceptDetection({ existing: second }),
         detectedBy: 'user',
         identifiedAt: Date.now() + 10_000_000_000_000,
+        humanClassifierId: 'user',
       }
     }
 
@@ -162,6 +167,48 @@ describe('persist round-trip (L4)', () => {
     expect(humanRows.some((row) => row.patch_id === foliumPatchId)).toBe(false)
   })
 
+  it('clears human taxonomy when resetting a patch-only package without bot rows', async () => {
+    mothboxNextPackageStore.set({
+      packageRoot: '',
+      manifest: {
+        format: 'mothbox-next-dataset',
+        version: 3,
+        dataset_id: 'patch-only',
+        folders: { records: '02_records/', classifications: '03_classifications/', patches: '01_patches/' },
+        records: { patches: '02_records/patches.ndjson' },
+      },
+      loaded: { classificationFiles: [] } as any,
+    })
+    photosStore.set({
+      'photo.jpg': { id: 'photo.jpg', name: 'photo.jpg', leafGroupId: 'patch-only__default' } as any,
+    })
+    detectionsStore.set({
+      p1: {
+        id: 'p1',
+        patchId: 'p1',
+        photoId: 'photo.jpg',
+        leafGroupId: 'patch-only__default',
+        detectedBy: 'user',
+        identifiedAt: 10,
+        label: 'Diptera',
+        taxon: { kingdom: 'Animalia', class: 'Insecta', order: 'Diptera' },
+        classificationType: 'taxon',
+        humanClassifierId: 'bf',
+        score: 0.8,
+      },
+    })
+
+    await resetDetections({ detectionIds: ['p1'] })
+
+    const reset = detectionsStore.get()?.p1
+    expect(reset?.detectedBy).toBe('auto')
+    expect(reset?.label).toBeUndefined()
+    expect(reset?.taxon).toBeUndefined()
+    expect(reset?.classificationType).toBeUndefined()
+    expect(reset?.humanClassifierId).toBeUndefined()
+    expect(reset?.score).toBeUndefined()
+  })
+
   it('preserves human rows from other leaf groups when saving one leaf group', async () => {
     const src = fixturePackageRoot('04_dinacon_lightweight_substrate')
     const tempRoot = await mkdtemp(path.join(tmpdir(), 'mothbox-next-'))
@@ -211,5 +258,32 @@ describe('persist round-trip (L4)', () => {
     const humanRows = parseClassificationRecords(await readFile(classifierPath, 'utf8'))
     expect(humanRows.some((row) => row.patch_id === currentLeafPatchId)).toBe(true)
     expect(humanRows.some((row) => row.patch_id === otherLeafPatchId)).toBe(true)
+  })
+
+  it('does not copy another classifier rows into the active classifier file', async () => {
+    const src = fixturePackageRoot('04_dinacon_lightweight_substrate')
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'mothbox-next-'))
+    await cp(src, tempRoot, { recursive: true })
+
+    const walked = await walkFixtureFiles(tempRoot)
+    const indexed = await Promise.all(
+      walked.map(async (f) => {
+        const bytes = await readFile(path.join(tempRoot, f.path))
+        const textContent = bytes.toString('utf8')
+        return {
+          path: f.path,
+          name: f.name,
+          size: f.size,
+          file: { text: async () => textContent } as File,
+        }
+      }),
+    )
+    await ingestMothboxNextPackageFromIndexedFiles({ files: indexed as any })
+    userSessionStore.set({ initials: 'bob' })
+
+    const writer = createNodePackageTextWriter(tempRoot)
+    await persistPackageClassifications({ writer })
+
+    expect(await writer.fileExists('03_classifications/bob.ndjson')).toBe(false)
   })
 })

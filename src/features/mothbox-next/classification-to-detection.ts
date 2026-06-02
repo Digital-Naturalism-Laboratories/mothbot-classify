@@ -24,6 +24,7 @@ export function detectionFromClassification(params: {
     score: typeof row.confidence === 'number' ? row.confidence : undefined,
     classificationType: row.classification_type,
     botClassifierId: row.classifier_type === 'bot' ? row.classifier_id : undefined,
+    humanClassifierId: row.classifier_type === 'human' ? row.classifier_id : undefined,
   }
 }
 
