@@ -36,6 +36,7 @@ const AMI_METADATA_COLUMNS = [
 ]
 
 const AMI_PARQUET_ROW_BATCH_SIZE = 50_000
+const AMI_CLASSIFIER_PRIORITY = ['uk-denmark-moths', 'fastai-species', 'mcc24', 'ami-csv', 'ami'] as const
 const TAXON_RANK_ORDER = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species'] as const
 const DEEPEST_RANK_FIRST = [...TAXON_RANK_ORDER].reverse()
 
@@ -501,22 +502,25 @@ function normalizeAmiTaxonSpecies(params: {
   speciesLabel?: string
   genus?: string
 }) {
-  const { taxon, speciesLabel, genus } = params
-  if (!taxon || !speciesLabel || !genus) return taxon
+  const { taxon, speciesLabel } = params
+  if (!taxon || !speciesLabel) return taxon
 
-  const normalizedSpecies = speciesLabel.trim()
-  const normalizedGenus = genus.trim()
-  const prefix = `${normalizedGenus} `
-  if (!normalizedSpecies.toLowerCase().startsWith(prefix.toLowerCase())) return taxon
-
-  const epithet = normalizedSpecies.slice(prefix.length).trim()
-  if (!epithet) return taxon
+  const parsed = parseBinomialSpeciesLabel(speciesLabel)
+  if (!parsed) return taxon
 
   return {
     ...taxon,
-    scientificName: normalizedSpecies,
-    species: epithet,
+    scientificName: `${parsed.genus} ${parsed.epithet}`,
+    genus: parsed.genus,
+    species: parsed.epithet,
   }
+}
+
+function parseBinomialSpeciesLabel(value: string) {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  const match = normalized.match(/^([A-Z][A-Za-z-]+)\s+([a-z][A-Za-z-]+)\b/)
+  if (!match?.[1] || !match?.[2]) return null
+  return { genus: match[1], epithet: match[2] }
 }
 
 function taxonFieldsFromAmiRows(rows: AmiMetadataRow[]) {
@@ -550,16 +554,29 @@ function selectAmiClassifierRows(rows: AmiMetadataRow[]) {
               .map((row) => row.score ?? Number.NEGATIVE_INFINITY),
           )
         : Number.NEGATIVE_INFINITY
-      return { algorithm, rows: algorithmRows, rankCount: ranks.length, deepestRankIndex, primaryScore }
+      return {
+        algorithm,
+        rows: algorithmRows,
+        rankCount: ranks.length,
+        deepestRankIndex,
+        primaryScore,
+        classifierPriority: amiClassifierPriority(algorithm),
+      }
     })
     .sort((a, b) => {
-      if (a.rankCount !== b.rankCount) return b.rankCount - a.rankCount
       if (a.deepestRankIndex !== b.deepestRankIndex) return b.deepestRankIndex - a.deepestRankIndex
+      if (a.classifierPriority !== b.classifierPriority) return a.classifierPriority - b.classifierPriority
+      if (a.rankCount !== b.rankCount) return b.rankCount - a.rankCount
       if (a.primaryScore !== b.primaryScore) return b.primaryScore - a.primaryScore
       return a.algorithm.localeCompare(b.algorithm)
     })
 
   return ranked[0]?.rows ?? rows
+}
+
+function amiClassifierPriority(algorithm: string) {
+  const index = AMI_CLASSIFIER_PRIORITY.indexOf(algorithm as (typeof AMI_CLASSIFIER_PRIORITY)[number])
+  return index >= 0 ? index : AMI_CLASSIFIER_PRIORITY.length
 }
 
 function parseAmiCropPath(relativePath: string): AmiCrop | null {
