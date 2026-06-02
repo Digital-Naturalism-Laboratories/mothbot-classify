@@ -70,6 +70,8 @@ export function buildDetectionFromBotShape(params: { shape: any; existingDetecti
     speciesListId: undefined,
     speciesListDOI: undefined,
     originalMothboxLabel: existingDetection?.originalMothboxLabel ?? safeString(shape?.label),
+    classificationType: undefined,
+    humanClassifierId: undefined,
   }
 
   return detection

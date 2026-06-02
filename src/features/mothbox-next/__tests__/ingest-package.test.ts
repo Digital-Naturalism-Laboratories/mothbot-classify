@@ -216,6 +216,7 @@ describe('ingestMothboxNextPackage (L3)', () => {
 
     const detection = hydrated.detections['11f4a909-1d1f-470b-8d99-9d2f473df1dc']
     expect(detection?.detectedBy).toBe('user')
+    expect(detection?.humanClassifierId).toBe('bf')
     expect(detection?.botClassifierId).toBe('fastai-species')
     expect(detection?.score).toBe(0.84)
   })

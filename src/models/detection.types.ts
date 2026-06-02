@@ -37,4 +37,5 @@ export type DetectionEntity = {
   // Original label from bot detection JSON (e.g., "ORDER_Diptera")
   originalMothboxLabel?: string
   classificationType?: DetectionClassificationType
+  humanClassifierId?: string
 }

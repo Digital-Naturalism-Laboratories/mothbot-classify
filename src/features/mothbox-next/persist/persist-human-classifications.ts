@@ -8,10 +8,10 @@ import { parseClassificationRecords } from '../parse-package-records'
 import type { ClassificationRecord } from '../records'
 import { mothboxNextPackageStore } from '../active-package'
 import { joinRelativePaths, classifierFileName } from '../package-paths'
-import { userSessionStore } from '~/stores/ui'
 import { refreshActivePackageLoadedFromWriter } from '../reload-package'
 import { savePackageSessionCacheFromStores } from '~/features/data-flow/3.persist/save-package-session-cache'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
+import { currentHumanClassifierId } from '../human-classifier-id'
 
 export type PackageTextWriter = {
   readText: (relativePath: string) => Promise<string>
@@ -28,7 +28,7 @@ export async function persistPackageClassifications(params: {
   const active = mothboxNextPackageStore.get()
   if (!active) return
 
-  const classifierId = defaultClassifierId()
+  const classifierId = currentHumanClassifierId()
   const relClassifierPath = joinRelativePaths(
     active.manifest.folders.classifications,
     classifierFileName(classifierId),
@@ -66,13 +66,23 @@ function collectHumanClassificationUpdates(params: { leafGroupId?: string; class
   const { leafGroupId, classifierId } = params
   const detections = leafGroupId ? getIdentifiedDetectionsForLeafGroup(leafGroupId) : getAllIdentifiedDetections()
 
-  return detections.map((detection) =>
-    classificationFromDetection({
-      detection,
-      classifierId,
-      classifierType: 'human',
-    }),
-  )
+  return detections
+    .filter((detection) => shouldPersistForClassifier({ detection, classifierId }))
+    .map((detection) =>
+      classificationFromDetection({
+        detection,
+        classifierId,
+        classifierType: 'human',
+      }),
+    )
+}
+
+function shouldPersistForClassifier(params: { detection: DetectionEntity; classifierId: string }) {
+  const { detection, classifierId } = params
+  if (detection.detectedBy !== 'user') return false
+  if (!detection.humanClassifierId) return true
+
+  return detection.humanClassifierId === classifierId
 }
 
 function getAllIdentifiedDetections(): DetectionEntity[] {
@@ -103,10 +113,4 @@ export async function rebuildCurrentClassificationsCacheFromDisk(params: {
 
   const ndjson = buildCurrentClassificationsNdjson({ classificationFiles })
   await writer.writeText(currentRel, ndjson)
-}
-
-function defaultClassifierId(): string {
-  const user = userSessionStore.get()
-  const initials = (user?.initials || 'user').trim().toLowerCase()
-  return initials || 'user'
 }
