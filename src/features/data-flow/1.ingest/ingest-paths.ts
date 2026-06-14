@@ -133,7 +133,17 @@ export function parsePathParts(params: { path: string }) {
   const normalized = (path ?? '').replaceAll('\\', '/').replace(/^\/+/, '')
   if (isPackageArchiveRelativePath(normalized)) return null
 
-  const segments = normalized.split('/').filter(Boolean)
+  
+  // Strip the `_processed` mirror prefix so JSON files stored under
+  // _processed/<project>/<deployment>/<night>/... are parsed with the
+  // same positional logic as co-located (legacy) files.
+  const rawSegments = normalized.split('/').filter(Boolean)
+  const processedIndex = rawSegments.findIndex((s) => s.toLowerCase() === '_processed')
+  const segments =
+    processedIndex >= 0
+      ? [...rawSegments.slice(0, processedIndex), ...rawSegments.slice(processedIndex + 1)]
+      : rawSegments  
+  
   if (segments.length < 4) return null
   const [project, deployment, night, ...rest] = segments
   const site = deriveSiteFromDeploymentFolder(deployment)
