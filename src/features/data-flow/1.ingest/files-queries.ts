@@ -3,11 +3,12 @@ import { useStore } from '@nanostores/react'
 import { appReadyStore, userSessionLoadedStore } from '~/stores/ui'
 import { loadDatasetsDirectory } from '~/features/data-flow/3.persist/files.persistence'
 import { openDirectory, tryRestoreLegacyPickedDirectory } from './files.service'
-import { chooseDatasetsFolder } from './choose-datasets-folder'
+import { setupDatasetsFolder } from './choose-datasets-folder'
 import { hydrateDatasetsWorkspaceFromDisk, scanDatasetsRegistry } from './datasets-workspace-setup'
 import { warmDefaultDatasetInBackground } from './ensure-default-dataset-open'
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
 import { openDatasetByFolderName } from './open-dataset-by-folder'
+import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 
 export function useRestoreDirectoryQuery() {
   const query = useQuery({
@@ -59,10 +60,15 @@ export function useOpenDirectoryMutation() {
   return res
 }
 
-export function useChooseDatasetsFolderMutation() {
+/**
+ * Mutation that accepts a pre-obtained FileSystemDirectoryHandle and finishes
+ * the datasets-folder setup. The picker itself must be called synchronously
+ * inside the click handler (before mutateAsync) so Firefox doesn't block it.
+ */
+export function useSetupDatasetsFolderMutation() {
   return useMutation({
     mutationKey: ['fs', 'choose-datasets'],
-    mutationFn: async () => chooseDatasetsFolder(),
+    mutationFn: async (handle: FileSystemDirectoryHandleLike) => setupDatasetsFolder(handle),
     retry: false,
   })
 }

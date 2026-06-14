@@ -8,9 +8,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import { isDirectoryPickerLikelySupported } from '~/features/data-flow/1.ingest/directory-picker'
+import { isDirectoryPickerLikelySupported, pickDirectoryHandle } from '~/features/data-flow/1.ingest/directory-picker'
 import {
-  useChooseDatasetsFolderMutation,
+  useSetupDatasetsFolderMutation,
   useOpenDatasetMutation,
   useScanDatasetsFolderMutation,
 } from '~/features/data-flow/1.ingest/files-queries'
@@ -28,16 +28,25 @@ export function HomeDatasetsPanel() {
   const workspace = useStore(datasetsWorkspaceStore)
   const activeFolderName = useStore(activeDatasetFolderNameStore)
   const openMutation = useOpenDatasetMutation()
-  const chooseMutation = useChooseDatasetsFolderMutation()
+  const setupMutation = useSetupDatasetsFolderMutation()
   const scanMutation = useScanDatasetsFolderMutation()
   const isScanning = scanMutation.isPending
-  const isChoosing = chooseMutation.isPending
+  const isChoosing = setupMutation.isPending
   const openingFolderName = openMutation.isPending ? openMutation.variables?.folderName : undefined
 
   function onSelectDataset(folderName: string) {
     if (openMutation.isPending) return
     if (folderName === activeFolderName && isMothboxNextPackageOpen()) return
     openMutation.mutate({ folderName })
+  }
+
+  // Called directly from the click handler so showDirectoryPicker fires inside
+  // the user gesture — required by Firefox (and good practice everywhere).
+  async function onChooseFolder() {
+    if (isChoosing) return
+    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+    if (!handle) return
+    setupMutation.mutate(handle)
   }
 
   return (
@@ -49,7 +58,7 @@ export function HomeDatasetsPanel() {
           isScanning={isScanning}
           isChoosing={isChoosing}
           onRefresh={() => void scanMutation.mutateAsync()}
-          onChooseFolder={() => void chooseMutation.mutateAsync()}
+          onChooseFolder={() => void onChooseFolder()}
         />
       </div>
 

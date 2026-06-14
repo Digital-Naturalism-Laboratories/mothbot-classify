@@ -1,0 +1,157 @@
+--- a/src/features/data-flow/1.ingest/choose-datasets-folder.ts
++++ b/src/features/data-flow/1.ingest/choose-datasets-folder.ts
+@@ -11,18 +11,31 @@
+ 
+ export { requireDatasetsFolderHandle } from './datasets-folder-handle'
+ 
+-export async function chooseDatasetsFolder(): Promise<boolean> {
++/**
++ * Opens the native folder picker and returns the chosen handle.
++ *
++ * MUST be called synchronously inside a user-gesture handler (click/keypress).
++ * Firefox enforces this strictly — any await before showDirectoryPicker will
++ * cause a SecurityError. Keep this function free of any awaits before the
++ * showDirectoryPicker call so the browser gesture token is still live.
++ */
++export async function pickDatasetsFolderHandle(): Promise<FileSystemDirectoryHandleLike | null> {
+   if (!isDirectoryPickerAvailable()) {
+     toast.error('Folder picker is not available in this browser.')
+-    return false
++    return null
+   }
+ 
+-  const handle = await pickDirectoryHandle({
++  return pickDirectoryHandle({
+     mode: 'readwrite',
+     title: 'datasets folder',
+   })
+-  if (!handle) return false
++}
+ 
++/**
++ * Finishes setting up the datasets folder after the handle has been obtained.
++ * Safe to call from a mutation or any async context.
++ */
++export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike): Promise<boolean> {
+   const granted = await ensureReadWritePermission(handle)
+   if (!granted) {
+     toast.error('Write permission is required on the datasets folder.')
+@@ -37,7 +50,7 @@
+     const setup = await finishDatasetsWorkspaceSetup({ autoMigrate: false })
+     speciesFileCount = setup.speciesFileCount
+   } catch (err) {
+-    console.warn('🚨 chooseDatasetsFolder: workspace setup failed', err)
++    console.warn('🚨 setupDatasetsFolder: workspace setup failed', err)
+     toast.error('Datasets folder saved, but scanning packages failed. Try reopening the folder.')
+     return false
+   }
+@@ -51,6 +64,14 @@
+   return true
+ }
+ 
++/** @deprecated Use pickDatasetsFolderHandle() + setupDatasetsFolder() separately so
++ * the showDirectoryPicker call stays inside the user-gesture handler. */
++export async function chooseDatasetsFolder(): Promise<boolean> {
++  const handle = await pickDatasetsFolderHandle()
++  if (!handle) return false
++  return setupDatasetsFolder(handle)
++}
++
+ export async function getOrCreateDatasetPackageHandle(params: {
+   datasetsRoot: FileSystemDirectoryHandleLike
+   datasetFolderName: string
+@@ -66,7 +87,7 @@
+   const alreadyPackage = await directoryHasDatasetManifest(packageHandle)
+   if (alreadyPackage) {
+     throw new Error(
+-      `“${safeName}” already exists under your datasets folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
++      `"${safeName}" already exists under your datasets folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
+     )
+   }
+ 
+--- a/src/features/data-flow/1.ingest/files-queries.ts
++++ b/src/features/data-flow/1.ingest/files-queries.ts
+@@ -3,11 +3,12 @@
+ import { appReadyStore, userSessionLoadedStore } from '~/stores/ui'
+ import { loadDatasetsDirectory } from '~/features/data-flow/3.persist/files.persistence'
+ import { openDirectory, tryRestoreLegacyPickedDirectory } from './files.service'
+-import { chooseDatasetsFolder } from './choose-datasets-folder'
++import { setupDatasetsFolder } from './choose-datasets-folder'
+ import { hydrateDatasetsWorkspaceFromDisk, scanDatasetsRegistry } from './datasets-workspace-setup'
+ import { warmDefaultDatasetInBackground } from './ensure-default-dataset-open'
+ import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
+ import { openDatasetByFolderName } from './open-dataset-by-folder'
++import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
+ 
+ export function useRestoreDirectoryQuery() {
+   const query = useQuery({
+@@ -59,10 +60,15 @@
+   return res
+ }
+ 
+-export function useChooseDatasetsFolderMutation() {
++/**
++ * Mutation that accepts a pre-obtained FileSystemDirectoryHandle and finishes
++ * the datasets-folder setup. The picker itself must be called synchronously
++ * inside the click handler (before mutateAsync) so Firefox doesn't block it.
++ */
++export function useSetupDatasetsFolderMutation() {
+   return useMutation({
+     mutationKey: ['fs', 'choose-datasets'],
+-    mutationFn: async () => chooseDatasetsFolder(),
++    mutationFn: async (handle: FileSystemDirectoryHandleLike) => setupDatasetsFolder(handle),
+     retry: false,
+   })
+ }
+--- a/src/routes/0.home/home-datasets-panel.tsx
++++ b/src/routes/0.home/home-datasets-panel.tsx
+@@ -8,9 +8,9 @@
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+ } from '~/components/ui/dropdown-menu'
+-import { isDirectoryPickerLikelySupported } from '~/features/data-flow/1.ingest/directory-picker'
++import { isDirectoryPickerLikelySupported, pickDirectoryHandle } from '~/features/data-flow/1.ingest/directory-picker'
+ import {
+-  useChooseDatasetsFolderMutation,
++  useSetupDatasetsFolderMutation,
+   useOpenDatasetMutation,
+   useScanDatasetsFolderMutation,
+ } from '~/features/data-flow/1.ingest/files-queries'
+@@ -28,10 +28,10 @@
+   const workspace = useStore(datasetsWorkspaceStore)
+   const activeFolderName = useStore(activeDatasetFolderNameStore)
+   const openMutation = useOpenDatasetMutation()
+-  const chooseMutation = useChooseDatasetsFolderMutation()
++  const setupMutation = useSetupDatasetsFolderMutation()
+   const scanMutation = useScanDatasetsFolderMutation()
+   const isScanning = scanMutation.isPending
+-  const isChoosing = chooseMutation.isPending
++  const isChoosing = setupMutation.isPending
+   const openingFolderName = openMutation.isPending ? openMutation.variables?.folderName : undefined
+ 
+   function onSelectDataset(folderName: string) {
+@@ -40,6 +40,15 @@
+     openMutation.mutate({ folderName })
+   }
+ 
++  // Called directly from the click handler so showDirectoryPicker fires inside
++  // the user gesture — required by Firefox (and good practice everywhere).
++  async function onChooseFolder() {
++    if (isChoosing) return
++    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
++    if (!handle) return
++    setupMutation.mutate(handle)
++  }
++
+   return (
+     <div className='shadow-border flex min-h-0 flex-1 flex-col rounded-2xl bg-white p-0 pb-16'>
+       <div className='mb-8 flex shrink-0 items-center justify-between gap-8 px-16 pt-16'>
+@@ -49,7 +58,7 @@
+           isScanning={isScanning}
+           isChoosing={isChoosing}
+           onRefresh={() => void scanMutation.mutateAsync()}
+-          onChooseFolder={() => void chooseMutation.mutateAsync()}
++          onChooseFolder={() => void onChooseFolder()}
+         />
+       </div>
+ 

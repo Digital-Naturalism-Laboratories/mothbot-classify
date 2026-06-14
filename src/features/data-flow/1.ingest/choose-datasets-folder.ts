@@ -11,18 +11,31 @@ import { finishDatasetsWorkspaceSetup } from './datasets-workspace-setup'
 
 export { requireDatasetsFolderHandle } from './datasets-folder-handle'
 
-export async function chooseDatasetsFolder(): Promise<boolean> {
+/**
+ * Opens the native folder picker and returns the chosen handle.
+ *
+ * MUST be called synchronously inside a user-gesture handler (click/keypress).
+ * Firefox enforces this strictly — any await before showDirectoryPicker will
+ * cause a SecurityError. Keep this function free of any awaits before the
+ * showDirectoryPicker call so the browser gesture token is still live.
+ */
+export async function pickDatasetsFolderHandle(): Promise<FileSystemDirectoryHandleLike | null> {
   if (!isDirectoryPickerAvailable()) {
     toast.error('Folder picker is not available in this browser.')
-    return false
+    return null
   }
 
-  const handle = await pickDirectoryHandle({
+  return pickDirectoryHandle({
     mode: 'readwrite',
     title: 'datasets folder',
   })
-  if (!handle) return false
+}
 
+/**
+ * Finishes setting up the datasets folder after the handle has been obtained.
+ * Safe to call from a mutation or any async context.
+ */
+export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike): Promise<boolean> {
   const granted = await ensureReadWritePermission(handle)
   if (!granted) {
     toast.error('Write permission is required on the datasets folder.')
@@ -37,7 +50,7 @@ export async function chooseDatasetsFolder(): Promise<boolean> {
     const setup = await finishDatasetsWorkspaceSetup({ autoMigrate: false })
     speciesFileCount = setup.speciesFileCount
   } catch (err) {
-    console.warn('🚨 chooseDatasetsFolder: workspace setup failed', err)
+    console.warn('🚨 setupDatasetsFolder: workspace setup failed', err)
     toast.error('Datasets folder saved, but scanning packages failed. Try reopening the folder.')
     return false
   }
@@ -49,6 +62,14 @@ export async function chooseDatasetsFolder(): Promise<boolean> {
         : `Legacy datasets will be converted into subfolders here (e.g. ${name}/my-dataset/). Add CSVs under ${name}/Species/ for identify lists.`,
   })
   return true
+}
+
+/** @deprecated Use pickDatasetsFolderHandle() + setupDatasetsFolder() separately so
+ * the showDirectoryPicker call stays inside the user-gesture handler. */
+export async function chooseDatasetsFolder(): Promise<boolean> {
+  const handle = await pickDatasetsFolderHandle()
+  if (!handle) return false
+  return setupDatasetsFolder(handle)
 }
 
 export async function getOrCreateDatasetPackageHandle(params: {
@@ -66,7 +87,7 @@ export async function getOrCreateDatasetPackageHandle(params: {
   const alreadyPackage = await directoryHasDatasetManifest(packageHandle)
   if (alreadyPackage) {
     throw new Error(
-      `“${safeName}” already exists under your datasets folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
+      `"${safeName}" already exists under your datasets folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
     )
   }
 
