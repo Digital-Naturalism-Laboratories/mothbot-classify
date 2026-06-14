@@ -4,7 +4,7 @@ import { Button } from '~/components/ui/button'
 import { Loader } from '~/components/atomic/Loader'
 import { closeGlobalDialog, openGlobalDialog } from '~/components/dialogs/global-dialog'
 import { useChooseDatasetsFolderMutation } from './files-queries'
-import { isDirectoryPickerAvailable } from './directory-picker'
+import { isDirectoryPickerLikelySupported } from './directory-picker'
 
 export type ChooseDatasetsFolderDialogProps = {
   onDismiss?: () => void
@@ -24,7 +24,7 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
   const { onDismiss } = props
   const chooseMutation = useChooseDatasetsFolderMutation()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const canPick = isDirectoryPickerAvailable()
+  const canPick = isDirectoryPickerLikelySupported()
   const isChoosing = chooseMutation.isPending
 
   function dismiss() {
@@ -63,7 +63,7 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
 
       {!canPick ? (
         <p className='mt-12 text-13 text-amber-800 text-pretty'>
-          Folder picking is not available in this browser. Use Chrome or Edge on desktop.
+          Folder picking is not available in this browser. Use Chrome, Edge, or Firefox on desktop.
         </p>
       ) : null}
 

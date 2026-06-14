@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import { isDirectoryPickerAvailable } from '~/features/data-flow/1.ingest/directory-picker'
+import { isDirectoryPickerLikelySupported } from '~/features/data-flow/1.ingest/directory-picker'
 import {
   useChooseDatasetsFolderMutation,
   useOpenDatasetMutation,
@@ -95,7 +95,7 @@ type DatasetsPanelMenuProps = {
 
 function DatasetsPanelMenu(props: DatasetsPanelMenuProps) {
   const { hasDatasetsFolder, isScanning, isChoosing, onRefresh, onChooseFolder } = props
-  const canPick = isDirectoryPickerAvailable()
+  const canPick = isDirectoryPickerLikelySupported()
   const busy = isScanning || isChoosing
 
   return (
