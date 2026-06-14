@@ -6,12 +6,12 @@ import { Breadcrumbs } from '~/components/ui/breadcrumb'
 import { deploymentsStore, leafGroupsStore, projectsStore, sitesStore } from '~/stores/entities'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import {
-  useChooseDatasetsFolderMutation,
+  useSetupDatasetsFolderMutation,
   useOpenDirectoryMutation,
   useRestoreDirectoryQuery,
   useScanDatasetsFolderMutation,
 } from '~/features/data-flow/1.ingest/files-queries'
-import { isDirectoryPickerAvailable } from '~/features/data-flow/1.ingest/directory-picker'
+import { isDirectoryPickerAvailable, pickDirectoryHandle } from '~/features/data-flow/1.ingest/directory-picker'
 import { datasetsWorkspaceStore } from '~/stores/datasets-workspace'
 import { Loader } from '~/components/atomic/Loader'
 import { Button } from '~/components/ui/button'
@@ -234,7 +234,7 @@ export function Nav() {
 
 export function FolderPicking() {
   const openMutation = useOpenDirectoryMutation()
-  const datasetsMutation = useChooseDatasetsFolderMutation()
+  const datasetsMutation = useSetupDatasetsFolderMutation()
   const scanMutation = useScanDatasetsFolderMutation()
   const workspace = useStore(datasetsWorkspaceStore)
   const canPick = isDirectoryPickerAvailable()
@@ -246,9 +246,11 @@ export function FolderPicking() {
     void openMutation.mutateAsync()
   }
 
-  function onChooseDatasets() {
+  async function onChooseDatasets() {
     if (busy) return
-    void datasetsMutation.mutateAsync()
+    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+    if (!handle) return
+    void datasetsMutation.mutateAsync(handle)
   }
 
   function onRefreshDatasets() {

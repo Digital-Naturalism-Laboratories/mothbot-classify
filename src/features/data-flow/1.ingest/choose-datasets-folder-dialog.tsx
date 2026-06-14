@@ -3,8 +3,8 @@ import { DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { Button } from '~/components/ui/button'
 import { Loader } from '~/components/atomic/Loader'
 import { closeGlobalDialog, openGlobalDialog } from '~/components/dialogs/global-dialog'
-import { useChooseDatasetsFolderMutation } from './files-queries'
-import { isDirectoryPickerLikelySupported } from './directory-picker'
+import { useSetupDatasetsFolderMutation } from './files-queries'
+import { isDirectoryPickerLikelySupported, pickDirectoryHandle } from './directory-picker'
 
 export type ChooseDatasetsFolderDialogProps = {
   onDismiss?: () => void
@@ -22,7 +22,7 @@ export function openChooseDatasetsFolderDialog(params?: ChooseDatasetsFolderDial
 
 export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDialogProps) {
   const { onDismiss } = props
-  const chooseMutation = useChooseDatasetsFolderMutation()
+  const chooseMutation = useSetupDatasetsFolderMutation()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const canPick = isDirectoryPickerLikelySupported()
   const isChoosing = chooseMutation.isPending
@@ -37,7 +37,9 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
     setErrorMessage(null)
 
     try {
-      const ok = await chooseMutation.mutateAsync()
+      const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+      if (!handle) return
+      const ok = await chooseMutation.mutateAsync(handle)
       if (ok) closeGlobalDialog()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
