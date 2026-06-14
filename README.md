@@ -28,6 +28,8 @@ Load a project folder with the following structure:
 ```
 projects/
   └── {project}/
+      └── {Species}/
+          ├── {Species_list_fromGBIF}.csv
       └── {site}/
           └── {deployment}/
               └── {night}/
