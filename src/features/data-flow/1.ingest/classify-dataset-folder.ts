@@ -3,13 +3,14 @@ import { findRelativeFilesUnderDirectory } from './fs-find-files'
 import { normalizeIngestRelativePath, PACKAGE_ARCHIVE_DIR } from './reserved-paths'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
-export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species'])
+export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species', '_processed'])
 
 export type DatasetFolderKind =
   | 'package'
   | 'legacy-root'
   | 'source-only'
   | 'mothbox-processed'
+  | 'mothbox-processed-sibling'
   | 'ami'
   | 'patch-images-only'
   | 'skip'
@@ -35,8 +36,15 @@ export function isReservedDatasetsChildFolderName(folderName: string) {
 export async function classifyDatasetFolder(params: {
   directory: FileSystemDirectoryHandleLike
   folderName: string
+  /**
+   * Sibling `_processed/<folderName>` directory, when one exists at the
+   * datasets root next to `directory`. Used to detect the case where JSON
+   * outputs were moved out of the dataset folder entirely into a mirrored
+   * tree, rather than nested in a `_processed` subfolder inside it.
+   */
+  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
 }): Promise<DatasetFolderKind> {
-  const { directory, folderName } = params
+  const { directory, folderName, processedMirrorHandle } = params
   if (isReservedDatasetsChildFolderName(folderName)) return 'skip'
 
   if (await directoryHasDatasetManifest(directory)) return 'package'
@@ -44,6 +52,13 @@ export async function classifyDatasetFolder(params: {
   const botPaths = await findRelativeFilesUnderDirectory(directory, (name) => name.endsWith('_botdetection.json'))
   const processedBotPaths = botPaths.filter((path) => isUnderProcessedMirror(path))
   if (processedBotPaths.length > 0) return 'mothbox-processed'
+
+  if (!botPaths.length && processedMirrorHandle) {
+    const mirrorBotPaths = await findRelativeFilesUnderDirectory(processedMirrorHandle, (name) =>
+      name.endsWith('_botdetection.json'),
+    )
+    if (mirrorBotPaths.length > 0) return 'mothbox-processed-sibling'
+  }
 
   const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
   const metadataPaths = await findRelativeFilesUnderDirectory(directory, (name) => isParquetFileName(name) || isCsvFileName(name))

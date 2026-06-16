@@ -16,9 +16,11 @@ export async function buildMothboxPackageFromFolder(params: {
   packageHandle: FileSystemDirectoryHandleLike
   folderName: string
   kind?: DatasetSetupKind
+  /** Sibling `_processed/<folderName>` directory, when JSON outputs live there instead of nested inside packageHandle. */
+  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<{ datasetId: string; patchCount: number }> {
-  const { packageHandle, folderName, onProgress } = params
+  const { packageHandle, folderName, processedMirrorHandle, onProgress } = params
   const kind = params.kind ?? (await resolveDatasetSetupKind({ directory: packageHandle, folderName }))
   const datasetId = sanitizeDatasetFolderName(folderName)
   const humanClassifierId = (userSessionStore.get()?.initials || 'user').trim().toLowerCase() || 'user'
@@ -32,7 +34,7 @@ export async function buildMothboxPackageFromFolder(params: {
       })
     })
 
-  const layout = await resolvePackageSourceLayout({ packageHandle, kind })
+  const layout = await resolvePackageSourceLayout({ packageHandle, kind, processedMirrorHandle })
 
   reportProgress({
     phase: 'scan',

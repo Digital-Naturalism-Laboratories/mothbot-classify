@@ -52,6 +52,19 @@ export async function discoverDatasetFoldersUnderRoot(
     childCandidates.push({ directory: candidate, folderName })
   }
 
+  // Look up the datasets-root `_processed` mirror folder once, if present, so
+  // sibling source folders (e.g. `night5_6`) can be matched against their
+  // mirrored output (e.g. `_processed/night5_6`) instead of being scanned
+  // as unrelated, separate datasets.
+  let processedRoot: DirectoryHandleWithIter | null = null
+  try {
+    processedRoot = (await datasetsRoot.getDirectoryHandle?.('_processed', { create: false })) as
+      | DirectoryHandleWithIter
+      | null
+  } catch {
+    processedRoot = null
+  }
+
   const classified = await Promise.all(
     childCandidates.map(async ({ directory, folderName }) => {
       const manifestInfo = await readDatasetManifestSummary(directory)
@@ -66,9 +79,20 @@ export async function discoverDatasetFoldersUnderRoot(
         }
       }
 
-      const kind = await classifyDatasetFolder({ directory, folderName })
+      let processedMirrorHandle: DirectoryHandleWithIter | null = null
+      if (processedRoot) {
+        try {
+          processedMirrorHandle = (await processedRoot.getDirectoryHandle?.(folderName, { create: false })) as
+            | DirectoryHandleWithIter
+            | null
+        } catch {
+          processedMirrorHandle = null
+        }
+      }
+
+      const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle })
       if (kind !== 'package' && kind !== 'skip') {
-        return { package: null, pending: { folderName, kind } }
+        return { package: null, pending: { folderName, kind, processedMirrorHandle } }
       }
 
       return { package: null, pending: null }

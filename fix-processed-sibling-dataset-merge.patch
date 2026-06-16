@@ -1,0 +1,312 @@
+--- /dev/null
++++ b/src/utils/processed-mirror-overlay.ts
+@@ -0,0 +1,124 @@
++import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
++
++/**
++ * Builds a FileSystemDirectoryHandleLike that overlays a `_processed` mirror
++ * directory on top of a primary source directory. Reads check the mirror
++ * first (e.g. `_botdetection.json` / `_identified.json` files that live
++ * under `_processed/<night>/...`), then fall back to the primary directory
++ * (source images, `patches/` folders, anything not present in the mirror).
++ *
++ * This lets the existing adapter — which expects JSON files co-located next
++ * to source images/patches — work unmodified against the newer layout where
++ * JSON output was moved into a directory tree mirrored under `_processed`,
++ * sitting as a SIBLING of the dataset folder (not nested inside it):
++ *
++ *   datasets/
++ *     night5_6/        <- primaryHandle (images, patches/)
++ *     _processed/
++ *       night5_6/      <- mirrorHandle (the *_botdetection.json, *_identified.json files)
++ *
++ * Writes (createWritable, removeEntry, create:true) always go to the
++ * primary handle, never the mirror, since the mirror is processing output
++ * we shouldn't be modifying from the classify UI.
++ */
++export function buildProcessedMirrorOverlayHandle(params: {
++  primaryHandle: FileSystemDirectoryHandleLike
++  mirrorHandle: FileSystemDirectoryHandleLike
++}): FileSystemDirectoryHandleLike {
++  const { primaryHandle, mirrorHandle } = params
++  return wrapOverlayDir(primaryHandle, mirrorHandle)
++}
++
++function wrapOverlayDir(
++  primary: FileSystemDirectoryHandleLike,
++  mirror: FileSystemDirectoryHandleLike | null,
++): FileSystemDirectoryHandleLike {
++  return {
++    name: primary.name,
++    kind: 'directory',
++
++    getFileHandle: async (name, options) => {
++      // Mirror takes priority for reads (JSON outputs live there).
++      if (mirror?.getFileHandle) {
++        try {
++          const fh = await mirror.getFileHandle(name)
++          if (fh) return fh
++        } catch {
++          // fall through to primary
++        }
++      }
++      if (!primary.getFileHandle) throw makeNotFoundError(name)
++      return primary.getFileHandle(name, options)
++    },
++
++    getDirectoryHandle: async (name, options) => {
++      let primaryChild: FileSystemDirectoryHandleLike | null = null
++      let mirrorChild: FileSystemDirectoryHandleLike | null = null
++
++      try {
++        primaryChild = (await primary.getDirectoryHandle?.(name, options)) ?? null
++      } catch {
++        primaryChild = null
++      }
++
++      if (mirror?.getDirectoryHandle) {
++        try {
++          mirrorChild = (await mirror.getDirectoryHandle(name)) ?? null
++        } catch {
++          mirrorChild = null
++        }
++      }
++
++      if (!primaryChild && !mirrorChild) throw makeNotFoundError(name)
++      if (!primaryChild) return mirrorChild as FileSystemDirectoryHandleLike
++      return wrapOverlayDir(primaryChild, mirrorChild)
++    },
++
++    removeEntry: async (name, options) => {
++      if (!primary.removeEntry) throw new Error(`Cannot remove: ${name}`)
++      return primary.removeEntry(name, options)
++    },
++
++    queryPermission: primary.queryPermission?.bind(primary),
++    requestPermission: primary.requestPermission?.bind(primary),
++
++    entries: async function* () {
++      const seen = new Set<string>()
++      if (primary.entries) {
++        for await (const [name, handle] of primary.entries()) {
++          seen.add(name)
++          if (handle.kind === 'directory') {
++            let mirrorChild: FileSystemDirectoryHandleLike | null = null
++            if (mirror?.getDirectoryHandle) {
++              try {
++                mirrorChild = (await mirror.getDirectoryHandle(name)) ?? null
++              } catch {
++                mirrorChild = null
++              }
++            }
++            yield [name, wrapOverlayDir(handle as FileSystemDirectoryHandleLike, mirrorChild)]
++          } else {
++            yield [name, handle]
++          }
++        }
++      }
++      if (mirror?.entries) {
++        for await (const [name, handle] of mirror.entries()) {
++          if (seen.has(name)) continue
++          yield [name, handle]
++        }
++      }
++    },
++
++    values: async function* () {
++      const self = wrapOverlayDir(primary, mirror)
++      for await (const [, handle] of self.entries!()) yield handle
++    },
++  }
++}
++
++function makeNotFoundError(name: string) {
++  const err = new Error(`File not found: ${name}`)
++  ;(err as { name?: string }).name = 'NotFoundError'
++  return err
++}
+--- a/src/features/data-flow/1.ingest/classify-dataset-folder.ts
++++ b/src/features/data-flow/1.ingest/classify-dataset-folder.ts
+@@ -3,13 +3,14 @@
+ import { normalizeIngestRelativePath, PACKAGE_ARCHIVE_DIR } from './reserved-paths'
+ import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
+ 
+-export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species'])
++export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species', '_processed'])
+ 
+ export type DatasetFolderKind =
+   | 'package'
+   | 'legacy-root'
+   | 'source-only'
+   | 'mothbox-processed'
++  | 'mothbox-processed-sibling'
+   | 'ami'
+   | 'patch-images-only'
+   | 'skip'
+@@ -35,8 +36,15 @@
+ export async function classifyDatasetFolder(params: {
+   directory: FileSystemDirectoryHandleLike
+   folderName: string
++  /**
++   * Sibling `_processed/<folderName>` directory, when one exists at the
++   * datasets root next to `directory`. Used to detect the case where JSON
++   * outputs were moved out of the dataset folder entirely into a mirrored
++   * tree, rather than nested in a `_processed` subfolder inside it.
++   */
++  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
+ }): Promise<DatasetFolderKind> {
+-  const { directory, folderName } = params
++  const { directory, folderName, processedMirrorHandle } = params
+   if (isReservedDatasetsChildFolderName(folderName)) return 'skip'
+ 
+   if (await directoryHasDatasetManifest(directory)) return 'package'
+@@ -45,6 +53,13 @@
+   const processedBotPaths = botPaths.filter((path) => isUnderProcessedMirror(path))
+   if (processedBotPaths.length > 0) return 'mothbox-processed'
+ 
++  if (!botPaths.length && processedMirrorHandle) {
++    const mirrorBotPaths = await findRelativeFilesUnderDirectory(processedMirrorHandle, (name) =>
++      name.endsWith('_botdetection.json'),
++    )
++    if (mirrorBotPaths.length > 0) return 'mothbox-processed-sibling'
++  }
++
+   const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
+   const metadataPaths = await findRelativeFilesUnderDirectory(directory, (name) => isParquetFileName(name) || isCsvFileName(name))
+   if (metadataPaths.length > 0 && imagePaths.some(isAmiCropImagePath)) {
+--- a/src/features/data-flow/1.ingest/discover-dataset-folders.ts
++++ b/src/features/data-flow/1.ingest/discover-dataset-folders.ts
+@@ -52,6 +52,19 @@
+     childCandidates.push({ directory: candidate, folderName })
+   }
+ 
++  // Look up the datasets-root `_processed` mirror folder once, if present, so
++  // sibling source folders (e.g. `night5_6`) can be matched against their
++  // mirrored output (e.g. `_processed/night5_6`) instead of being scanned
++  // as unrelated, separate datasets.
++  let processedRoot: DirectoryHandleWithIter | null = null
++  try {
++    processedRoot = (await datasetsRoot.getDirectoryHandle?.('_processed', { create: false })) as
++      | DirectoryHandleWithIter
++      | null
++  } catch {
++    processedRoot = null
++  }
++
+   const classified = await Promise.all(
+     childCandidates.map(async ({ directory, folderName }) => {
+       const manifestInfo = await readDatasetManifestSummary(directory)
+@@ -66,9 +79,20 @@
+         }
+       }
+ 
+-      const kind = await classifyDatasetFolder({ directory, folderName })
++      let processedMirrorHandle: DirectoryHandleWithIter | null = null
++      if (processedRoot) {
++        try {
++          processedMirrorHandle = (await processedRoot.getDirectoryHandle?.(folderName, { create: false })) as
++            | DirectoryHandleWithIter
++            | null
++        } catch {
++          processedMirrorHandle = null
++        }
++      }
++
++      const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle })
+       if (kind !== 'package' && kind !== 'skip') {
+-        return { package: null, pending: { folderName, kind } }
++        return { package: null, pending: { folderName, kind, processedMirrorHandle } }
+       }
+ 
+       return { package: null, pending: null }
+--- a/src/features/data-flow/1.ingest/pending-dataset-migration-types.ts
++++ b/src/features/data-flow/1.ingest/pending-dataset-migration-types.ts
+@@ -1,6 +1,9 @@
+ import type { DatasetFolderKind } from './classify-dataset-folder'
++import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
+ 
+ export type PendingDatasetMigration = {
+   folderName: string
+   kind: Exclude<DatasetFolderKind, 'package' | 'skip'>
++  /** Sibling `_processed/<folderName>` directory, when the JSON outputs live there instead of nested inside the dataset folder. */
++  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
+ }
+--- a/src/features/data-flow/1.ingest/migrate-pending-dataset-folders.ts
++++ b/src/features/data-flow/1.ingest/migrate-pending-dataset-folders.ts
+@@ -75,6 +75,7 @@
+           packageHandle,
+           folderName: item.folderName,
+           kind: item.kind,
++          processedMirrorHandle: item.processedMirrorHandle,
+           onProgress: reportProgress,
+         })
+         migrated.push({
+--- a/src/features/data-flow/1.ingest/build-mothbox-package-from-folder.ts
++++ b/src/features/data-flow/1.ingest/build-mothbox-package-from-folder.ts
+@@ -16,9 +16,11 @@
+   packageHandle: FileSystemDirectoryHandleLike
+   folderName: string
+   kind?: DatasetSetupKind
++  /** Sibling `_processed/<folderName>` directory, when JSON outputs live there instead of nested inside packageHandle. */
++  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
+   onProgress?: DinalabAdapterProgressCallback
+ }): Promise<{ datasetId: string; patchCount: number }> {
+-  const { packageHandle, folderName, onProgress } = params
++  const { packageHandle, folderName, processedMirrorHandle, onProgress } = params
+   const kind = params.kind ?? (await resolveDatasetSetupKind({ directory: packageHandle, folderName }))
+   const datasetId = sanitizeDatasetFolderName(folderName)
+   const humanClassifierId = (userSessionStore.get()?.initials || 'user').trim().toLowerCase() || 'user'
+@@ -32,7 +34,7 @@
+       })
+     })
+ 
+-  const layout = await resolvePackageSourceLayout({ packageHandle, kind })
++  const layout = await resolvePackageSourceLayout({ packageHandle, kind, processedMirrorHandle })
+ 
+   reportProgress({
+     phase: 'scan',
+--- a/src/features/data-flow/1.ingest/resolve-package-source-layout.ts
++++ b/src/features/data-flow/1.ingest/resolve-package-source-layout.ts
+@@ -8,6 +8,7 @@
+ import { resolveLegacyContentRootHandle } from './resolve-legacy-content-root'
+ import { getPackageSourceDirectoryHandle } from './move-legacy-into-package-source'
+ import { PACKAGE_ARCHIVE_DIR } from './reserved-paths'
++import { buildProcessedMirrorOverlayHandle } from '~/utils/processed-mirror-overlay'
+ import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
+ 
+ export type PackageSourceLayout = 'in_place' | 'archive'
+@@ -22,8 +23,10 @@
+ export async function resolvePackageSourceLayout(params: {
+   packageHandle: FileSystemDirectoryHandleLike
+   kind: Exclude<DatasetFolderKind, 'package' | 'skip'>
++  /** Sibling `_processed/<folderName>` directory, required when kind is 'mothbox-processed-sibling'. */
++  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
+ }): Promise<ResolvedPackageSourceLayout> {
+-  const { packageHandle, kind } = params
++  const { packageHandle, kind, processedMirrorHandle } = params
+ 
+   if (kind === 'source-only') {
+     const sourceHandle = await getPackageSourceDirectoryHandle(packageHandle)
+@@ -40,6 +43,22 @@
+       packageRelativeSourcePrefix: '',
+       layout: 'in_place',
+     }
++  }
++
++  if (kind === 'mothbox-processed-sibling') {
++    if (!processedMirrorHandle) {
++      throw new Error(
++        'Expected a sibling _processed mirror folder for this dataset, but none was found. The folder may have moved.',
++      )
++    }
++    return {
++      sourceHandle: buildProcessedMirrorOverlayHandle({
++        primaryHandle: packageHandle,
++        mirrorHandle: processedMirrorHandle,
++      }),
++      packageRelativeSourcePrefix: '',
++      layout: 'in_place',
++    }
+   }
+ 
+   const legacyRoot =

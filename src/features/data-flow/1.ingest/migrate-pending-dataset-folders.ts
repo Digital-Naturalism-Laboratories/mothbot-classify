@@ -75,6 +75,7 @@ export async function migratePendingDatasetFolders(
           packageHandle,
           folderName: item.folderName,
           kind: item.kind,
+          processedMirrorHandle: item.processedMirrorHandle,
           onProgress: reportProgress,
         })
         migrated.push({

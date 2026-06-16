@@ -8,6 +8,7 @@ import {
 import { resolveLegacyContentRootHandle } from './resolve-legacy-content-root'
 import { getPackageSourceDirectoryHandle } from './move-legacy-into-package-source'
 import { PACKAGE_ARCHIVE_DIR } from './reserved-paths'
+import { buildProcessedMirrorOverlayHandle } from '~/utils/processed-mirror-overlay'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
 export type PackageSourceLayout = 'in_place' | 'archive'
@@ -22,8 +23,10 @@ export type ResolvedPackageSourceLayout = {
 export async function resolvePackageSourceLayout(params: {
   packageHandle: FileSystemDirectoryHandleLike
   kind: Exclude<DatasetFolderKind, 'package' | 'skip'>
+  /** Sibling `_processed/<folderName>` directory, required when kind is 'mothbox-processed-sibling'. */
+  processedMirrorHandle?: FileSystemDirectoryHandleLike | null
 }): Promise<ResolvedPackageSourceLayout> {
-  const { packageHandle, kind } = params
+  const { packageHandle, kind, processedMirrorHandle } = params
 
   if (kind === 'source-only') {
     const sourceHandle = await getPackageSourceDirectoryHandle(packageHandle)
@@ -37,6 +40,22 @@ export async function resolvePackageSourceLayout(params: {
   if (kind === 'mothbox-processed' || kind === 'ami') {
     return {
       sourceHandle: packageHandle,
+      packageRelativeSourcePrefix: '',
+      layout: 'in_place',
+    }
+  }
+
+  if (kind === 'mothbox-processed-sibling') {
+    if (!processedMirrorHandle) {
+      throw new Error(
+        'Expected a sibling _processed mirror folder for this dataset, but none was found. The folder may have moved.',
+      )
+    }
+    return {
+      sourceHandle: buildProcessedMirrorOverlayHandle({
+        primaryHandle: packageHandle,
+        mirrorHandle: processedMirrorHandle,
+      }),
       packageRelativeSourcePrefix: '',
       layout: 'in_place',
     }
