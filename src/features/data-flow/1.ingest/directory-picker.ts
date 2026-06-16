@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 
 export function isDirectoryPickerAvailable(): boolean {
@@ -5,23 +6,15 @@ export function isDirectoryPickerAvailable(): boolean {
 }
 
 /**
- * Returns true when the browser supports the File System Access API
- * (`showDirectoryPicker`) BUT gates it behind a user-gesture requirement
- * that isn't met in the current context.
- *
- * Firefox 111+ ships `showDirectoryPicker` but only allows it to be called
- * from a trusted user-gesture event (click/keypress). When the function
- * exists yet the call throws a `SecurityError` or `NotAllowedError`, that
- * means the browser *has* the API but the picker wasn't triggered from an
- * appropriate user gesture — not that the API is missing altogether.
- *
- * This helper lets callers distinguish "API not supported" (show a warning)
- * from "API available" (show the button, let the browser decide at click time).
+ * Always true: the button should never be permanently disabled based on
+ * this check. Some Firefox builds don't expose `showDirectoryPicker` at all
+ * (vs. exposing it but blocking the call outside a user gesture, which is a
+ * separate case handled in pickDirectoryHandle's catch block). Leaving the
+ * button enabled lets pickDirectoryHandle surface a clear, actionable error
+ * instead of the button looking permanently broken.
  */
 export function isDirectoryPickerLikelySupported(): boolean {
-  // If the function exists at all, show the button — Firefox will enforce
-  // the gesture requirement at call time, which is fine.
-  return isDirectoryPickerAvailable()
+  return true
 }
 
 export async function pickDirectoryHandle(params: {
@@ -29,6 +22,15 @@ export async function pickDirectoryHandle(params: {
   title: string
 }): Promise<FileSystemDirectoryHandleLike | null> {
   const { mode, title } = params
+
+  if (!isDirectoryPickerAvailable()) {
+    toast.error('Folder picker is not supported in this browser', {
+      description:
+        'This feature needs the File System Access API (showDirectoryPicker). Try the latest Chrome or Edge, or check that Firefox is fully up to date.',
+    })
+    return null
+  }
+
   try {
     const handle = await (
       window as unknown as {
@@ -40,8 +42,8 @@ export async function pickDirectoryHandle(params: {
   } catch (err) {
     if (isAbortError(err)) return null
     // Firefox throws SecurityError when showDirectoryPicker is called outside
-    // a trusted user-gesture context. Surface a friendlier message instead of
-    // the raw DOMException.
+    // a trusted user-gesture context (e.g. after an await broke the gesture
+    // chain). Surface a friendlier message instead of the raw DOMException.
     if (isSecurityError(err)) {
       throw new Error(
         `Folder picker was blocked by the browser. Make sure you click the button directly (${title}).`,
