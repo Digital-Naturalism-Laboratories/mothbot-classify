@@ -8,7 +8,6 @@ import {
 import { resolveLegacyContentRootHandle } from './resolve-legacy-content-root'
 import { getPackageSourceDirectoryHandle } from './move-legacy-into-package-source'
 import { PACKAGE_ARCHIVE_DIR } from './reserved-paths'
-import { buildProcessedMirrorOverlayHandle } from '~/utils/processed-mirror-overlay'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
 export type PackageSourceLayout = 'in_place' | 'archive'
@@ -51,11 +50,12 @@ export async function resolvePackageSourceLayout(params: {
         'Expected a sibling _processed mirror folder for this dataset, but none was found. The folder may have moved.',
       )
     }
+    // Everything the adapter needs (bot/identified JSON and the patch image
+    // crops) already lives together under the _processed mirror folder, in
+    // the same in-place layout as `mothbox-processed`. No overlay needed —
+    // just point the source at the mirror directly.
     return {
-      sourceHandle: buildProcessedMirrorOverlayHandle({
-        primaryHandle: packageHandle,
-        mirrorHandle: processedMirrorHandle,
-      }),
+      sourceHandle: processedMirrorHandle,
       packageRelativeSourcePrefix: '',
       layout: 'in_place',
     }

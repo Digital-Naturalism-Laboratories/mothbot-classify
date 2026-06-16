@@ -1,0 +1,150 @@
+--- a/src/features/data-flow/1.ingest/resolve-package-source-layout.ts
++++ b/src/features/data-flow/1.ingest/resolve-package-source-layout.ts
+@@ -8,7 +8,6 @@
+ import { resolveLegacyContentRootHandle } from './resolve-legacy-content-root'
+ import { getPackageSourceDirectoryHandle } from './move-legacy-into-package-source'
+ import { PACKAGE_ARCHIVE_DIR } from './reserved-paths'
+-import { buildProcessedMirrorOverlayHandle } from '~/utils/processed-mirror-overlay'
+ import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
+ 
+ export type PackageSourceLayout = 'in_place' | 'archive'
+@@ -51,11 +50,12 @@
+         'Expected a sibling _processed mirror folder for this dataset, but none was found. The folder may have moved.',
+       )
+     }
++    // Everything the adapter needs (bot/identified JSON and the patch image
++    // crops) already lives together under the _processed mirror folder, in
++    // the same in-place layout as `mothbox-processed`. No overlay needed —
++    // just point the source at the mirror directly.
+     return {
+-      sourceHandle: buildProcessedMirrorOverlayHandle({
+-        primaryHandle: packageHandle,
+-        mirrorHandle: processedMirrorHandle,
+-      }),
++      sourceHandle: processedMirrorHandle,
+       packageRelativeSourcePrefix: '',
+       layout: 'in_place',
+     }
+--- a/src/features/data-flow/1.ingest/build-mothbox-package-from-folder.ts
++++ b/src/features/data-flow/1.ingest/build-mothbox-package-from-folder.ts
+@@ -36,6 +36,14 @@
+ 
+   const layout = await resolvePackageSourceLayout({ packageHandle, kind, processedMirrorHandle })
+ 
++  // For the "_processed mirror sibling" layout, all package output
++  // (dataset.json, 02_records/, 03_classifications/, adapter-report.json)
++  // should be written into the _processed mirror folder, not into the
++  // original source folder — source images are often too large to share,
++  // so the team's workflow is to share only the _processed side.
++  const effectivePackageHandle =
++    kind === 'mothbox-processed-sibling' && processedMirrorHandle ? processedMirrorHandle : packageHandle
++
+   reportProgress({
+     phase: 'scan',
+     message: 'Setting up dataset…',
+@@ -50,7 +58,7 @@
+     packageSourceLayout: layout.layout,
+     legacySourceRootName: layout.legacySourceRootName,
+     folderKind: kind,
+-    io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle }),
++    io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle: effectivePackageHandle }),
+     onProgress: reportProgress,
+   })
+ 
+@@ -58,7 +66,7 @@
+     reportProgress.flush()
+   }
+ 
+-  const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle })
++  const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle: effectivePackageHandle })
+   if (morphoLinks.importedCount > 0) {
+     console.log('✅ setup: migrated morpho links', morphoLinks)
+   }
+--- a/src/stores/datasets-registry.ts
++++ b/src/stores/datasets-registry.ts
+@@ -8,6 +8,14 @@
+   folderName: string
+   datasetId?: string
+   hasManifest: boolean
++  /**
++   * Path (relative to the datasets root) where the package's manifest and
++   * records actually live, when different from `folderName`. Used for the
++   * `_processed/<folderName>` mirror layout, where dataset.json and friends
++   * are written into _processed instead of the original source folder.
++   * Falls back to `folderName` when absent.
++   */
++  packagePath?: string
+ }
+ 
+ export const datasetsRegistryStore = atom<DatasetRegistryEntry[]>([])
+--- a/src/features/data-flow/1.ingest/discover-dataset-folders.ts
++++ b/src/features/data-flow/1.ingest/discover-dataset-folders.ts
+@@ -90,6 +90,25 @@
+         }
+       }
+ 
++      // The package may already be set up on the mirror side (e.g.
++      // _processed/night5_6/dataset.json), even though the source folder
++      // itself (night5_6) has no manifest. Check there before treating this
++      // as a folder that still needs migration.
++      if (processedMirrorHandle) {
++        const mirrorManifestInfo = await readDatasetManifestSummary(processedMirrorHandle)
++        if (mirrorManifestInfo.hasManifest) {
++          return {
++            package: {
++              folderName,
++              datasetId: mirrorManifestInfo.datasetId,
++              hasManifest: true as const,
++              packagePath: `_processed/${folderName}`,
++            },
++            pending: null,
++          }
++        }
++      }
++
+       const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle })
+       if (kind !== 'package' && kind !== 'skip') {
+         return { package: null, pending: { folderName, kind, processedMirrorHandle } }
+--- a/src/features/data-flow/1.ingest/migrate-pending-dataset-folders.ts
++++ b/src/features/data-flow/1.ingest/migrate-pending-dataset-folders.ts
+@@ -82,6 +82,7 @@
+           folderName: item.folderName,
+           datasetId: built.datasetId,
+           hasManifest: true,
++          ...(item.kind === 'mothbox-processed-sibling' ? { packagePath: `_processed/${item.folderName}` } : {}),
+         })
+       } catch (err) {
+         const message = err instanceof Error ? err.message : String(err)
+--- a/src/features/data-flow/1.ingest/open-dataset-by-folder.ts
++++ b/src/features/data-flow/1.ingest/open-dataset-by-folder.ts
+@@ -1,6 +1,7 @@
+ import { toast } from 'sonner'
+ import { requireDatasetsFolderHandle } from './datasets-folder-handle'
+ import { openMothboxNextPackageFromHandle } from './open-mothbox-next-package'
++import { datasetsRegistryStore } from '~/stores/datasets-registry'
+ import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
+ 
+ type DirectoryHandleWithIter = FileSystemDirectoryHandleLike & {
+@@ -18,9 +19,20 @@
+     return false
+   }
+ 
+-  let subdir: FileSystemDirectoryHandleLike | undefined
++  // The package's manifest/records may live at a different path than the
++  // display folder name (e.g. _processed/night5_6 for the processed-mirror
++  // layout, where source images stay in night5_6 but the package output is
++  // written into _processed to keep the shareable bundle small).
++  const registryEntry = datasetsRegistryStore.get().find((entry) => entry.folderName === folderName)
++  const relativePackagePath = registryEntry?.packagePath ?? folderName
++  const pathSegments = relativePackagePath.split('/').filter(Boolean)
++
++  let subdir: FileSystemDirectoryHandleLike | undefined = root
+   try {
+-    subdir = await root.getDirectoryHandle?.(folderName, { create: false })
++    for (const segment of pathSegments) {
++      subdir = await (subdir as DirectoryHandleWithIter)?.getDirectoryHandle?.(segment, { create: false })
++      if (!subdir) break
++    }
+   } catch {
+     subdir = undefined
+   }

@@ -82,6 +82,7 @@ export async function migratePendingDatasetFolders(
           folderName: item.folderName,
           datasetId: built.datasetId,
           hasManifest: true,
+          ...(item.kind === 'mothbox-processed-sibling' ? { packagePath: `_processed/${item.folderName}` } : {}),
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)

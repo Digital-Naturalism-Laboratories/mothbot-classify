@@ -36,6 +36,14 @@ export async function buildMothboxPackageFromFolder(params: {
 
   const layout = await resolvePackageSourceLayout({ packageHandle, kind, processedMirrorHandle })
 
+  // For the "_processed mirror sibling" layout, all package output
+  // (dataset.json, 02_records/, 03_classifications/, adapter-report.json)
+  // should be written into the _processed mirror folder, not into the
+  // original source folder — source images are often too large to share,
+  // so the team's workflow is to share only the _processed side.
+  const effectivePackageHandle =
+    kind === 'mothbox-processed-sibling' && processedMirrorHandle ? processedMirrorHandle : packageHandle
+
   reportProgress({
     phase: 'scan',
     message: 'Setting up dataset…',
@@ -50,7 +58,7 @@ export async function buildMothboxPackageFromFolder(params: {
     packageSourceLayout: layout.layout,
     legacySourceRootName: layout.legacySourceRootName,
     folderKind: kind,
-    io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle }),
+    io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle: effectivePackageHandle }),
     onProgress: reportProgress,
   })
 
@@ -58,7 +66,7 @@ export async function buildMothboxPackageFromFolder(params: {
     reportProgress.flush()
   }
 
-  const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle })
+  const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle: effectivePackageHandle })
   if (morphoLinks.importedCount > 0) {
     console.log('✅ setup: migrated morpho links', morphoLinks)
   }

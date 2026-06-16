@@ -90,6 +90,25 @@ export async function discoverDatasetFoldersUnderRoot(
         }
       }
 
+      // The package may already be set up on the mirror side (e.g.
+      // _processed/night5_6/dataset.json), even though the source folder
+      // itself (night5_6) has no manifest. Check there before treating this
+      // as a folder that still needs migration.
+      if (processedMirrorHandle) {
+        const mirrorManifestInfo = await readDatasetManifestSummary(processedMirrorHandle)
+        if (mirrorManifestInfo.hasManifest) {
+          return {
+            package: {
+              folderName,
+              datasetId: mirrorManifestInfo.datasetId,
+              hasManifest: true as const,
+              packagePath: `_processed/${folderName}`,
+            },
+            pending: null,
+          }
+        }
+      }
+
       const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle })
       if (kind !== 'package' && kind !== 'skip') {
         return { package: null, pending: { folderName, kind, processedMirrorHandle } }

@@ -8,6 +8,14 @@ export type DatasetRegistryEntry = {
   folderName: string
   datasetId?: string
   hasManifest: boolean
+  /**
+   * Path (relative to the datasets root) where the package's manifest and
+   * records actually live, when different from `folderName`. Used for the
+   * `_processed/<folderName>` mirror layout, where dataset.json and friends
+   * are written into _processed instead of the original source folder.
+   * Falls back to `folderName` when absent.
+   */
+  packagePath?: string
 }
 
 export const datasetsRegistryStore = atom<DatasetRegistryEntry[]>([])
