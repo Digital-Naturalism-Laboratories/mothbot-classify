@@ -1,6 +1,10 @@
 # Mothbot Classify
 
-A local-first application for labeling and classifying insect photos captured by Mothbot hardware.
+A local-first application for labeling and classifying insect photos captured by Mothbot hardware. You can use it by just going to 
+
+```
+https://dev-classify.mothbox.org/
+```
 
 ## Prerequisites
 
