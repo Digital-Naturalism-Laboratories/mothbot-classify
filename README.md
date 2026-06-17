@@ -33,10 +33,16 @@ projects/
       └── {site}/
           └── {deployment}/
               └── {night}/
-                  ├── {photo}.jpg
-                  ├── {photo}_botdetection.json
-                  └── patches/
-                      └── {photo}_{index}_{model}.jpg
+                  ├── {photo_sourceImageA}.jpg
+  └── _processed
+
+      └── {project}/
+          └── {site}/
+              └── {deployment}/
+                  └── {night}/
+                      ├── {photo_sourceImageA}__{index}_{model}.jpg
+                      ├── {photo_sourceImageA}_botdetection.json
+
 ```
 
 The app lets you navigate through this hierarchy, view AI-detected insects, and approve or further classify each detection.
