@@ -210,6 +210,8 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
   const { photo } = props
 
   const photoUrl = useObjectUrl(photo?.imageFile?.file, photo?.imageFile?.handle)
+  const hasPhotoRecord = !!photo
+  const sourceUnavailable = hasPhotoRecord && !photoUrl
 
   return (
     <div className='space-y-8'>
@@ -218,7 +220,15 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
         alt={photo?.name ?? 'photo'}
         downloadName={photo?.name ?? undefined}
         className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
-        fallback={<div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />}
+        fallback={
+          <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 flex items-center justify-center p-16 text-center'>
+            <p className='text-13 text-neutral-500'>
+              {sourceUnavailable
+                ? 'Source image was not found in this dataset. It may only have been shared with the processed data, without the original source photos.'
+                : 'No source photo linked to this patch.'}
+            </p>
+          </div>
+        }
       />
       <div className='flex flex-wrap gap-8'>
         {photoUrl ? (
@@ -228,7 +238,7 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
             </Button>
           </a>
         ) : null}
-        <Button size='xsm' variant='outline' onClick={() => copyToClipboard(photo?.imageFile?.path)}>
+        <Button size='xsm' variant='outline' disabled={!photo?.imageFile?.path} onClick={() => copyToClipboard(photo?.imageFile?.path)}>
           Copy photo path
         </Button>
       </div>
@@ -237,7 +247,8 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
           <span className='font-medium'>Photo ID:</span> {photo?.id}
         </div>
         <div className='mt-4'>
-          <span className='font-medium'>File path:</span> {photo?.imageFile?.path ?? '—'}
+          <span className='font-medium'>File path:</span>{' '}
+          {photo?.imageFile?.path ?? (sourceUnavailable ? 'Not available in this dataset' : '—')}
         </div>
       </div>
     </div>

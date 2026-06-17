@@ -22,9 +22,11 @@ export async function runDinalabMothboxV1Adapter(params: {
   packageSourceLayout?: PackageSourceLayout
   legacySourceRootName?: string
   folderKind?: Exclude<DatasetFolderKind, 'package' | 'skip'>
+  /** Read-only existence check against the original (primary) source folder, used as a fallback when locating full-size source photos not present in a `_processed` mirror. */
+  originalSourceExists?: (relativePath: string) => Promise<boolean>
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<DinalabAdapterResult> {
-  const { datasetId, io, legacySourceRootName, folderKind, onProgress } = params
+  const { datasetId, io, legacySourceRootName, folderKind, onProgress, originalSourceExists } = params
   const archiveSourceTree = params.archiveSourceTree === true
   const retainPatchesInSource = params.retainPatchesInSource === true
   const humanClassifierId = params.humanClassifierId?.trim() || 'bf'
@@ -52,6 +54,7 @@ export async function runDinalabMothboxV1Adapter(params: {
             ...buildParams,
             humanClassifierId,
             processedMirrorRoot: folderKind === 'mothbox-processed' ? '_processed' : undefined,
+            originalSourceExists: folderKind === 'mothbox-processed-sibling' ? originalSourceExists : undefined,
           })
 
   if (archiveSourceTree && !retainPatchesInSource) {

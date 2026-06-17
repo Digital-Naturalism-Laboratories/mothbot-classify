@@ -42,6 +42,21 @@ export async function openDatasetByFolderName(params: {
     return false
   }
 
-  const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast })
+  // When the package lives in a different location than the display name
+  // (e.g. _processed/night5_6), the display folder itself (night5_6) is the
+  // original source location, which may still hold full-size source photos
+  // not included in the package's _processed mirror.
+  let originalSourceHandle: FileSystemDirectoryHandleLike | undefined
+  if (registryEntry?.packagePath && registryEntry.packagePath !== folderName) {
+    try {
+      originalSourceHandle = await (root as DirectoryHandleWithIter)?.getDirectoryHandle?.(folderName, {
+        create: false,
+      })
+    } catch {
+      originalSourceHandle = undefined
+    }
+  }
+
+  const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast, originalSourceHandle })
   return opened.ok
 }

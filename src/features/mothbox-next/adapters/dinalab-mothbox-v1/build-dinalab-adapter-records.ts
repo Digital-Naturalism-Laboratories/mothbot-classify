@@ -43,6 +43,15 @@ export async function buildDinalabMothboxV1Records(params: {
   packageSourceLayout: PackageSourceLayout
   legacySourceRootName?: string
   processedMirrorRoot?: string
+  /**
+   * Optional read-only IO rooted at the original (primary) source folder,
+   * used only to locate full-size source photos when `io.source` is a
+   * `_processed` mirror that doesn't include them (patches/JSON live in the
+   * mirror, but full-size photos stay in the primary folder since they're
+   * often too large to share). Never used for writes or for patch/JSON
+   * lookups — those always come from `io.source`.
+   */
+  originalSourceExists?: (relativePath: string) => Promise<boolean>
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<BuiltDinalabAdapterRecords> {
   const {
@@ -54,6 +63,7 @@ export async function buildDinalabMothboxV1Records(params: {
     packageRelativeSourcePrefix,
     packageSourceLayout,
     processedMirrorRoot,
+    originalSourceExists,
   } = params
   const humanClassifierId = params.humanClassifierId?.trim() || 'bf'
   const progressMessage = 'Converting legacy dataset…'
@@ -152,6 +162,7 @@ export async function buildDinalabMothboxV1Records(params: {
         io,
         botRelativePath,
         processedMirrorRoot,
+        originalSourceExists,
       })
 
       patchSources.push({
@@ -263,8 +274,9 @@ async function resolveSourcePhotoRelative(params: {
   io: DinalabAdapterIO
   botRelativePath: string
   processedMirrorRoot?: string
+  originalSourceExists?: (relativePath: string) => Promise<boolean>
 }) {
-  const { io, botRelativePath, processedMirrorRoot } = params
+  const { io, botRelativePath, processedMirrorRoot, originalSourceExists } = params
   const photoBase = stripProcessedMirrorSegment(
     botRelativePath.replace(/_botdetection\.json$/i, ''),
     processedMirrorRoot,
@@ -280,6 +292,15 @@ async function resolveSourcePhotoRelative(params: {
 
   for (const candidate of candidates) {
     if (await io.source.exists(candidate)) return candidate
+  }
+
+  // Full-size source photos sometimes live outside the mirror (e.g.
+  // _processed/<night> holds JSON + patches, but the original photo stays
+  // in the sibling source folder since it's often too large to share).
+  if (originalSourceExists) {
+    for (const candidate of candidates) {
+      if (await originalSourceExists(candidate)) return candidate
+    }
   }
 
   return `${photoBase}.jpg`

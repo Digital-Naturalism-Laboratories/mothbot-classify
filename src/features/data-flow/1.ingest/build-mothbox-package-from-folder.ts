@@ -4,6 +4,7 @@ import { runDinalabMothboxV1Adapter } from '~/features/mothbox-next/adapters/din
 import { createThrottledProgressCallback } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/adapter-progress'
 import { createBrowserDinalabAdapterIO } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import type { DinalabAdapterProgressCallback } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/adapter-io'
+import { fileExistsAt } from '~/utils/fs-directory-handle'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 import { sanitizeDatasetFolderName } from './choose-datasets-folder'
 import { resolvePackageSourceLayout } from './resolve-package-source-layout'
@@ -59,6 +60,12 @@ export async function buildMothboxPackageFromFolder(params: {
     legacySourceRootName: layout.legacySourceRootName,
     folderKind: kind,
     io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle: effectivePackageHandle }),
+    // For the sibling-mirror layout, full-size source photos live in the
+    // original folder (packageHandle, before swapping to the mirror), not
+    // in the mirror used as io.source. Let the adapter fall back to
+    // checking there when resolving each photo's real path.
+    originalSourceExists:
+      kind === 'mothbox-processed-sibling' ? (relativePath) => fileExistsAt(packageHandle, relativePath) : undefined,
     onProgress: reportProgress,
   })
 

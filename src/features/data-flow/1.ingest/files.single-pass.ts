@@ -15,6 +15,8 @@ export async function singlePassIngest(params: {
   skipIndexedStateApply?: boolean
   /** Set when `ingestIndexedFolderFiles` already validated the folder. */
   skipValidation?: boolean
+  /** Extra files used only for resolving full-size source photos outside the package (e.g. a sibling original-source folder when the package lives in a `_processed` mirror). Mothbox-next packages only. */
+  extraSourceResolutionFiles?: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>
 }) {
   try {
     const normalizedFiles = params.pathsAlreadyNormalized
@@ -52,7 +54,10 @@ export async function singlePassIngest(params: {
       label: isPackage ? 'ingested mothbox-next package' : 'ingested files',
       fn: async () => {
         if (isPackage) {
-          const result = await ingestMothboxNextPackageFromIndexedFiles({ files: normalizedFiles as any })
+          const result = await ingestMothboxNextPackageFromIndexedFiles({
+            files: normalizedFiles as any,
+            extraSourceResolutionFiles: params.extraSourceResolutionFiles as any,
+          })
           if (!result.ok) throw new Error(result.message)
           return
         }

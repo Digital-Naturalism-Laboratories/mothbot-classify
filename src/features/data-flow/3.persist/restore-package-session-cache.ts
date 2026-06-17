@@ -13,8 +13,13 @@ import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/pack
 export async function restorePackageSessionCache(params: {
   folderName: string
   indexed: IndexedFile[]
+  /** Extra files used only for resolving full-size source photos outside the package (e.g. a sibling original-source folder when the package lives in a `_processed` mirror). */
+  extraSourceResolutionFiles?: IndexedFile[]
 }): Promise<PackageSessionRestoreResult> {
   const normalized = normalizeIndexedPathsToPackageRoot(params.indexed)
+  const sourceResolutionIndexed = params.extraSourceResolutionFiles?.length
+    ? [...normalized, ...params.extraSourceResolutionFiles]
+    : normalized
   const fingerprint = await computePackageSessionFingerprint({ indexed: normalized })
   if (!fingerprint) return { ok: false, reason: 'missing-fingerprint' }
 
@@ -37,7 +42,7 @@ export async function restorePackageSessionCache(params: {
     await applyLoadedPackageToStores({
       loaded: cached.loaded,
       indexedFiles: mergedIndexed,
-      sourceResolutionIndexed: normalized,
+      sourceResolutionIndexed,
     })
   } catch (err) {
     clearMothboxNextPackage()
@@ -60,6 +65,7 @@ export async function restorePackageSessionCache(params: {
 export async function tryRestorePackageFromSessionCache(params: {
   folderName: string
   indexed: IndexedFile[]
+  extraSourceResolutionFiles?: IndexedFile[]
 }): Promise<boolean> {
   const result = await restorePackageSessionCache(params)
   return result.ok

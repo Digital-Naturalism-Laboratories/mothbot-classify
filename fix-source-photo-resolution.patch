@@ -1,0 +1,339 @@
+--- a/src/routes/5.night/patch-detail-dialog.tsx
++++ b/src/routes/5.night/patch-detail-dialog.tsx
+@@ -210,6 +210,8 @@
+   const { photo } = props
+ 
+   const photoUrl = useObjectUrl(photo?.imageFile?.file, photo?.imageFile?.handle)
++  const hasPhotoRecord = !!photo
++  const sourceUnavailable = hasPhotoRecord && !photoUrl
+ 
+   return (
+     <div className='space-y-8'>
+@@ -218,7 +220,15 @@
+         alt={photo?.name ?? 'photo'}
+         downloadName={photo?.name ?? undefined}
+         className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
+-        fallback={<div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />}
++        fallback={
++          <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 flex items-center justify-center p-16 text-center'>
++            <p className='text-13 text-neutral-500'>
++              {sourceUnavailable
++                ? 'Source image was not found in this dataset. It may only have been shared with the processed data, without the original source photos.'
++                : 'No source photo linked to this patch.'}
++            </p>
++          </div>
++        }
+       />
+       <div className='flex flex-wrap gap-8'>
+         {photoUrl ? (
+@@ -228,7 +238,7 @@
+             </Button>
+           </a>
+         ) : null}
+-        <Button size='xsm' variant='outline' onClick={() => copyToClipboard(photo?.imageFile?.path)}>
++        <Button size='xsm' variant='outline' disabled={!photo?.imageFile?.path} onClick={() => copyToClipboard(photo?.imageFile?.path)}>
+           Copy photo path
+         </Button>
+       </div>
+@@ -237,7 +247,8 @@
+           <span className='font-medium'>Photo ID:</span> {photo?.id}
+         </div>
+         <div className='mt-4'>
+-          <span className='font-medium'>File path:</span> {photo?.imageFile?.path ?? '—'}
++          <span className='font-medium'>File path:</span>{' '}
++          {photo?.imageFile?.path ?? (sourceUnavailable ? 'Not available in this dataset' : '—')}
+         </div>
+       </div>
+     </div>
+--- a/src/features/mothbox-next/adapters/dinalab-mothbox-v1/build-dinalab-adapter-records.ts
++++ b/src/features/mothbox-next/adapters/dinalab-mothbox-v1/build-dinalab-adapter-records.ts
+@@ -43,6 +43,15 @@
+   packageSourceLayout: PackageSourceLayout
+   legacySourceRootName?: string
+   processedMirrorRoot?: string
++  /**
++   * Optional read-only IO rooted at the original (primary) source folder,
++   * used only to locate full-size source photos when `io.source` is a
++   * `_processed` mirror that doesn't include them (patches/JSON live in the
++   * mirror, but full-size photos stay in the primary folder since they're
++   * often too large to share). Never used for writes or for patch/JSON
++   * lookups — those always come from `io.source`.
++   */
++  originalSourceExists?: (relativePath: string) => Promise<boolean>
+   onProgress?: DinalabAdapterProgressCallback
+ }): Promise<BuiltDinalabAdapterRecords> {
+   const {
+@@ -54,6 +63,7 @@
+     packageRelativeSourcePrefix,
+     packageSourceLayout,
+     processedMirrorRoot,
++    originalSourceExists,
+   } = params
+   const humanClassifierId = params.humanClassifierId?.trim() || 'bf'
+   const progressMessage = 'Converting legacy dataset…'
+@@ -152,6 +162,7 @@
+         io,
+         botRelativePath,
+         processedMirrorRoot,
++        originalSourceExists,
+       })
+ 
+       patchSources.push({
+@@ -263,8 +274,9 @@
+   io: DinalabAdapterIO
+   botRelativePath: string
+   processedMirrorRoot?: string
++  originalSourceExists?: (relativePath: string) => Promise<boolean>
+ }) {
+-  const { io, botRelativePath, processedMirrorRoot } = params
++  const { io, botRelativePath, processedMirrorRoot, originalSourceExists } = params
+   const photoBase = stripProcessedMirrorSegment(
+     botRelativePath.replace(/_botdetection\.json$/i, ''),
+     processedMirrorRoot,
+@@ -282,6 +294,15 @@
+     if (await io.source.exists(candidate)) return candidate
+   }
+ 
++  // Full-size source photos sometimes live outside the mirror (e.g.
++  // _processed/<night> holds JSON + patches, but the original photo stays
++  // in the sibling source folder since it's often too large to share).
++  if (originalSourceExists) {
++    for (const candidate of candidates) {
++      if (await originalSourceExists(candidate)) return candidate
++    }
++  }
++
+   return `${photoBase}.jpg`
+ }
+ 
+--- a/src/features/mothbox-next/adapters/dinalab-mothbox-v1/run-adapter.ts
++++ b/src/features/mothbox-next/adapters/dinalab-mothbox-v1/run-adapter.ts
+@@ -22,9 +22,11 @@
+   packageSourceLayout?: PackageSourceLayout
+   legacySourceRootName?: string
+   folderKind?: Exclude<DatasetFolderKind, 'package' | 'skip'>
++  /** Read-only existence check against the original (primary) source folder, used as a fallback when locating full-size source photos not present in a `_processed` mirror. */
++  originalSourceExists?: (relativePath: string) => Promise<boolean>
+   onProgress?: DinalabAdapterProgressCallback
+ }): Promise<DinalabAdapterResult> {
+-  const { datasetId, io, legacySourceRootName, folderKind, onProgress } = params
++  const { datasetId, io, legacySourceRootName, folderKind, onProgress, originalSourceExists } = params
+   const archiveSourceTree = params.archiveSourceTree === true
+   const retainPatchesInSource = params.retainPatchesInSource === true
+   const humanClassifierId = params.humanClassifierId?.trim() || 'bf'
+@@ -52,6 +54,7 @@
+             ...buildParams,
+             humanClassifierId,
+             processedMirrorRoot: folderKind === 'mothbox-processed' ? '_processed' : undefined,
++            originalSourceExists: folderKind === 'mothbox-processed-sibling' ? originalSourceExists : undefined,
+           })
+ 
+   if (archiveSourceTree && !retainPatchesInSource) {
+--- a/src/features/data-flow/1.ingest/build-mothbox-package-from-folder.ts
++++ b/src/features/data-flow/1.ingest/build-mothbox-package-from-folder.ts
+@@ -4,6 +4,7 @@
+ import { createThrottledProgressCallback } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/adapter-progress'
+ import { createBrowserDinalabAdapterIO } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
+ import type { DinalabAdapterProgressCallback } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/adapter-io'
++import { fileExistsAt } from '~/utils/fs-directory-handle'
+ import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
+ import { sanitizeDatasetFolderName } from './choose-datasets-folder'
+ import { resolvePackageSourceLayout } from './resolve-package-source-layout'
+@@ -59,6 +60,12 @@
+     legacySourceRootName: layout.legacySourceRootName,
+     folderKind: kind,
+     io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle: effectivePackageHandle }),
++    // For the sibling-mirror layout, full-size source photos live in the
++    // original folder (packageHandle, before swapping to the mirror), not
++    // in the mirror used as io.source. Let the adapter fall back to
++    // checking there when resolving each photo's real path.
++    originalSourceExists:
++      kind === 'mothbox-processed-sibling' ? (relativePath) => fileExistsAt(packageHandle, relativePath) : undefined,
+     onProgress: reportProgress,
+   })
+ 
+--- a/src/features/data-flow/1.ingest/open-dataset-by-folder.ts
++++ b/src/features/data-flow/1.ingest/open-dataset-by-folder.ts
+@@ -42,6 +42,21 @@
+     return false
+   }
+ 
+-  const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast })
++  // When the package lives in a different location than the display name
++  // (e.g. _processed/night5_6), the display folder itself (night5_6) is the
++  // original source location, which may still hold full-size source photos
++  // not included in the package's _processed mirror.
++  let originalSourceHandle: FileSystemDirectoryHandleLike | undefined
++  if (registryEntry?.packagePath && registryEntry.packagePath !== folderName) {
++    try {
++      originalSourceHandle = await (root as DirectoryHandleWithIter)?.getDirectoryHandle?.(folderName, {
++        create: false,
++      })
++    } catch {
++      originalSourceHandle = undefined
++    }
++  }
++
++  const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast, originalSourceHandle })
+   return opened.ok
+ }
+--- a/src/features/data-flow/1.ingest/open-mothbox-next-package.ts
++++ b/src/features/data-flow/1.ingest/open-mothbox-next-package.ts
+@@ -23,6 +23,13 @@
+ export type OpenPackageOptions = {
+   /** When false, skip success toast (e.g. background warm on startup). */
+   showSuccessToast?: boolean
++  /**
++   * Sibling folder holding the original (primary) source data, when the
++   * package lives in a different location (e.g. _processed/<name> mirror).
++   * Indexed read-only and merged in just for resolving full-size source
++   * photos that aren't included in the package's own files.
++   */
++  originalSourceHandle?: FileSystemDirectoryHandleLike
+ }
+ 
+ export async function openMothboxNextPackageFromHandle(
+@@ -31,6 +38,7 @@
+ ): Promise<OpenPackageResult> {
+   const folderName = (handle as { name?: string }).name?.trim() || 'dataset'
+   const showSuccessToast = options?.showSuccessToast !== false
++  const originalSourceHandle = options?.originalSourceHandle
+ 
+   toast.loading('Opening dataset…', {
+     id: OPEN_PACKAGE_TOAST_ID,
+@@ -44,6 +52,21 @@
+     const indexed = await collectIndexedFromDirectoryHandle(handle, { hydrateFiles: false })
+     const normalizedIndexed = normalizeIndexedPathsToPackageRoot(indexed)
+ 
++    // Index the sibling original-source folder (if any) read-only, purely
++    // to make full-size source photos resolvable. Failures here are
++    // non-fatal — the dataset still opens, just without source photos.
++    let extraSourceResolutionFiles: Awaited<ReturnType<typeof collectIndexedFromDirectoryHandle>> = []
++    if (originalSourceHandle) {
++      try {
++        extraSourceResolutionFiles = await collectIndexedFromDirectoryHandle(originalSourceHandle, {
++          hydrateFiles: false,
++        })
++      } catch (err) {
++        console.warn('🚨 openMothboxNextPackage: could not index original source folder', err)
++        extraSourceResolutionFiles = []
++      }
++    }
++
+     await migratePackageSourceToArchiveIfNeeded({
+       packageHandle: handle,
+       indexedPaths: normalizedIndexed.map((file) => file.path),
+@@ -53,6 +76,7 @@
+     const restoredFromCache = await tryRestorePackageFromSessionCache({
+       folderName,
+       indexed: normalizedIndexed,
++      extraSourceResolutionFiles,
+     })
+     if (restoredFromCache) {
+       pickerErrorStore.set(null)
+@@ -82,7 +106,14 @@
+     })
+ 
+     const hydrated = await hydrateIndexedForIngest(normalizedIndexed)
+-    const ingest = await singlePassIngest({ files: hydrated, pathsAlreadyNormalized: true })
++    const hydratedExtraSourceResolutionFiles = extraSourceResolutionFiles.length
++      ? await hydrateIndexedForIngest(extraSourceResolutionFiles)
++      : []
++    const ingest = await singlePassIngest({
++      files: hydrated,
++      pathsAlreadyNormalized: true,
++      extraSourceResolutionFiles: hydratedExtraSourceResolutionFiles,
++    })
+     if (!ingest.ok) {
+       const message = formatFilesystemError(ingest.message)
+       pickerErrorStore.set(message)
+--- a/src/features/data-flow/1.ingest/package/ingest-package.ts
++++ b/src/features/data-flow/1.ingest/package/ingest-package.ts
+@@ -9,8 +9,15 @@
+ import { parseDatasetManifest } from '~/features/mothbox-next/dataset-manifest'
+ export async function ingestMothboxNextPackageFromIndexedFiles(params: {
+   files: IndexedFile[]
++  /**
++   * Extra files (already relative to their own root, not the package root)
++   * used only for resolving full-size source photos not present in the
++   * package itself — e.g. the original source folder when the package
++   * lives in a `_processed` mirror. Never used for patches, JSON, or writes.
++   */
++  extraSourceResolutionFiles?: IndexedFile[]
+ }) {
+-  const { files } = params
++  const { files, extraSourceResolutionFiles } = params
+   const manifestInfo = findPackageManifestInIndexedFiles(files)
+   if (!manifestInfo) return { ok: false as const, message: 'No dataset.json found.' }
+ 
+@@ -21,10 +28,13 @@
+ 
+   try {
+     const normalizedFiles = normalizeIndexedPathsToPackageRoot(files)
++    const sourceResolutionIndexed = extraSourceResolutionFiles?.length
++      ? [...normalizedFiles, ...extraSourceResolutionFiles]
++      : normalizedFiles
+ 
+     const loaded = await reloadActivePackageFromIndexedFiles({
+       files: normalizedFiles,
+-      sourceResolutionIndexed: normalizedFiles,
++      sourceResolutionIndexed,
+     })
+ 
+     console.log('✅ ingestMothboxNextPackage: complete', {
+--- a/src/features/data-flow/1.ingest/files.single-pass.ts
++++ b/src/features/data-flow/1.ingest/files.single-pass.ts
+@@ -15,6 +15,8 @@
+   skipIndexedStateApply?: boolean
+   /** Set when `ingestIndexedFolderFiles` already validated the folder. */
+   skipValidation?: boolean
++  /** Extra files used only for resolving full-size source photos outside the package (e.g. a sibling original-source folder when the package lives in a `_processed` mirror). Mothbox-next packages only. */
++  extraSourceResolutionFiles?: Array<{ file?: File; handle?: unknown; path: string; name: string; size: number }>
+ }) {
+   try {
+     const normalizedFiles = params.pathsAlreadyNormalized
+@@ -52,7 +54,10 @@
+       label: isPackage ? 'ingested mothbox-next package' : 'ingested files',
+       fn: async () => {
+         if (isPackage) {
+-          const result = await ingestMothboxNextPackageFromIndexedFiles({ files: normalizedFiles as any })
++          const result = await ingestMothboxNextPackageFromIndexedFiles({
++            files: normalizedFiles as any,
++            extraSourceResolutionFiles: params.extraSourceResolutionFiles as any,
++          })
+           if (!result.ok) throw new Error(result.message)
+           return
+         }
+--- a/src/features/data-flow/3.persist/restore-package-session-cache.ts
++++ b/src/features/data-flow/3.persist/restore-package-session-cache.ts
+@@ -13,8 +13,13 @@
+ export async function restorePackageSessionCache(params: {
+   folderName: string
+   indexed: IndexedFile[]
++  /** Extra files used only for resolving full-size source photos outside the package (e.g. a sibling original-source folder when the package lives in a `_processed` mirror). */
++  extraSourceResolutionFiles?: IndexedFile[]
+ }): Promise<PackageSessionRestoreResult> {
+   const normalized = normalizeIndexedPathsToPackageRoot(params.indexed)
++  const sourceResolutionIndexed = params.extraSourceResolutionFiles?.length
++    ? [...normalized, ...params.extraSourceResolutionFiles]
++    : normalized
+   const fingerprint = await computePackageSessionFingerprint({ indexed: normalized })
+   if (!fingerprint) return { ok: false, reason: 'missing-fingerprint' }
+ 
+@@ -37,7 +42,7 @@
+     await applyLoadedPackageToStores({
+       loaded: cached.loaded,
+       indexedFiles: mergedIndexed,
+-      sourceResolutionIndexed: normalized,
++      sourceResolutionIndexed,
+     })
+   } catch (err) {
+     clearMothboxNextPackage()
+@@ -60,6 +65,7 @@
+ export async function tryRestorePackageFromSessionCache(params: {
+   folderName: string
+   indexed: IndexedFile[]
++  extraSourceResolutionFiles?: IndexedFile[]
+ }): Promise<boolean> {
+   const result = await restorePackageSessionCache(params)
+   return result.ok

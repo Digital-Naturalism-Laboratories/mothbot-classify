@@ -23,6 +23,13 @@ export type OpenPackageResult =
 export type OpenPackageOptions = {
   /** When false, skip success toast (e.g. background warm on startup). */
   showSuccessToast?: boolean
+  /**
+   * Sibling folder holding the original (primary) source data, when the
+   * package lives in a different location (e.g. _processed/<name> mirror).
+   * Indexed read-only and merged in just for resolving full-size source
+   * photos that aren't included in the package's own files.
+   */
+  originalSourceHandle?: FileSystemDirectoryHandleLike
 }
 
 export async function openMothboxNextPackageFromHandle(
@@ -31,6 +38,7 @@ export async function openMothboxNextPackageFromHandle(
 ): Promise<OpenPackageResult> {
   const folderName = (handle as { name?: string }).name?.trim() || 'dataset'
   const showSuccessToast = options?.showSuccessToast !== false
+  const originalSourceHandle = options?.originalSourceHandle
 
   toast.loading('Opening dataset…', {
     id: OPEN_PACKAGE_TOAST_ID,
@@ -44,6 +52,21 @@ export async function openMothboxNextPackageFromHandle(
     const indexed = await collectIndexedFromDirectoryHandle(handle, { hydrateFiles: false })
     const normalizedIndexed = normalizeIndexedPathsToPackageRoot(indexed)
 
+    // Index the sibling original-source folder (if any) read-only, purely
+    // to make full-size source photos resolvable. Failures here are
+    // non-fatal — the dataset still opens, just without source photos.
+    let extraSourceResolutionFiles: Awaited<ReturnType<typeof collectIndexedFromDirectoryHandle>> = []
+    if (originalSourceHandle) {
+      try {
+        extraSourceResolutionFiles = await collectIndexedFromDirectoryHandle(originalSourceHandle, {
+          hydrateFiles: false,
+        })
+      } catch (err) {
+        console.warn('🚨 openMothboxNextPackage: could not index original source folder', err)
+        extraSourceResolutionFiles = []
+      }
+    }
+
     await migratePackageSourceToArchiveIfNeeded({
       packageHandle: handle,
       indexedPaths: normalizedIndexed.map((file) => file.path),
@@ -53,6 +76,7 @@ export async function openMothboxNextPackageFromHandle(
     const restoredFromCache = await tryRestorePackageFromSessionCache({
       folderName,
       indexed: normalizedIndexed,
+      extraSourceResolutionFiles,
     })
     if (restoredFromCache) {
       pickerErrorStore.set(null)
@@ -82,7 +106,14 @@ export async function openMothboxNextPackageFromHandle(
     })
 
     const hydrated = await hydrateIndexedForIngest(normalizedIndexed)
-    const ingest = await singlePassIngest({ files: hydrated, pathsAlreadyNormalized: true })
+    const hydratedExtraSourceResolutionFiles = extraSourceResolutionFiles.length
+      ? await hydrateIndexedForIngest(extraSourceResolutionFiles)
+      : []
+    const ingest = await singlePassIngest({
+      files: hydrated,
+      pathsAlreadyNormalized: true,
+      extraSourceResolutionFiles: hydratedExtraSourceResolutionFiles,
+    })
     if (!ingest.ok) {
       const message = formatFilesystemError(ingest.message)
       pickerErrorStore.set(message)

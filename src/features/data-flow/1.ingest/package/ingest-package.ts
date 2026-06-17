@@ -9,8 +9,15 @@ import {
 import { parseDatasetManifest } from '~/features/mothbox-next/dataset-manifest'
 export async function ingestMothboxNextPackageFromIndexedFiles(params: {
   files: IndexedFile[]
+  /**
+   * Extra files (already relative to their own root, not the package root)
+   * used only for resolving full-size source photos not present in the
+   * package itself — e.g. the original source folder when the package
+   * lives in a `_processed` mirror. Never used for patches, JSON, or writes.
+   */
+  extraSourceResolutionFiles?: IndexedFile[]
 }) {
-  const { files } = params
+  const { files, extraSourceResolutionFiles } = params
   const manifestInfo = findPackageManifestInIndexedFiles(files)
   if (!manifestInfo) return { ok: false as const, message: 'No dataset.json found.' }
 
@@ -21,10 +28,13 @@ export async function ingestMothboxNextPackageFromIndexedFiles(params: {
 
   try {
     const normalizedFiles = normalizeIndexedPathsToPackageRoot(files)
+    const sourceResolutionIndexed = extraSourceResolutionFiles?.length
+      ? [...normalizedFiles, ...extraSourceResolutionFiles]
+      : normalizedFiles
 
     const loaded = await reloadActivePackageFromIndexedFiles({
       files: normalizedFiles,
-      sourceResolutionIndexed: normalizedFiles,
+      sourceResolutionIndexed,
     })
 
     console.log('✅ ingestMothboxNextPackage: complete', {
