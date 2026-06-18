@@ -8,6 +8,7 @@ import { hydrateDatasetsWorkspaceFromDisk, scanDatasetsRegistry } from './datase
 import { warmDefaultDatasetInBackground } from './ensure-default-dataset-open'
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
 import { openDatasetByFolderName } from './open-dataset-by-folder'
+import { resetDataset } from './reset-dataset'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 
 export function useRestoreDirectoryQuery() {
@@ -77,6 +78,14 @@ export function useOpenDatasetMutation() {
   return useMutation({
     mutationKey: ['fs', 'open-dataset'],
     mutationFn: async (params: { folderName: string }) => openDatasetByFolderName(params),
+    retry: false,
+  })
+}
+
+export function useResetDatasetMutation() {
+  return useMutation({
+    mutationKey: ['fs', 'reset-dataset'],
+    mutationFn: async (params: { folderName: string }) => resetDataset(params),
     retry: false,
   })
 }

@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useStore } from '@nanostores/react'
-import { EllipsisIcon, FolderOpenIcon, RefreshCwIcon } from 'lucide-react'
+import { EllipsisIcon, FolderOpenIcon, RefreshCwIcon, RotateCcwIcon } from 'lucide-react'
 import { Loader } from '~/components/atomic/Loader'
 import { Button } from '~/components/ui/button'
 import {
@@ -8,11 +9,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuSeparator,
+} from '~/components/ui/context-menu'
 import { isDirectoryPickerLikelySupported, pickDirectoryHandle } from '~/features/data-flow/1.ingest/directory-picker'
 import {
   useSetupDatasetsFolderMutation,
   useOpenDatasetMutation,
   useScanDatasetsFolderMutation,
+  useResetDatasetMutation,
 } from '~/features/data-flow/1.ingest/files-queries'
 import {
   activeDatasetFolderNameStore,
@@ -22,6 +31,8 @@ import {
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
 import { datasetsWorkspaceStore } from '~/stores/datasets-workspace'
 import { cn } from '~/utils/cn'
+import { openGlobalDialog, closeGlobalDialog } from '~/components/dialogs/global-dialog'
+import { DialogHeader, DialogTitle, DialogFooter } from '~/components/ui/dialog'
 
 export function HomeDatasetsPanel() {
   const registry = useStore(datasetsRegistryStore)
@@ -30,6 +41,7 @@ export function HomeDatasetsPanel() {
   const openMutation = useOpenDatasetMutation()
   const setupMutation = useSetupDatasetsFolderMutation()
   const scanMutation = useScanDatasetsFolderMutation()
+  const resetMutation = useResetDatasetMutation()
   const isScanning = scanMutation.isPending
   const isChoosing = setupMutation.isPending
   const openingFolderName = openMutation.isPending ? openMutation.variables?.folderName : undefined
@@ -40,13 +52,26 @@ export function HomeDatasetsPanel() {
     openMutation.mutate({ folderName })
   }
 
-  // Called directly from the click handler so showDirectoryPicker fires inside
-  // the user gesture — required by Firefox (and good practice everywhere).
   async function onChooseFolder() {
     if (isChoosing) return
     const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
     if (!handle) return
     setupMutation.mutate(handle)
+  }
+
+  function onResetDataset(folderName: string) {
+    openGlobalDialog({
+      component: ResetDatasetConfirmDialog,
+      props: {
+        folderName,
+        onConfirm: () => {
+          closeGlobalDialog()
+          resetMutation.mutate({ folderName })
+        },
+      },
+      align: 'center',
+      className: 'max-w-[400px]',
+    })
   }
 
   return (
@@ -83,8 +108,10 @@ export function HomeDatasetsPanel() {
                 entry={entry}
                 isActive={entry.folderName === activeFolderName}
                 isOpening={entry.folderName === openingFolderName}
-                disabled={isScanning}
+                isResetting={resetMutation.isPending && resetMutation.variables?.folderName === entry.folderName}
+                disabled={isScanning || resetMutation.isPending}
                 onSelect={onSelectDataset}
+                onReset={onResetDataset}
               />
             ))}
           </ul>
@@ -152,41 +179,116 @@ type DatasetListItemProps = {
   entry: DatasetRegistryEntry
   isActive: boolean
   isOpening: boolean
+  isResetting: boolean
   disabled: boolean
   onSelect: (folderName: string) => void
+  onReset: (folderName: string) => void
 }
 
 function DatasetListItem(props: DatasetListItemProps) {
-  const { entry, isActive, isOpening, disabled, onSelect } = props
+  const { entry, isActive, isOpening, isResetting, disabled, onSelect, onReset } = props
 
   return (
     <li className='mx-8'>
-      <button
-        type='button'
-        disabled={disabled}
-        onClick={() => onSelect(entry.folderName)}
-        className={cn(
-          'w-full rounded-md px-8 py-8 text-left text-13',
-          'transition-[background-color,color,scale] duration-150 ease-out',
-          'active:not-disabled:scale-[0.96]',
-          isActive ? 'bg-neutral-100 font-medium text-neutral-900' : 'text-neutral-700 hover:bg-neutral-50',
-          disabled ? 'cursor-wait opacity-70' : 'cursor-pointer',
-        )}
-      >
-        <div className='flex items-start justify-between gap-8'>
-          <div className='min-w-0 flex-1'>
-            <div className='truncate'>{entry.folderName}</div>
-            {entry.datasetId && entry.datasetId !== entry.folderName ? (
-              <div className='truncate text-12 text-neutral-500'>{entry.datasetId}</div>
-            ) : null}
-          </div>
-          {isOpening ? (
-            <span className='inline-flex shrink-0 items-center gap-4 text-12 text-neutral-500'>
-              <Loader size={12} />
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            type='button'
+            disabled={disabled}
+            onClick={() => onSelect(entry.folderName)}
+            className={cn(
+              'w-full rounded-md px-8 py-8 text-left text-13',
+              'transition-[background-color,color,scale] duration-150 ease-out',
+              'active:not-disabled:scale-[0.96]',
+              isActive ? 'bg-neutral-100 font-medium text-neutral-900' : 'text-neutral-700 hover:bg-neutral-50',
+              disabled ? 'cursor-wait opacity-70' : 'cursor-pointer',
+            )}
+          >
+            <div className='flex items-start justify-between gap-8'>
+              <div className='min-w-0 flex-1'>
+                <div className='truncate'>{entry.folderName}</div>
+                {entry.datasetId && entry.datasetId !== entry.folderName ? (
+                  <div className='truncate text-12 text-neutral-500'>{entry.datasetId}</div>
+                ) : null}
+              </div>
+              {isOpening || isResetting ? (
+                <span className='inline-flex shrink-0 items-center gap-4 text-12 text-neutral-500'>
+                  <Loader size={12} />
+                </span>
+              ) : null}
+            </div>
+          </button>
+        </ContextMenuTrigger>
+
+        <ContextMenuContent className='w-[200px]'>
+          <ContextMenuItem onSelect={() => onSelect(entry.folderName)} disabled={disabled}>
+            <span className='inline-flex items-center gap-8'>
+              <FolderOpenIcon className='h-14 w-14 text-neutral-500' />
+              Open
             </span>
-          ) : null}
-        </div>
-      </button>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            onSelect={() => onReset(entry.folderName)}
+            disabled={disabled}
+            className='text-red-600 focus:text-red-700'
+          >
+            <span className='inline-flex items-center gap-8'>
+              <RotateCcwIcon className='h-14 w-14' />
+              Reset dataset
+            </span>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </li>
+  )
+}
+
+function ResetDatasetConfirmDialog(props: { folderName: string; onConfirm: () => void }) {
+  const { folderName, onConfirm } = props
+  const [confirming, setConfirming] = useState(false)
+
+  async function handleConfirm() {
+    setConfirming(true)
+    onConfirm()
+  }
+
+  return (
+    <div>
+      <DialogHeader>
+        <DialogTitle>Reset "{folderName}"?</DialogTitle>
+      </DialogHeader>
+
+      <p className='mt-12 text-13 text-neutral-700 text-pretty'>
+        This removes all files Classify added to this dataset — the manifest, records, and classifications. Your
+        original source images, patches, and detection JSON files are not affected.
+      </p>
+      <p className='mt-8 text-13 text-neutral-500 text-pretty'>
+        After resetting, you can run Set up again to re-index the dataset from scratch. This is useful if the
+        underlying processed data has changed.
+      </p>
+
+      <DialogFooter className='mt-20'>
+        <Button variant='outline' type='button' disabled={confirming} onClick={closeGlobalDialog}>
+          Cancel
+        </Button>
+        <Button
+          type='button'
+          variant='primary'
+          disabled={confirming}
+          className='bg-red-600 hover:bg-red-700 focus:ring-red-500'
+          onClick={() => void handleConfirm()}
+        >
+          {confirming ? (
+            <span className='inline-flex items-center gap-6'>
+              <Loader size={14} />
+              Resetting…
+            </span>
+          ) : (
+            'Reset dataset'
+          )}
+        </Button>
+      </DialogFooter>
+    </div>
   )
 }
