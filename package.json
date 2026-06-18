@@ -63,6 +63,7 @@
     "caniuse-lite": "1.0.30001788"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "@eslint/js": "^9.33.0",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.0",
