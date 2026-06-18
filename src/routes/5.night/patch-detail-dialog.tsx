@@ -164,7 +164,7 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
 
   const finestTaxonLevel = detection ? deriveTaxonNameFromDetection({ detection }) : undefined
   const patchAlt = finestTaxonLevel ?? patch?.name ?? 'patch'
-  const originalDownloadName = patch?.name ?? 'patch.jpg'
+  const originalDownloadName = resolvePatchOriginalDownloadName(patch)
 
   return (
     <div className='space-y-8'>
@@ -259,4 +259,25 @@ function copyToClipboard(text?: string) {
   const value = (text ?? '').trim()
   if (!value) return
   void navigator?.clipboard?.writeText?.(value)
+}
+
+/**
+ * Picks a safe download filename for "Download original". `patch.name` is
+ * just the bare patch ID with no extension — and that ID itself often
+ * contains a model filename segment ending in `.pt` (e.g.
+ * "..._b1_2024-01-18.pt"), so using it directly as a filename makes the
+ * browser/OS treat `.pt` as the extension and silently drop the real
+ * `.jpg`. Prefer the actual indexed file's path (which has the real
+ * extension) when available, and only fall back to the patch ID — with a
+ * forced `.jpg` — when no file path is known.
+ */
+function resolvePatchOriginalDownloadName(patch?: PatchEntity): string {
+  const filePath = patch?.imageFile?.path?.trim()
+  if (filePath) {
+    const basename = filePath.replaceAll('\\', '/').split('/').pop()
+    if (basename) return basename
+  }
+
+  const fallbackBase = (patch?.name ?? 'patch').replace(/\.(pt|pth|onnx)$/i, '')
+  return `${fallbackBase}.jpg`
 }
