@@ -1,0 +1,8 @@
+--- a/src/test/setup.ts
++++ b/src/test/setup.ts
+@@ -11,5 +11,4 @@
+   disconnect() {}
+ }
+ 
+-// @ts-expect-error jsdom globals
+ global.ResizeObserver = ResizeObserver
