@@ -100,7 +100,12 @@ export function Nav() {
       <div className='flex h-[54px] flex-row items-center gap-4 px-20'>
         <Link to='/' className='text-xl font-semibold hover:opacity-80 mr-40 flex items-center gap-6'>
           <Logo size={30} />
-          <span className='text-10 font-mono font-normal text-neutral-400 select-none'>v{__APP_VERSION__}</span>
+          <span
+            className='font-mono font-normal text-neutral-400 select-none'
+            style={{ fontSize: '7px' }}
+          >
+            v{__APP_VERSION__}
+          </span>
         </Link>
 
         {breadcrumbs.length === 0 && workspace?.folderName ? (
