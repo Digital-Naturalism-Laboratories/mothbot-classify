@@ -57,6 +57,26 @@ export function parseDinalabDeploymentFolderName(folderName: string): ParsedDina
   }
 }
 
+/**
+ * True when `value` IS an ISO date (e.g. "2026-06-01") OR ends with one
+ * (e.g. "cutTambor_2026-06-02"). Night folders sometimes carry a prefix —
+ * a deployment/device label, a backup-source name, etc. — so a strict
+ * `isIsoDateOnly` check incorrectly treats those folders as a brand new
+ * deployment segment instead of recognizing them as the night folder.
+ */
+function looksLikeNightFolderSegment(value: string): boolean {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) return false
+  if (isIsoDateOnly(trimmed)) return true
+  return /(?:^|[_\-/])\d{4}-\d{2}-\d{2}$/.test(trimmed)
+}
+
+/** Extracts the trailing ISO date from a night-folder-like segment, e.g. "cutTambor_2026-06-02" -> "2026-06-02". */
+function extractTrailingIsoDate(value: string): string | undefined {
+  const trimmed = (value ?? '').trim()
+  return trimmed.match(/(\d{4}-\d{2}-\d{2})$/)?.[1]
+}
+
 export function siteIdForDeployment(params: { datasetId: string; siteName: string }) {
   const { datasetId, siteName } = params
   return `${datasetId}/site/${siteName}`
@@ -108,7 +128,7 @@ export function resolveDeploymentContextFromPatchPath(params: {
   if (patchesIndex >= 0) {
     pathSegmentsBeforeNight = dirParts.slice(0, patchesIndex)
     if (patchesIndex > 0) nightSegment = dirParts[patchesIndex - 1]
-  } else if (dirParts.length > 0 && isIsoDateOnly(dirParts[dirParts.length - 1])) {
+  } else if (dirParts.length > 0 && looksLikeNightFolderSegment(dirParts[dirParts.length - 1])) {
     nightSegment = dirParts[dirParts.length - 1]
     pathSegmentsBeforeNight = dirParts.slice(0, -1)
   } else {
@@ -127,7 +147,7 @@ export function resolveDeploymentContextFromPatchPath(params: {
 
   const patchIdStem = patchIdFromImageFileName(fileName)
   const nightDate =
-    (nightSegment && isIsoDateOnly(nightSegment) ? nightSegment : undefined) ??
+    (nightSegment ? (isIsoDateOnly(nightSegment) ? nightSegment : extractTrailingIsoDate(nightSegment)) : undefined) ??
     inferNightDateFromPatchId(patchIdStem) ??
     parsed.deploymentDate ??
     'unknown-night'
@@ -307,7 +327,7 @@ function resolveDeploymentFolderFromBotPath(params: {
   }
 
   const firstSegment = botDirSegments[0]
-  if (legacySourceRootName && isIsoDateOnly(firstSegment)) {
+  if (legacySourceRootName && looksLikeNightFolderSegment(firstSegment)) {
     return legacySourceRootName
   }
 
@@ -322,8 +342,9 @@ function resolveNightDateFromBotPath(params: {
 }): string {
   const { botRelativePath, botDirSegments, legacySourceRootName, parsedDeploymentDate } = params
 
-  if (legacySourceRootName && botDirSegments.length >= 1 && isIsoDateOnly(botDirSegments[0])) {
-    return botDirSegments[0]
+  if (legacySourceRootName && botDirSegments.length >= 1 && looksLikeNightFolderSegment(botDirSegments[0])) {
+    const exact = isIsoDateOnly(botDirSegments[0]) ? botDirSegments[0] : undefined
+    return exact ?? extractTrailingIsoDate(botDirSegments[0]) ?? botDirSegments[0]
   }
 
   const fromPath = inferNightDateFromBotJsonPath(botRelativePath)
