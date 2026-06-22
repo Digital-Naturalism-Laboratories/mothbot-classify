@@ -1,6 +1,9 @@
 import { useStore } from '@nanostores/react'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
+import { DownloadIcon } from 'lucide-react'
+import { toast } from 'sonner'
+import { exportScopeDarwinCSV } from '~/features/data-flow/4.export/export-orchestrator'
 import {
   ExpandDisclosurePanel,
   ExpandDisclosureTitleRow,
@@ -188,7 +191,22 @@ function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
                   <Loader size={14} />
                   <span>exporting</span>
                 </div>
-              ) : null}
+              ) : (
+                <button
+                  type='button'
+                  aria-label='Export Darwin Core CSV'
+                  className='shrink-0 opacity-0 group-hover/night:opacity-100 transition-opacity flex items-center gap-4 rounded px-6 py-2 text-12 text-neutral-500 hover:text-neutral-800 hover:bg-black/5'
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const p = exportScopeDarwinCSV({ scope: 'night', id: node.id, nights })
+                    toast.promise(p, { loading: '💾 Exporting DwC…', success: '✅ DwC exported', error: '🚨 Failed to export DwC' })
+                  }}
+                >
+                  <DownloadIcon className='h-12 w-12' />
+                  Export DwC
+                </button>
+              )}
             </div>
             <InlineProgress total={prog.total} identified={prog.identified} />
           </div>
