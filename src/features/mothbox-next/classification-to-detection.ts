@@ -25,6 +25,9 @@ export function detectionFromClassification(params: {
     classificationType: row.classification_type,
     botClassifierId: row.classifier_type === 'bot' ? row.classifier_id : undefined,
     humanClassifierId: row.classifier_type === 'human' ? row.classifier_id : undefined,
+    ...(typeof row.pixel_mass_pixels === 'number' ? { pixelMassPixels: row.pixel_mass_pixels } : {}),
+    ...(row.pixel_mass_mm2 != null ? { pixelMassMm2: row.pixel_mass_mm2 } : {}),
+    ...(typeof row.pixel_mass_timestamp === 'string' ? { pixelMassTimestamp: row.pixel_mass_timestamp } : {}),
   }
 }
 

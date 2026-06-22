@@ -219,6 +219,15 @@ export function buildAssetPathIndex(params: {
       filePath: patch.asset_path,
     })
     if (hit) indexedByAssetPath[patch.asset_path] = hit
+
+    // Also index the _nobg.png sibling produced by Mothbot Process pixel mass step
+    const nobgAssetPath = patch.asset_path.replace(/\.jpg$/i, '_nobg.png')
+    const nobgHit = resolveIndexedEntry({
+      byPath: byRelativePath,
+      packageRoot,
+      filePath: nobgAssetPath,
+    })
+    if (nobgHit) indexedByAssetPath[nobgAssetPath] = nobgHit
   }
 
   return indexedByAssetPath

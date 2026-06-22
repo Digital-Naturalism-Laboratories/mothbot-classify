@@ -67,6 +67,9 @@ export type ClassificationRecord = {
   classified_at?: number | null
   source_bot_detection_id?: string | null
   resolved_from?: string
+  pixel_mass_pixels?: number | null
+  pixel_mass_mm2?: number | null
+  pixel_mass_timestamp?: string | null
 }
 
 export type CurrentClassificationRecord = ClassificationRecord & {

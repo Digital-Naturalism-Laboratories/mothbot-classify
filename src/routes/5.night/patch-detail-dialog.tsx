@@ -57,15 +57,17 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent align='vhSide' className='max-w-[900px]'>
-        <DialogHeader className='grid grid-cols-2 gap-8 mb-8'>
+      <DialogContent align='vhSide' className='max-w-[1200px]'>
+        <DialogHeader className={`grid gap-8 mb-8 ${patch?.nobgImageFile ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <DialogTitle>Patch details</DialogTitle>
           <DialogTitle>Source Photo</DialogTitle>
+          {patch?.nobgImageFile ? <DialogTitle>Background Removed</DialogTitle> : null}
         </DialogHeader>
 
-        <div className='grid grid-cols-1 gap-12 md:grid-cols-2'>
+        <div className={`grid grid-cols-1 gap-12 ${patch?.nobgImageFile ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <PatchDetails patch={patch} detection={detection} />
           <SourcePhoto photo={photo} />
+          {patch?.nobgImageFile ? <NobgImage patch={patch} detection={detection} /> : null}
         </div>
 
         <div className='mt-12 grid grid-cols-1 md:grid-cols-2 gap-12 text-12 text-neutral-700'>
@@ -86,6 +88,25 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             <div>
               <span className='font-medium'>Points:</span> {Array.isArray(detection?.points) ? detection!.points!.length : 0}
             </div>
+
+            {(detection?.pixelMassPixels != null || detection?.pixelMassMm2 != null) ? (
+              <div className='pt-8 space-y-2'>
+                <h5 className='text-13 font-semibold text-neutral-800'>Pixel Mass</h5>
+                {detection.pixelMassPixels != null ? (
+                  <div>
+                    <span className='font-medium'>Foreground pixels:</span> {detection.pixelMassPixels.toLocaleString()}
+                  </div>
+                ) : null}
+                {detection.pixelMassMm2 != null ? (
+                  <div>
+                    <span className='font-medium'>Pixel area:</span> {detection.pixelMassMm2.toFixed(4)} mm²
+                  </div>
+                ) : null}
+                {detection.pixelMassMm2 == null && detection.pixelMassPixels != null ? (
+                  <div className='text-neutral-500 text-11'>No calibration set — area in mm² unavailable</div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className='pt-8 space-y-2'>
               <h5 className='text-13 font-semibold text-neutral-800'>Taxonomy</h5>
@@ -249,6 +270,47 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
         <div className='mt-4'>
           <span className='font-medium'>File path:</span>{' '}
           {photo?.imageFile?.path ?? (sourceUnavailable ? 'Not available in this dataset' : '—')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) {
+  const { patch, detection } = props
+  const nobgUrl = useObjectUrl(patch?.nobgImageFile?.file, patch?.nobgImageFile?.handle)
+
+  return (
+    <div className='space-y-8'>
+      {nobgUrl ? (
+        <img
+          src={nobgUrl}
+          alt='background removed'
+          className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
+          style={{ background: 'repeating-conic-gradient(#e0e0e0 0% 25%, #ffffff 0% 50%) 0 0 / 16px 16px' }}
+        />
+      ) : (
+        <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />
+      )}
+      <div className='flex flex-wrap gap-8'>
+        {nobgUrl ? (
+          <a href={nobgUrl} target='_blank' rel='noreferrer'>
+            <Button size='xsm' variant='outline'>Open nobg image</Button>
+          </a>
+        ) : null}
+      </div>
+      <div className='text-12 text-neutral-700 space-y-2 mt-12'>
+        {detection?.pixelMassPixels != null ? (
+          <div><span className='font-medium'>Foreground pixels:</span> {detection.pixelMassPixels.toLocaleString()}</div>
+        ) : null}
+        {detection?.pixelMassMm2 != null ? (
+          <div><span className='font-medium'>Pixel area:</span> {detection.pixelMassMm2.toFixed(4)} mm²</div>
+        ) : null}
+        {detection?.pixelMassMm2 == null && detection?.pixelMassPixels != null ? (
+          <div className='text-neutral-500 text-11'>No calibration — mm² unavailable</div>
+        ) : null}
+        <div className='break-all'>
+          <span className='font-medium'>File path:</span> {patch?.nobgImageFile?.path ?? '—'}
         </div>
       </div>
     </div>

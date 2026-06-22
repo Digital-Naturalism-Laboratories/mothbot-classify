@@ -38,4 +38,7 @@ export type DetectionEntity = {
   originalMothboxLabel?: string
   classificationType?: DetectionClassificationType
   humanClassifierId?: string
+  pixelMassPixels?: number
+  pixelMassMm2?: number | null
+  pixelMassTimestamp?: string
 }

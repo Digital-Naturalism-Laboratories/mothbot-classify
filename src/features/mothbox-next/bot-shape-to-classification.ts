@@ -28,6 +28,9 @@ export function classificationFromBotShape(params: {
       typeof shape.detection_id === 'string'
         ? shape.detection_id
         : `${patchId}::mothbot`,
+    pixel_mass_pixels: typeof shape.pixel_mass_pixels === 'number' ? shape.pixel_mass_pixels : null,
+    pixel_mass_mm2: typeof shape.pixel_mass_mm2 === 'number' ? shape.pixel_mass_mm2 : null,
+    pixel_mass_timestamp: typeof shape.timestamp_pixel_mass === 'string' ? shape.timestamp_pixel_mass : null,
   }
 }
 
