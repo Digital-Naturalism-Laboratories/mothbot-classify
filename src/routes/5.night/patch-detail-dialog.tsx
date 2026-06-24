@@ -57,6 +57,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
   }
 
   const showNobg = patch?.imageFile?.parentDir != null
+  const botData = useBotDetectionData(patch)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,7 +71,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
         <div className={`grid grid-cols-1 gap-12 ${showNobg ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <PatchDetails patch={patch} detection={detection} />
           <SourcePhoto photo={photo} />
-          {showNobg ? <NobgImage patch={patch} detection={detection} /> : null}
+          {showNobg ? <NobgImage patch={patch} detection={detection} botData={botData} /> : null}
         </div>
 
         <div className='mt-12 grid grid-cols-1 md:grid-cols-2 gap-12 text-12 text-neutral-700'>
@@ -92,24 +93,25 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
               <span className='font-medium'>Points:</span> {Array.isArray(detection?.points) ? detection!.points!.length : 0}
             </div>
 
-            {(detection?.pixelMassPixels != null || detection?.pixelMassMm2 != null) ? (
-              <div className='pt-8 space-y-2'>
-                <h5 className='text-13 font-semibold text-neutral-800'>Pixel Mass</h5>
-                {detection.pixelMassPixels != null ? (
-                  <div>
-                    <span className='font-medium'>Foreground pixels:</span> {detection.pixelMassPixels.toLocaleString()}
-                  </div>
-                ) : null}
-                {detection.pixelMassMm2 != null ? (
-                  <div>
-                    <span className='font-medium'>Pixel area:</span> {detection.pixelMassMm2.toFixed(4)} mm²
-                  </div>
-                ) : null}
-                {detection.pixelMassMm2 == null && detection.pixelMassPixels != null ? (
-                  <div className='text-neutral-500 text-11'>No calibration set — area in mm² unavailable</div>
-                ) : null}
-              </div>
-            ) : null}
+            {(() => {
+              const px = botData?.pixelMassPixels ?? detection?.pixelMassPixels
+              const mm2 = botData?.pixelMassMm2 ?? detection?.pixelMassMm2
+              if (px == null && mm2 == null) return null
+              return (
+                <div className='pt-8 space-y-2'>
+                  <h5 className='text-13 font-semibold text-neutral-800'>Pixel Mass</h5>
+                  {px != null ? (
+                    <div><span className='font-medium'>Foreground pixels:</span> {px.toLocaleString()}</div>
+                  ) : null}
+                  {mm2 != null ? (
+                    <div><span className='font-medium'>Pixel area:</span> {mm2.toFixed(4)} mm²</div>
+                  ) : null}
+                  {mm2 == null && px != null ? (
+                    <div className='text-neutral-500 text-11'>No calibration set — area in mm² unavailable</div>
+                  ) : null}
+                </div>
+              )
+            })()}
 
             <div className='pt-8 space-y-2'>
               <h5 className='text-13 font-semibold text-neutral-800'>Taxonomy</h5>
@@ -172,17 +174,18 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             <div>
               <span className='font-medium'>Patch:</span> {patch?.name ?? '—'}
             </div>
-            {(patch?.latitude || patch?.longitude) ? (
-              <div className='pt-8 space-y-2'>
-                <h5 className='text-13 font-semibold text-neutral-800'>Location</h5>
-                {patch?.latitude ? (
-                  <div><span className='font-medium'>Latitude:</span> {patch.latitude}</div>
-                ) : null}
-                {patch?.longitude ? (
-                  <div><span className='font-medium'>Longitude:</span> {patch.longitude}</div>
-                ) : null}
-              </div>
-            ) : null}
+            {(() => {
+              const lat = patch?.latitude || botData?.latitude
+              const lon = patch?.longitude || botData?.longitude
+              if (!lat && !lon) return null
+              return (
+                <div className='pt-8 space-y-2'>
+                  <h5 className='text-13 font-semibold text-neutral-800'>Location</h5>
+                  {lat ? <div><span className='font-medium'>Latitude:</span> {lat}</div> : null}
+                  {lon ? <div><span className='font-medium'>Longitude:</span> {lon}</div> : null}
+                </div>
+              )
+            })()}
           </div>
         </div>
 
@@ -290,8 +293,55 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
   )
 }
 
-function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) {
-  const { patch, detection } = props
+type BotDetectionData = {
+  pixelMassPixels?: number
+  pixelMassMm2?: number
+  latitude?: string
+  longitude?: string
+}
+
+function useBotDetectionData(patch?: PatchEntity): BotDetectionData | null {
+  const [data, setData] = useState<BotDetectionData | null>(null)
+
+  useEffect(() => {
+    setData(null)
+    const parentDir = patch?.imageFile?.parentDir as
+      | { getFileHandle?: (name: string) => Promise<{ getFile: () => Promise<File> }> }
+      | undefined
+    const jsonName = patch?.botDetectionJsonName
+    const patchFileName = patch?.imageFile?.name
+
+    if (!parentDir?.getFileHandle || !jsonName || !patchFileName) return
+
+    let cancelled = false
+    parentDir.getFileHandle(jsonName)
+      .then((h) => h.getFile())
+      .then((f) => f.text())
+      .then((text) => {
+        if (cancelled) return
+        const json = JSON.parse(text) as {
+          latitude?: string
+          longitude?: string
+          shapes?: Array<{ patch_path?: string; pixel_mass_pixels?: number; pixel_mass_mm2?: number }>
+        }
+        const shape = json.shapes?.find((s) => s.patch_path === patchFileName)
+        setData({
+          pixelMassPixels: shape?.pixel_mass_pixels,
+          pixelMassMm2: shape?.pixel_mass_mm2,
+          latitude: json.latitude,
+          longitude: json.longitude,
+        })
+      })
+      .catch(() => { if (!cancelled) setData(null) })
+
+    return () => { cancelled = true }
+  }, [patch?.id, patch?.botDetectionJsonName, patch?.imageFile?.parentDir, patch?.imageFile?.name])
+
+  return data
+}
+
+function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity; botData?: BotDetectionData | null }) {
+  const { patch, detection, botData } = props
   const [nobgUrl, setNobgUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const revokeRef = useRef<string | null>(null)
@@ -336,6 +386,9 @@ function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) 
     }
   }, [patch?.id, patch?.imageFile?.parentDir, patch?.imageFile?.name])
 
+  const pixelMassPixels = botData?.pixelMassPixels ?? detection?.pixelMassPixels
+  const pixelMassMm2 = botData?.pixelMassMm2 ?? detection?.pixelMassMm2
+
   return (
     <div className='space-y-8'>
       {loading ? (
@@ -360,13 +413,13 @@ function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) 
         ) : null}
       </div>
       <div className='text-12 text-neutral-700 space-y-2 mt-12'>
-        {detection?.pixelMassPixels != null ? (
-          <div><span className='font-medium'>Foreground pixels:</span> {detection.pixelMassPixels.toLocaleString()}</div>
+        {pixelMassPixels != null ? (
+          <div><span className='font-medium'>Foreground pixels:</span> {pixelMassPixels.toLocaleString()}</div>
         ) : null}
-        {detection?.pixelMassMm2 != null ? (
-          <div><span className='font-medium'>Pixel area:</span> {detection.pixelMassMm2.toFixed(4)} mm²</div>
+        {pixelMassMm2 != null ? (
+          <div><span className='font-medium'>Pixel area:</span> {pixelMassMm2.toFixed(4)} mm²</div>
         ) : null}
-        {detection?.pixelMassMm2 == null && detection?.pixelMassPixels != null ? (
+        {pixelMassMm2 == null && pixelMassPixels != null ? (
           <div className='text-neutral-500 text-11'>No calibration — mm² unavailable</div>
         ) : null}
       </div>

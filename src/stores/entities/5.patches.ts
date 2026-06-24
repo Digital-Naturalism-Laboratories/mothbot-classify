@@ -10,6 +10,7 @@ export type PatchEntity = {
   imageFile?: IndexedFile
   latitude?: string | null
   longitude?: string | null
+  botDetectionJsonName?: string
 }
 
 export const patchesStore = atom<Record<string, PatchEntity>>({})
