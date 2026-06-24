@@ -8,7 +8,6 @@ export type PatchEntity = {
   photoId: string
   capturedAt?: string
   imageFile?: IndexedFile
-  nobgImageFile?: IndexedFile
 }
 
 export const patchesStore = atom<Record<string, PatchEntity>>({})
@@ -23,7 +22,6 @@ export function clearFileObjectsForLeafGroup(params: { leafGroupId: string }) {
       updated[id] = {
         ...patch,
         imageFile: patch.imageFile ? { ...patch.imageFile, file: undefined } : undefined,
-        nobgImageFile: patch.nobgImageFile ? { ...patch.nobgImageFile, file: undefined } : undefined,
       }
     } else {
       updated[id] = patch

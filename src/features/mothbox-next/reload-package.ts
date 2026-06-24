@@ -147,12 +147,9 @@ export function relinkPackagePatchImageFilesFromIndexed(params: {
     const imageFile = indexedByAssetPath[patchRecord.asset_path]
     const entity = nextPatches[patchRecord.patch_id]
     if (!entity) continue
-    const nobgAssetPath = patchRecord.asset_path.replace(/\.jpg$/i, '_nobg.png')
-    const nobgImageFile = indexedByAssetPath[nobgAssetPath]
     nextPatches[patchRecord.patch_id] = {
       ...entity,
       ...(imageFile ? { imageFile } : {}),
-      ...(nobgImageFile ? { nobgImageFile } : {}),
     }
   }
 

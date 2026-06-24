@@ -4,6 +4,11 @@ type DirectoryWithEntries = FileSystemDirectoryHandleLike & {
   entries?: () => AsyncIterable<[string, FileSystemDirectoryHandleLike]>
 }
 
+// Image directories must never be iterated — Chrome pre-fetches all entries as
+// FileSystemFileHandle objects and crashes when a directory holds thousands of images.
+const ENDS_WITH_DATE_RE = /\d{4}-\d{2}-\d{2}$/
+const FLAT_IMAGE_DIR_NAMES = new Set(['01_patches'])
+
 export async function findRelativeFilesUnderDirectory(
   root: FileSystemDirectoryHandleLike,
   predicate: (fileName: string) => boolean,
@@ -18,6 +23,7 @@ export async function findRelativeFilesUnderDirectory(
     for await (const [name, handle] of current.entries()) {
       const rel = prefix ? `${prefix}/${name}` : name
       if (handle?.kind === 'directory') {
+        if (ENDS_WITH_DATE_RE.test(name) || FLAT_IMAGE_DIR_NAMES.has(name)) continue
         await walk(handle, rel)
         continue
       }

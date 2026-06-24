@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { PatchDownloadContextMenu } from '~/components/atomic/patch-download-context-menu'
 import { TaxonRankBadge } from '~/components/taxon-rank-badge'
 import { Button } from '~/components/ui/button'
@@ -9,6 +9,7 @@ import { patchStoreById } from '~/stores/entities/patch-selectors'
 import { photosStore } from '~/stores/entities/photos'
 import type { PatchEntity } from '~/stores/entities/5.patches'
 import type { PhotoEntity } from '~/stores/entities/photos'
+import { makeIndexedFileHandle } from '~/stores/entities/photos'
 import { useObjectUrl } from '~/utils/use-object-url'
 import type { TaxonRecord } from '~/features/data-flow/2.identify/species-list.store'
 import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
@@ -55,19 +56,21 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
     labelDetections({ detectionIds: [detectionId], label: trimmed, taxon })
   }
 
+  const showNobg = detection?.pixelMassPixels != null && patch?.imageFile?.parentDir != null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent align='vhSide' className='max-w-[1200px]'>
-        <DialogHeader className={`grid gap-8 mb-8 ${patch?.nobgImageFile ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <DialogHeader className={`grid gap-8 mb-8 ${showNobg ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <DialogTitle>Patch details</DialogTitle>
           <DialogTitle>Source Photo</DialogTitle>
-          {patch?.nobgImageFile ? <DialogTitle>Background Removed</DialogTitle> : null}
+          {showNobg ? <DialogTitle>Background Removed</DialogTitle> : null}
         </DialogHeader>
 
-        <div className={`grid grid-cols-1 gap-12 ${patch?.nobgImageFile ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+        <div className={`grid grid-cols-1 gap-12 ${showNobg ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <PatchDetails patch={patch} detection={detection} />
           <SourcePhoto photo={photo} />
-          {patch?.nobgImageFile ? <NobgImage patch={patch} detection={detection} /> : null}
+          {showNobg ? <NobgImage patch={patch} detection={detection} /> : null}
         </div>
 
         <div className='mt-12 grid grid-cols-1 md:grid-cols-2 gap-12 text-12 text-neutral-700'>
@@ -181,7 +184,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
 function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity }) {
   const { patch, detection } = props
 
-  const patchUrl = useObjectUrl(patch?.imageFile?.file, patch?.imageFile?.handle)
+  const patchUrl = useObjectUrl(patch?.imageFile?.file, makeIndexedFileHandle(patch?.imageFile))
 
   const finestTaxonLevel = detection ? deriveTaxonNameFromDetection({ detection }) : undefined
   const patchAlt = finestTaxonLevel ?? patch?.name ?? 'patch'
@@ -191,7 +194,7 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
     <div className='space-y-8'>
       <PatchDownloadContextMenu
         file={patch?.imageFile?.file}
-        handle={patch?.imageFile?.handle}
+        handle={makeIndexedFileHandle(patch?.imageFile)}
         originalUrl={patchUrl}
         originalDownloadName={originalDownloadName}
       >
@@ -230,7 +233,7 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
 function SourcePhoto(props: { photo?: PhotoEntity }) {
   const { photo } = props
 
-  const photoUrl = useObjectUrl(photo?.imageFile?.file, photo?.imageFile?.handle)
+  const photoUrl = useObjectUrl(photo?.imageFile?.file, makeIndexedFileHandle(photo?.imageFile))
   const hasPhotoRecord = !!photo
   const sourceUnavailable = hasPhotoRecord && !photoUrl
 
@@ -278,11 +281,55 @@ function SourcePhoto(props: { photo?: PhotoEntity }) {
 
 function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) {
   const { patch, detection } = props
-  const nobgUrl = useObjectUrl(patch?.nobgImageFile?.file, patch?.nobgImageFile?.handle)
+  const [nobgUrl, setNobgUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const revokeRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    setNobgUrl(null)
+    setLoading(true)
+
+    const parentDir = patch?.imageFile?.parentDir as
+      | { getFileHandle?: (name: string) => Promise<{ getFile: () => Promise<File> }> }
+      | undefined
+    const patchName = patch?.imageFile?.name
+
+    if (!parentDir?.getFileHandle || !patchName) {
+      setLoading(false)
+      return
+    }
+
+    const nobgName = patchName.replace(/\.jpg$/i, '_nobg.png')
+    let cancelled = false
+
+    parentDir.getFileHandle(nobgName)
+      .then((handle) => handle.getFile())
+      .then((file) => {
+        if (cancelled) return
+        const url = URL.createObjectURL(file)
+        if (revokeRef.current) URL.revokeObjectURL(revokeRef.current)
+        revokeRef.current = url
+        setNobgUrl(url)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      if (revokeRef.current) {
+        URL.revokeObjectURL(revokeRef.current)
+        revokeRef.current = null
+      }
+    }
+  }, [patch?.id, patch?.imageFile?.parentDir, patch?.imageFile?.name])
 
   return (
     <div className='space-y-8'>
-      {nobgUrl ? (
+      {loading ? (
+        <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 animate-pulse' />
+      ) : nobgUrl ? (
         <img
           src={nobgUrl}
           alt='background removed'
@@ -290,7 +337,9 @@ function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) 
           style={{ background: 'repeating-conic-gradient(#e0e0e0 0% 25%, #ffffff 0% 50%) 0 0 / 16px 16px' }}
         />
       ) : (
-        <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />
+        <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 flex items-center justify-center p-16 text-center'>
+          <p className='text-13 text-neutral-400'>Background-removed image not found in this folder.</p>
+        </div>
       )}
       <div className='flex flex-wrap gap-8'>
         {nobgUrl ? (
@@ -309,9 +358,6 @@ function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity }) 
         {detection?.pixelMassMm2 == null && detection?.pixelMassPixels != null ? (
           <div className='text-neutral-500 text-11'>No calibration — mm² unavailable</div>
         ) : null}
-        <div className='break-all'>
-          <span className='font-medium'>File path:</span> {patch?.nobgImageFile?.path ?? '—'}
-        </div>
       </div>
     </div>
   )

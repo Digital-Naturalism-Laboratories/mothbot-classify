@@ -150,7 +150,7 @@ describe('smoke: startup and package session cache', () => {
 
     const firstPatch = Object.values(patchesStore.get() || {})[0]
     expect(firstPatch?.imageFile?.path).toBeTruthy()
-    expect(firstPatch?.imageFile?.file ?? firstPatch?.imageFile?.handle).toBeTruthy()
+    expect(firstPatch?.imageFile?.file ?? firstPatch?.imageFile?.handle ?? firstPatch?.imageFile?.parentDir).toBeTruthy()
   })
 
   it('restores source photos using full live index when cache meta omits archive paths', async () => {

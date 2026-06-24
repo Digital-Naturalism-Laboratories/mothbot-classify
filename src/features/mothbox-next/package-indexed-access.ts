@@ -130,9 +130,31 @@ async function indexedEntryExists(params: {
   if (entry) return indexedFileEntryReadable(entry)
 
   const directoryPrefix = directoryPrefixForExistsCheck({ packageRoot, filePath })
-  if (!directoryPrefix) return false
+  if (directoryPrefix) {
+    return Object.keys(byPath).some((indexedPath) => indexedPath.startsWith(directoryPrefix))
+  }
 
-  return Object.keys(byPath).some((indexedPath) => indexedPath.startsWith(directoryPrefix))
+  // Image files may not appear in the index when their directory was skipped during scan
+  // (Chrome pre-fetches entire directory entry lists and crashes on large flat dirs).
+  // If any scanned entry has a rootDir handle, the user granted access to the root
+  // directory and buildAssetPathIndex will create virtual navigation entries for all
+  // patch images from the NDJSON. Trust the manifest rather than the incomplete scan.
+  if (/\.(jpg|jpeg|png|gif|webp)$/i.test(filePath)) {
+    if (Object.values(byPath).some((f) => (f as IndexedFile).rootDir)) return true
+
+    // For datasets loaded via the legacy File object path (no handle), check siblings.
+    const packageRel = toPackageRelativePath({
+      packageRoot,
+      filePath: normalizePackageRelativePath(filePath),
+    })
+    const segs = packageRel.replace(/\\/g, '/').split('/').filter(Boolean)
+    if (segs.length >= 2) {
+      const parentPrefix = segs.slice(0, -1).join('/') + '/'
+      if (Object.keys(byPath).some((p) => p.startsWith(parentPrefix))) return true
+    }
+  }
+
+  return false
 }
 
 function directoryPrefixForExistsCheck(params: { packageRoot: string; filePath: string }) {
@@ -145,13 +167,22 @@ function directoryPrefixForExistsCheck(params: { packageRoot: string; filePath: 
 async function indexedFileEntryReadable(entry: IndexedFile) {
   if (entry.file) return true
 
-  try {
-    const handle = entry.handle as { getFile?: () => Promise<File> } | undefined
-    const file = await handle?.getFile?.()
-    return !!file
-  } catch {
-    return false
+  const handle = entry.handle as { getFile?: () => Promise<File> } | undefined
+  if (handle?.getFile) {
+    try {
+      const file = await handle.getFile()
+      return !!file
+    } catch {
+      return false
+    }
   }
+
+  // Image files don't store a direct handle (to avoid Chrome's FS handle limit).
+  // parentDir means the file was present during directory enumeration.
+  // rootDir means we can navigate to it on demand — trust the manifest.
+  if (entry.parentDir || entry.rootDir) return true
+
+  return false
 }
 
 export function resolveIndexedEntry(params: {
@@ -212,22 +243,48 @@ export function buildAssetPathIndex(params: {
   const { patches, byRelativePath, packageRoot = '' } = params
   const indexedByAssetPath: Record<string, IndexedFile> = {}
 
+  // rootDir is stored on every scanned entry. Use the first one found as a fallback
+  // navigator for images in directories that were skipped due to the depth limit.
+  const rootDir = Object.values(byRelativePath).find((f) => f.rootDir)?.rootDir
+
   for (const patch of patches) {
     const hit = resolveIndexedEntry({
       byPath: byRelativePath,
       packageRoot,
       filePath: patch.asset_path,
     })
-    if (hit) indexedByAssetPath[patch.asset_path] = hit
-
-    // Also index the _nobg.png sibling produced by Mothbot Process pixel mass step
-    const nobgAssetPath = patch.asset_path.replace(/\.jpg$/i, '_nobg.png')
-    const nobgHit = resolveIndexedEntry({
-      byPath: byRelativePath,
-      packageRoot,
-      filePath: nobgAssetPath,
-    })
-    if (nobgHit) indexedByAssetPath[nobgAssetPath] = nobgHit
+    if (hit) {
+      indexedByAssetPath[patch.asset_path] = hit
+    } else if (rootDir) {
+      // Image was not collected (directory hit the image-scan limit). Create a virtual
+      // entry with a synthetic parentDir that navigates from rootDir on demand.
+      // joinRelativePaths prepends packageRoot so the path navigates correctly from rootDir
+      // whether the user picked the package folder (packageRoot="") or a parent folder.
+      const fullPath = joinRelativePaths(packageRoot, patch.asset_path)
+      const segments = fullPath.replace(/\\/g, '/').split('/').filter(Boolean)
+      const name = segments[segments.length - 1] ?? ''
+      const parentSegments = segments.slice(0, -1)
+      const rd = rootDir as { getDirectoryHandle: (n: string) => Promise<unknown> }
+      // Virtual parentDir: navigates from rootDir to the parent directory each time
+      const virtualParentDir = {
+        getFileHandle: async (fileName: string) => {
+          let current = rd as Record<string, (n: string) => Promise<unknown>>
+          for (const seg of parentSegments) {
+            current = (await current['getDirectoryHandle'](seg)) as typeof current
+          }
+          return (current as unknown as { getFileHandle: (n: string) => Promise<{ getFile: () => Promise<File> }> }).getFileHandle(fileName)
+        },
+      }
+      indexedByAssetPath[patch.asset_path] = {
+        file: undefined,
+        handle: undefined,
+        parentDir: virtualParentDir,
+        rootDir,
+        path: fullPath,
+        name,
+        size: 0,
+      }
+    }
   }
 
   return indexedByAssetPath

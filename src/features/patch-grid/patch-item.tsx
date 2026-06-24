@@ -17,6 +17,7 @@ import {
 } from '~/stores/ui'
 import { cn } from '~/utils/cn'
 import { useObjectUrl } from '~/utils/use-object-url'
+import { makeIndexedFileHandle } from '~/stores/entities/photos'
 import { Button } from '~/components/ui/button'
 import { ZoomInIcon } from 'lucide-react'
 import type { BadgeVariants } from '~/components/ui/badge'
@@ -61,7 +62,7 @@ function PatchItemImpl(props: PatchItemProps) {
   const clusterId = typeof detection?.clusterId === 'number' ? detection.clusterId : undefined
   const isSelected = selected?.has?.(id)
 
-  const url = useObjectUrl(patch?.imageFile?.file, patch?.imageFile?.handle)
+  const url = useObjectUrl(patch?.imageFile?.file, makeIndexedFileHandle(patch?.imageFile))
 
   const [controlsPinned, setControlsPinned] = useState(false)
 
@@ -212,7 +213,7 @@ function PatchItemImpl(props: PatchItemProps) {
       />
       <PatchDownloadContextMenu
         file={patch?.imageFile?.file}
-        handle={patch?.imageFile?.handle}
+        handle={makeIndexedFileHandle(patch?.imageFile)}
         originalUrl={url}
         originalDownloadName={patch?.name ?? 'patch.jpg'}
       >

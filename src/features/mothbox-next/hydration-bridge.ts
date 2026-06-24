@@ -285,9 +285,6 @@ export function hydratePackageEntities(params: {
       photos[photoId] = { id: photoId, name: photoId, leafGroupId, imageFile: photoImageFile }
     }
 
-    const nobgAssetPath = patch.asset_path.replace(/\.jpg$/i, '_nobg.png')
-    const nobgImageFile = indexedByAssetPath[nobgAssetPath]
-
     patchesOut[patch.patch_id] = {
       id: patch.patch_id,
       name: patch.patch_id,
@@ -295,7 +292,6 @@ export function hydratePackageEntities(params: {
       photoId,
       ...(patch.captured_at ? { capturedAt: patch.captured_at } : {}),
       imageFile,
-      ...(nobgImageFile ? { nobgImageFile } : {}),
     }
 
     const patchDetectionMetadata = detectionMetadataFromPatch({

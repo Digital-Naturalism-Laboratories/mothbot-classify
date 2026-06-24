@@ -188,6 +188,8 @@ export function mergeIndexedWithHandles(params: {
       handle: handleEntry?.handle,
       file: handleEntry?.file,
       size: handleEntry?.size ?? entry.size,
+      parentDir: handleEntry?.parentDir,
+      rootDir: handleEntry?.rootDir,
     }
   })
 }
@@ -207,6 +209,8 @@ export function relinkIndexedRefFromLive(params: {
     handle: live.handle,
     file: live.file,
     size: live.size ?? ref.size,
+    parentDir: live.parentDir,
+    rootDir: live.rootDir,
   }
 }
 

@@ -12,6 +12,10 @@ import type {
 export type IndexedPickedFile = {
   file?: File
   handle?: unknown
+  /** The directory handle containing this file — used for lazy sibling resolution (e.g. _nobg.png). */
+  parentDir?: unknown
+  /** The top-level picked directory handle — fallback for images not enumerated due to depth limit. */
+  rootDir?: unknown
   path: string
   name: string
   size: number
@@ -41,16 +45,31 @@ async function* iterateDirectoryEntries(
   }
 }
 
+// Image directories are never iterated — Chrome pre-fetches entire directory contents as
+// FileSystemFileHandle objects and crashes when a flat directory holds thousands of images,
+// even before JS code can read or discard them. Images are resolved on demand via rootDir.
+//
+// Three heuristics (any one triggers a skip):
+//  1. Pure date name (YYYY-MM-DD): always an image folder in the mothbox-next layout.
+//  2. Name ends with a date *and* is inside _processed/ or 00_source/: captures
+//     deployment-date folders like "utterCoyote_2026-06-02" that hold flat patch images.
+//  3. Named "01_patches": always a flat patch image folder in the mothbox-next package
+//     layout. Patches are listed in patches.ndjson and resolved via rootDir on demand.
+const DATE_DIR_RE = /^\d{4}-\d{2}-\d{2}$/
+const ENDS_WITH_DATE_RE = /\d{4}-\d{2}-\d{2}$/
+const FLAT_IMAGE_DIR_NAMES = new Set(['01_patches'])
+
 export async function collectFilesWithPathsRecursively(params: {
   directoryHandle: FileSystemDirectoryHandleLike
-  /** Path from pick root to this directory (empty when traversing the picked folder itself). */
   pathToDirectory: string[]
   items: IndexedPickedFile[]
+  rootDir?: FileSystemDirectoryHandleLike
 }) {
   const { directoryHandle, pathToDirectory, items } = params
+  const rootDir = params.rootDir ?? directoryHandle
 
   try {
-    await collectDirectoryEntries({ directoryHandle, pathToDirectory, items })
+    await collectDirectoryEntries({ directoryHandle, pathToDirectory, items, rootDir })
   } catch (err) {
     const folderLabel = [...pathToDirectory, (directoryHandle as { name?: string }).name]
       .filter(Boolean)
@@ -63,25 +82,55 @@ async function collectDirectoryEntries(params: {
   directoryHandle: FileSystemDirectoryHandleLike
   pathToDirectory: string[]
   items: IndexedPickedFile[]
+  rootDir: FileSystemDirectoryHandleLike
 }) {
-  const { directoryHandle, pathToDirectory, items } = params
+  const { directoryHandle, pathToDirectory, items, rootDir } = params
 
   for await (const entry of iterateDirectoryEntries(directoryHandle)) {
     const entryName = (entry as unknown as { name?: string })?.name ?? ''
-    if (isFileHandle(entry)) {
-      const relFromRoot = [...pathToDirectory, entryName].filter(Boolean).join('/')
-      items.push({ file: undefined, handle: entry as unknown, path: relFromRoot, name: entryName, size: 0 })
+
+    if (!isFileHandle(entry)) {
+      // Never iterate image directories — Chrome pre-fetches all entries as
+      // FileSystemFileHandle objects and crashes before JS can act on them.
+      //
+      // Skip if:
+      //  (a) pure YYYY-MM-DD name — always an image date folder, never a package
+      //  (b) name ends with a date AND it is NOT a direct child of _processed/
+      //      (direct children of _processed/ are package folders, not image dirs)
+      const isPureDate = DATE_DIR_RE.test(entryName)
+      const endsWithDate = ENDS_WITH_DATE_RE.test(entryName)
+      const isDirectChildOfProcessed =
+        pathToDirectory.length > 0 && pathToDirectory[pathToDirectory.length - 1] === '_processed'
+      const isFlatImageDir = FLAT_IMAGE_DIR_NAMES.has(entryName)
+      if (isPureDate || (endsWithDate && !isDirectChildOfProcessed) || isFlatImageDir) continue
+
+      const subdir = entry as FileSystemDirectoryHandleLike
+      if (typeof subdir?.values === 'function') {
+        await collectFilesWithPathsRecursively({
+          directoryHandle: subdir,
+          pathToDirectory: [...pathToDirectory, entryName],
+          items,
+          rootDir,
+        })
+      }
       continue
     }
-    const subdir = entry as FileSystemDirectoryHandleLike
-    const hasValues = typeof subdir?.values === 'function'
-    if (hasValues) {
-      await collectFilesWithPathsRecursively({
-        directoryHandle: subdir,
-        pathToDirectory: [...pathToDirectory, entryName],
-        items,
-      })
-    }
+
+    // _nobg.png: loaded lazily in the patch detail dialog — skip entirely.
+    if (entryName.endsWith('_nobg.png')) continue
+
+    const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(entryName)
+    const relFromRoot = [...pathToDirectory, entryName].filter(Boolean).join('/')
+    // Don't store the image FileSystemFileHandle — use parentDir for lazy resolution.
+    items.push({
+      file: undefined,
+      handle: isImageFile ? undefined : (entry as unknown),
+      parentDir: directoryHandle,
+      rootDir,
+      path: relFromRoot,
+      name: entryName,
+      size: 0,
+    })
   }
 }
 
@@ -125,6 +174,14 @@ export async function hydrateIndexedHandleFiles(items: IndexedPickedFile[]): Pro
 
     const fileHandle = entry.handle as { getFile?: () => Promise<File> } | undefined
     if (!fileHandle?.getFile) {
+      hydrated.push(entry)
+      continue
+    }
+
+    // Skip eager file-open for images — useObjectUrl and readIndexedEntryText both resolve
+    // lazily from the stored handle. Opening all image handles up-front on a large dataset
+    // can exceed Chrome's File System Access API file-handle limit and crash the browser.
+    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(entry.name)) {
       hydrated.push(entry)
       continue
     }
