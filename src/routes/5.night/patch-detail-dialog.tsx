@@ -56,7 +56,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
     labelDetections({ detectionIds: [detectionId], label: trimmed, taxon })
   }
 
-  const showNobg = detection?.pixelMassPixels != null && patch?.imageFile?.parentDir != null
+  const showNobg = patch?.imageFile?.parentDir != null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,6 +172,17 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             <div>
               <span className='font-medium'>Patch:</span> {patch?.name ?? '—'}
             </div>
+            {(patch?.latitude || patch?.longitude) ? (
+              <div className='pt-8 space-y-2'>
+                <h5 className='text-13 font-semibold text-neutral-800'>Location</h5>
+                {patch?.latitude ? (
+                  <div><span className='font-medium'>Latitude:</span> {patch.latitude}</div>
+                ) : null}
+                {patch?.longitude ? (
+                  <div><span className='font-medium'>Longitude:</span> {patch.longitude}</div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
 

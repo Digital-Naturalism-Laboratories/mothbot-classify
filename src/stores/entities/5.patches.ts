@@ -8,6 +8,8 @@ export type PatchEntity = {
   photoId: string
   capturedAt?: string
   imageFile?: IndexedFile
+  latitude?: string | null
+  longitude?: string | null
 }
 
 export const patchesStore = atom<Record<string, PatchEntity>>({})

@@ -295,6 +295,10 @@ export function hydratePackageEntities(params: {
       photos[photoId] = { id: photoId, name: photoId, leafGroupId, imageFile: photoImageFile }
     }
 
+    const sourceMeta = patchSourcesById[patch.patch_id]?.source_metadata as Record<string, unknown> | undefined
+    const latitude = typeof sourceMeta?.latitude === 'string' ? sourceMeta.latitude : null
+    const longitude = typeof sourceMeta?.longitude === 'string' ? sourceMeta.longitude : null
+
     patchesOut[patch.patch_id] = {
       id: patch.patch_id,
       name: patch.patch_id,
@@ -302,6 +306,8 @@ export function hydratePackageEntities(params: {
       photoId,
       ...(patch.captured_at ? { capturedAt: patch.captured_at } : {}),
       imageFile,
+      ...(latitude ? { latitude } : {}),
+      ...(longitude ? { longitude } : {}),
     }
 
     const patchDetectionMetadata = detectionMetadataFromPatch({
