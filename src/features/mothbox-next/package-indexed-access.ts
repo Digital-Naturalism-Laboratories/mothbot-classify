@@ -190,8 +190,9 @@ export function resolveIndexedEntry(params: {
   packageRoot: string
   filePath: string
   archiveFallback?: boolean
+  rootDirs?: unknown[]
 }): IndexedFile | undefined {
-  const { byPath, packageRoot, filePath, archiveFallback = false } = params
+  const { byPath, packageRoot, filePath, archiveFallback = false, rootDirs } = params
   const normalized = normalizePackageRelativePath(filePath)
   const rel = toPackageRelativePath({ packageRoot, filePath: normalized })
   const baseCandidates = uniqueStrings([
@@ -208,6 +209,33 @@ export function resolveIndexedEntry(params: {
   for (const candidate of uniqueStrings([...baseCandidates, ...archiveCandidates])) {
     const hit = byPath[candidate]
     if (hit) return hit
+  }
+
+  if (rootDirs && rootDirs.length > 0) {
+    const fullPath = joinRelativePaths(packageRoot, normalized)
+    const segments = fullPath.replace(/\\/g, '/').split('/').filter(Boolean)
+    const name = segments[segments.length - 1] ?? ''
+    const parentSegments = segments.slice(0, -1)
+    // Try each rootDir in sequence — source photos may live in the package itself
+    // (rootDir=packageHandle) or in a sibling source folder (rootDir=originalSourceHandle).
+    const virtualParentDir = {
+      getFileHandle: async (fileName: string) => {
+        let lastErr: unknown
+        for (const rootDir of rootDirs) {
+          try {
+            let current = rootDir as Record<string, (n: string) => Promise<unknown>>
+            for (const seg of parentSegments) {
+              current = (await current['getDirectoryHandle'](seg)) as typeof current
+            }
+            return await (current as unknown as { getFileHandle: (n: string) => Promise<{ getFile: () => Promise<File> }> }).getFileHandle(fileName)
+          } catch (err) {
+            lastErr = err
+          }
+        }
+        throw lastErr
+      },
+    }
+    return { file: undefined, handle: undefined, parentDir: virtualParentDir, rootDir: rootDirs[0], path: fullPath, name, size: 0 }
   }
 
   return undefined

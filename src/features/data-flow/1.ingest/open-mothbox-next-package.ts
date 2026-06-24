@@ -65,6 +65,16 @@ export async function openMothboxNextPackageFromHandle(
         console.warn('🚨 openMothboxNextPackage: could not index original source folder', err)
         extraSourceResolutionFiles = []
       }
+      // If the source folder only contained date-named subdirectories (all skipped during
+      // scanning), extraSourceResolutionFiles is empty and the handle is lost. Add a
+      // synthetic sentinel so originalSourceHandle survives into sourceResolutionByPath for
+      // virtual photo navigation via rootDir.
+      if (!extraSourceResolutionFiles.some((f) => (f as { rootDir?: unknown }).rootDir)) {
+        extraSourceResolutionFiles = [
+          ...extraSourceResolutionFiles,
+          { path: '___source_root___', name: '___source_root___', size: 0, rootDir: originalSourceHandle },
+        ]
+      }
     }
 
     await migratePackageSourceToArchiveIfNeeded({

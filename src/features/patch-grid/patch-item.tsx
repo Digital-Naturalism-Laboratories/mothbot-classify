@@ -160,6 +160,10 @@ function PatchItemImpl(props: PatchItemProps) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onToggle()
       }}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        if (id && props.onOpenDetail) props.onOpenDetail(id)
+      }}
       role='button'
       aria-pressed={isSelected}
     >

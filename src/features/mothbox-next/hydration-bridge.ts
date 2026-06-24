@@ -262,6 +262,15 @@ export function hydratePackageEntities(params: {
 
   const classificationByPatch = new Map(resolvedClassifications.map((r) => [r.patch_id, r]))
   const botMetadataByPatch = buildBotMetadataByPatch({ classificationFiles })
+  // Collect all unique rootDir handles from sourceResolutionByPath. Source photos may live
+  // in the package itself (rootDir=packageHandle) OR in a sibling source folder
+  // (rootDir=originalSourceHandle). We pass all candidates so the virtual entry can try
+  // each in turn until getDirectoryHandle succeeds.
+  const sourceRootDirsSet = new Set<unknown>()
+  for (const f of Object.values(sourceResolutionByPath)) {
+    if (f.rootDir) sourceRootDirsSet.add(f.rootDir)
+  }
+  const sourceRootDirs = [...sourceRootDirsSet]
 
   for (const patch of patches) {
     const leafGroupId = patch.camera_day_id && hierarchy.nights[patch.camera_day_id]
@@ -279,6 +288,7 @@ export function hydratePackageEntities(params: {
             packageRoot,
             filePath: photoAssetPath,
             archiveFallback: true,
+            rootDirs: sourceRootDirs,
           })
         : undefined
 
