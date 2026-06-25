@@ -99,11 +99,18 @@ export function isAmiCropImagePath(relativePath: string) {
   return parts.includes('_processed') || parts.includes('_crops_')
 }
 
-async function directoryHasDateSubdirectory(dir: FileSystemDirectoryHandleLike): Promise<boolean> {
+async function directoryHasDateSubdirectory(
+  dir: FileSystemDirectoryHandleLike,
+  remainingDepth = 3,
+): Promise<boolean> {
+  if (remainingDepth <= 0) return false
   const d = dir as { entries?: () => AsyncIterable<[string, { kind?: string }]> }
   if (!d.entries) return false
   for await (const [name, handle] of d.entries()) {
-    if ((handle as { kind?: string })?.kind === 'directory' && DATE_SUFFIX_RE.test(name)) return true
+    if ((handle as { kind?: string })?.kind !== 'directory') continue
+    if (DATE_SUFFIX_RE.test(name)) return true
+    // Safe to recurse into non-date-named dirs (few entries, no large image dirs)
+    if (await directoryHasDateSubdirectory(handle as FileSystemDirectoryHandleLike, remainingDepth - 1)) return true
   }
   return false
 }
