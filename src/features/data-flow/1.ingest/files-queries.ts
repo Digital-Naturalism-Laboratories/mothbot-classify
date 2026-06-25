@@ -93,7 +93,7 @@ export function useResetDatasetMutation() {
 export function useScanDatasetsFolderMutation() {
   return useMutation({
     mutationKey: ['fs', 'scan-datasets'],
-    mutationFn: async () => scanDatasetsRegistry({ autoMigrate: true }),
+    mutationFn: async () => scanDatasetsRegistry({ autoMigrate: false }),
     retry: false,
   })
 }
