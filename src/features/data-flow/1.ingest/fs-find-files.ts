@@ -12,7 +12,19 @@ const FLAT_IMAGE_DIR_NAMES = new Set(['01_patches'])
 export async function findRelativeFilesUnderDirectory(
   root: FileSystemDirectoryHandleLike,
   predicate: (fileName: string) => boolean,
+  options?: {
+    /**
+     * When true (default), skip directories whose names end with a date
+     * (e.g. `bowedBarbo_2026-06-04`) and known flat-image dirs (e.g.
+     * `01_patches`). This prevents Chrome from crashing when entries() is
+     * called on a directory holding thousands of image file handles.
+     * Pass false only when the predicate is known to match small files
+     * (e.g. `*_botdetection.json`) so the flat dirs are safe to enter.
+     */
+    skipLargeDirs?: boolean
+  },
 ): Promise<string[]> {
+  const skipLargeDirs = options?.skipLargeDirs ?? true
   const directory = root as DirectoryWithEntries
   const out: string[] = []
 
@@ -23,7 +35,7 @@ export async function findRelativeFilesUnderDirectory(
     for await (const [name, handle] of current.entries()) {
       const rel = prefix ? `${prefix}/${name}` : name
       if (handle?.kind === 'directory') {
-        if (ENDS_WITH_DATE_RE.test(name) || FLAT_IMAGE_DIR_NAMES.has(name)) continue
+        if (skipLargeDirs && (ENDS_WITH_DATE_RE.test(name) || FLAT_IMAGE_DIR_NAMES.has(name))) continue
         await walk(handle, rel)
         continue
       }

@@ -3,6 +3,8 @@ import { findRelativeFilesUnderDirectory } from './fs-find-files'
 import { normalizeIngestRelativePath, PACKAGE_ARCHIVE_DIR } from './reserved-paths'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
+const DATE_SUFFIX_RE = /\d{4}-\d{2}-\d{2}$/
+
 export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species', '_processed'])
 
 export type DatasetFolderKind =
@@ -54,10 +56,11 @@ export async function classifyDatasetFolder(params: {
   if (processedBotPaths.length > 0) return 'mothbox-processed'
 
   if (!botPaths.length && processedMirrorHandle) {
-    const mirrorBotPaths = await findRelativeFilesUnderDirectory(processedMirrorHandle, (name) =>
-      name.endsWith('_botdetection.json'),
-    )
-    if (mirrorBotPaths.length > 0) return 'mothbox-processed-sibling'
+    // Can't scan inside date-named subdirectories: Chrome pre-fetches all
+    // FileSystemFileHandle objects for entries() and crashes on large flat dirs.
+    // Presence of any date-named subdir in the mirror is a reliable signal that
+    // the Legacy Converter moved patches/JSONs there — classify as sibling.
+    if (await directoryHasDateSubdirectory(processedMirrorHandle)) return 'mothbox-processed-sibling'
   }
 
   const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
@@ -94,4 +97,13 @@ export function isAmiCropImagePath(relativePath: string) {
   if (!/_crop_[^/]+\.(jpg|jpeg|png)$/i.test(relativePath)) return false
   const parts = normalizeIngestRelativePath(relativePath).toLowerCase().split('/').filter(Boolean)
   return parts.includes('_processed') || parts.includes('_crops_')
+}
+
+async function directoryHasDateSubdirectory(dir: FileSystemDirectoryHandleLike): Promise<boolean> {
+  const d = dir as { entries?: () => AsyncIterable<[string, { kind?: string }]> }
+  if (!d.entries) return false
+  for await (const [name, handle] of d.entries()) {
+    if ((handle as { kind?: string })?.kind === 'directory' && DATE_SUFFIX_RE.test(name)) return true
+  }
+  return false
 }
