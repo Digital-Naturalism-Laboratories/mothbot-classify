@@ -158,6 +158,8 @@ export function parsePathParts(params: { path: string }) {
   const isPatch = isPatchesFolder && lower.endsWith('.jpg')
   const isPhotoJpg = !isPatchesFolder && lower.endsWith('.jpg')
   const isBotJson = lower.endsWith('_botdetection.json')
+  // Archived bot JSONs: preserved from a previous model run, e.g. img_botdetection_Mothbot_yolo11m_v1.json
+  const isArchivedBotJson = !isBotJson && lower.includes('_botdetection_') && lower.endsWith('.json')
   const isUserJson = lower.endsWith('_identified.json')
   const baseName = isBotJson
     ? fileName.slice(0, -'_botdetection.json'.length)
@@ -167,7 +169,7 @@ export function parsePathParts(params: { path: string }) {
     ? fileName.slice(0, -'.jpg'.length)
     : fileName
 
-  return { project, site, deployment, night, isPatch, isPhotoJpg, isBotJson, isUserJson, fileName, baseName }
+  return { project, site, deployment, night, isPatch, isPhotoJpg, isBotJson, isArchivedBotJson, isUserJson, fileName, baseName }
 }
 
 export function extractNightDiskPathFromIndexedPath(path: string) {

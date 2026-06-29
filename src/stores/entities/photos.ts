@@ -18,6 +18,8 @@ export type PhotoEntity = {
   imageFile?: IndexedFile
   botDetectionFile?: IndexedFile
   userDetectionFile?: IndexedFile
+  /** Detection JSONs archived from previous YOLO model runs (e.g. img_botdetection_Mothbot_v1.json). */
+  archivedBotDetectionFiles?: IndexedFile[]
 }
 
 export const photosStore = atom<Record<string, PhotoEntity>>({})

@@ -35,10 +35,10 @@ export async function ingestFilesToStores(params: {
     const parts = parsePathParts({ path: f.path })
     if (!parts) continue
 
-    const { project, site, deployment, night, isPatch, isPhotoJpg, isBotJson, isUserJson, fileName, baseName } = parts
+    const { project, site, deployment, night, isPatch, isPhotoJpg, isBotJson, isArchivedBotJson, isUserJson, fileName, baseName } = parts
     if (!project || !site || !deployment || !night) continue
 
-    const hasRelevantMedia = isPhotoJpg || isPatch || isBotJson || isUserJson
+    const hasRelevantMedia = isPhotoJpg || isPatch || isBotJson || isArchivedBotJson || isUserJson
     if (!hasRelevantMedia) continue
 
     const projectId = project
@@ -91,6 +91,17 @@ export async function ingestFilesToStores(params: {
       const photoId = `${baseName}.jpg`
       const existing = photos[photoId] ?? { id: photoId, name: photoId, leafGroupId }
       photos[photoId] = { ...existing, botDetectionFile: f }
+      continue
+    }
+
+    if (isArchivedBotJson && shouldIncludeMedia) {
+      // Extract the photo base name from the archived file (img_botdetection_Mothbot_v1.json → img.jpg)
+      const archiveSuffix = fileName.toLowerCase().indexOf('_botdetection_')
+      const archiveBaseName = archiveSuffix >= 0 ? fileName.slice(0, archiveSuffix) : baseName
+      const photoId = `${archiveBaseName}.jpg`
+      const existing = photos[photoId] ?? { id: photoId, name: photoId, leafGroupId }
+      const prev = existing.archivedBotDetectionFiles ?? []
+      photos[photoId] = { ...existing, archivedBotDetectionFiles: [...prev, f] }
       continue
     }
 
