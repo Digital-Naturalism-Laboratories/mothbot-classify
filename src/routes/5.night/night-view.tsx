@@ -12,7 +12,7 @@ import { patchesStore } from '~/stores/entities/5.patches'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import { acceptDetections, detectionsStore, labelDetections, resetDetections } from '~/stores/entities/detections'
 import { photosStore } from '~/stores/entities/photos'
-import { clearPatchSelection, selectedPatchIdsStore, setSelection, markLeafGroupAsActive, getActiveLeafGroupIds } from '~/stores/ui'
+import { clearPatchSelection, selectedPatchIdsStore, setSelection, markLeafGroupAsActive, getActiveLeafGroupIds, activeNightIdsStore, setActiveNightIds } from '~/stores/ui'
 import { clearFileObjectsForInactiveLeafGroups } from '~/stores/entities'
 import { Row } from '~/styles'
 import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
@@ -49,6 +49,7 @@ export function NightView(props: { leafGroupId: string }) {
   const selected = useStore(selectedPatchIdsStore)
   const { setConfirmDialog } = useConfirmDialog()
 
+  const activeNightIds = useStore(activeNightIdsStore)
   const night = nights[leafGroupId]
   const routeContext = useMemo(
     () => ({
@@ -60,6 +61,11 @@ export function NightView(props: { leafGroupId: string }) {
     }),
     [folderName, night?.datasetId, night?.deploymentId, night?.name, leafGroupId],
   )
+
+  // Reset to single-night view when navigating to a new night
+  useEffect(() => {
+    setActiveNightIds([leafGroupId])
+  }, [leafGroupId])
 
   useEffect(() => {
     markLeafGroupAsActive({ leafGroupId })
@@ -92,7 +98,7 @@ export function NightView(props: { leafGroupId: string }) {
       expandLeftPanelPathForSelection({
         selectedBucket: nextBucket,
         selectedTaxon: { rank: validRank, name },
-        leafGroupId,
+        leafGroupIds: activeNightIdsStore.get(),
         detections,
       })
     }
@@ -130,14 +136,14 @@ export function NightView(props: { leafGroupId: string }) {
   }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, routeContext, singleLeafDataset])
 
   const list = useMemo(() => {
-    return Object.values(patches).filter((patch) => patch.leafGroupId === leafGroupId)
-  }, [patches, leafGroupId])
-  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupId, bucket: 'auto' }), [detections, leafGroupId])
-  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupId, bucket: 'user' }), [detections, leafGroupId])
-  const totalDetections = useMemo(() => Object.values(detections ?? {}).filter((d) => d.leafGroupId === leafGroupId).length, [detections, leafGroupId])
+    return Object.values(patches).filter((patch) => activeNightIds.has(patch.leafGroupId))
+  }, [patches, activeNightIds])
+  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'auto' }), [detections, activeNightIds])
+  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'user' }), [detections, activeNightIds])
+  const totalDetections = useMemo(() => Object.values(detections ?? {}).filter((d) => activeNightIds.has(d.leafGroupId)).length, [detections, activeNightIds])
   const totalIdentified = useMemo(
-    () => Object.values(detections ?? {}).filter((d) => d.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user').length,
-    [detections, leafGroupId],
+    () => Object.values(detections ?? {}).filter((d) => activeNightIds.has(d.leafGroupId) && (d as any)?.detectedBy === 'user').length,
+    [detections, activeNightIds],
   )
   const sizeThresholdMax = useMemo(() => {
     return getMaxDetectionLongestDimension({ patches: list, detections })
@@ -157,12 +163,12 @@ export function NightView(props: { leafGroupId: string }) {
     [photos, detections, patches, leafGroupId],
   )
   const hasMachineIdentification = useMemo(
-    () => nightHasMachineIdentification({ photos, detections, leafGroupId }),
-    [photos, detections, leafGroupId],
+    () => Array.from(activeNightIds).some((id) => nightHasMachineIdentification({ photos, detections, leafGroupId: id })),
+    [photos, detections, activeNightIds],
   )
   const unassignedCount = useMemo(
-    () => countUnassignedDetectionsForNight({ detections, leafGroupId }),
-    [detections, leafGroupId],
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + countUnassignedDetectionsForNight({ detections, leafGroupId: id }), 0),
+    [detections, activeNightIds],
   )
 
   function onIdentify() {
@@ -191,7 +197,11 @@ export function NightView(props: { leafGroupId: string }) {
 
   function onSelectAll() {
     const allPatchIds = filtered.map((p) => p.id)
-    setSelection({ leafGroupId, patchIds: allPatchIds })
+    if (activeNightIds.size > 1) {
+      selectedPatchIdsStore.set(new Set(allPatchIds))
+    } else {
+      setSelection({ leafGroupId, patchIds: allPatchIds })
+    }
   }
 
   async function onResetToAuto() {
@@ -291,8 +301,8 @@ type TaxonomyNode = {
 
 const UNASSIGNED_LABEL = 'Unassigned'
 
-function buildTaxonomyTreeForLeafGroup(params: { detections: Record<string, any>; leafGroupId: string; bucket: 'auto' | 'user' }) {
-  const { detections, leafGroupId, bucket } = params
+function buildTaxonomyTreeForLeafGroup(params: { detections: Record<string, any>; leafGroupIds: Set<string>; bucket: 'auto' | 'user' }) {
+  const { detections, leafGroupIds, bucket } = params
   const onlyUser = bucket === 'user'
   const roots: TaxonomyNode[] = []
   function ensureChild(nodes: TaxonomyNode[], rank: TaxonomyNode['rank'], name: string, isMorphoSpecies?: boolean): TaxonomyNode {
@@ -306,7 +316,7 @@ function buildTaxonomyTreeForLeafGroup(params: { detections: Record<string, any>
     return node
   }
   for (const d of Object.values(detections ?? {})) {
-    if ((d as any)?.leafGroupId !== leafGroupId) continue
+    if (!leafGroupIds.has((d as any)?.leafGroupId)) continue
     const detectedBy = (d as any)?.detectedBy === 'user' ? 'user' : 'auto'
     if ((onlyUser && detectedBy !== 'user') || (!onlyUser && detectedBy !== 'auto')) continue
     // Skip error items from taxonomy tree; they are shown as a separate "Errors" row
@@ -448,17 +458,17 @@ function clampSizeThreshold(params: { value: number; max: number }) {
 function expandLeftPanelPathForSelection(params: {
   selectedBucket?: 'auto' | 'user'
   selectedTaxon?: TaxonSelection
-  leafGroupId: string
+  leafGroupIds: Set<string>
   detections: Record<string, DetectionEntity>
 }) {
-  const { selectedBucket, selectedTaxon, leafGroupId, detections } = params
+  const { selectedBucket, selectedTaxon, leafGroupIds, detections } = params
   if (!selectedBucket || !selectedTaxon) return
   if (selectedTaxon.rank === 'class') return
 
   let match: DetectionEntity | undefined
   for (const d of Object.values(detections || {})) {
     const det = d as DetectionEntity
-    if ((det as any)?.leafGroupId !== leafGroupId) continue
+    if (!leafGroupIds.has((det as any)?.leafGroupId)) continue
     const detectedBy = det?.detectedBy === 'user' ? 'user' : 'auto'
     if (selectedBucket && detectedBy !== selectedBucket) continue
     const t = det?.taxon

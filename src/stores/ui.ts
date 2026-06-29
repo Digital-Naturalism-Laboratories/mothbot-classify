@@ -37,8 +37,9 @@ export function togglePatchSelection(params: { patchId: string }) {
 
   const currentSelected = new Set(selectedPatchIdsStore.get() ?? new Set())
   const currentNightId = selectionLeafGroupIdStore.get()
+  const isMultiNight = activeNightIdsStore.get().size > 1
 
-  if (currentNightId && currentNightId !== patchNightId) {
+  if (!isMultiNight && currentNightId && currentNightId !== patchNightId) {
     selectedPatchIdsStore.set(new Set([patchId]))
     selectionLeafGroupIdStore.set(patchNightId)
     return
@@ -153,6 +154,23 @@ export function addNightIngestTotal(params: { leafGroupId: string; by: number })
 export const activeNightIdStore = atom<string | null>(null)
 export const recentlyViewedLeafGroupIdsStore = atom<Set<string>>(new Set())
 
+// Multi-night selection: the set of nights currently shown in the grid
+export const activeNightIdsStore = atom<Set<string>>(new Set())
+
+export function setActiveNightIds(ids: Iterable<string>) {
+  activeNightIdsStore.set(new Set(ids))
+}
+
+export function toggleActiveNightId(id: string) {
+  const current = new Set(activeNightIdsStore.get())
+  if (current.has(id)) {
+    current.delete(id)
+  } else {
+    current.add(id)
+  }
+  activeNightIdsStore.set(current)
+}
+
 const MAX_RECENTLY_VIEWED = 2
 
 export function markLeafGroupAsActive(params: { leafGroupId: string }) {
@@ -176,8 +194,10 @@ export function markLeafGroupAsActive(params: { leafGroupId: string }) {
 export function getActiveLeafGroupIds(): Set<string> {
   const active = activeNightIdStore.get()
   const recent = recentlyViewedLeafGroupIdsStore.get()
+  const multiNight = activeNightIdsStore.get()
   const result = new Set<string>()
   if (active) result.add(active)
   for (const id of recent) result.add(id)
+  for (const id of multiNight) result.add(id)
   return result
 }

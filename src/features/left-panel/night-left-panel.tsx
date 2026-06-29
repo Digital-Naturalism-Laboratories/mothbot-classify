@@ -14,6 +14,7 @@ import { PatchSizeControl } from '~/components/atomic/patch-size-control'
 import type { LeafGroupLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
 import { TaxonomySection } from './taxonomy-section'
+import { NightSelectorSection } from './night-selector'
 import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
 
 export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
@@ -46,6 +47,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
 
   return (
     <Column className={cn('bg-sidebar pl-14 pr-16 py-20 pt-12', className)}>
+      <NightSelectorSection />
       <WarningsBox warnings={warnings} className='mb-16' />
       <div className='mb-16'>
         <PanelHeading className='mb-6'>Summary</PanelHeading>

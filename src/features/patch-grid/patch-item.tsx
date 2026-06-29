@@ -14,7 +14,9 @@ import {
   selectedSubClusterIdStore,
   setSelectedSubClusterId,
   selectionLeafGroupIdStore,
+  activeNightIdsStore,
 } from '~/stores/ui'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { cn } from '~/utils/cn'
 import { useObjectUrl } from '~/utils/use-object-url'
 import { makeIndexedFileHandle } from '~/stores/entities/photos'
@@ -50,6 +52,10 @@ function PatchItemImpl(props: PatchItemProps) {
   const hoveredTopClusterId = useStore(selectedClusterIdStore)
   const hoveredSubClusterId = useStore(selectedSubClusterIdStore)
   const selected = useStore(selectedPatchIdsStore)
+  const activeNightIds = useStore(activeNightIdsStore)
+  const leafGroups = useStore(leafGroupsStore)
+  const isMultiNight = activeNightIds.size > 1
+  const nightName = isMultiNight && patch?.leafGroupId ? (leafGroups[patch.leafGroupId]?.name ?? '') : ''
   const label = detection ? deriveTaxonNameFromDetection({ detection }) || 'Unlabeled' : 'Unlabeled'
   const rank = typeof detection?.morphospecies === 'string' && !!detection?.morphospecies ? 'morphospecies' : detection?.taxon?.taxonRank
   const morphoKeyForDetection = (detection?.morphospecies || '').trim() ? normalizeMorphoKey(detection?.morphospecies || '') : ''
@@ -245,18 +251,25 @@ function PatchItemImpl(props: PatchItemProps) {
         )}
       </PatchDownloadContextMenu>
 
-      {!compact && <TaxonRankRow rank={rank} label={label} />}
+      {!compact && <TaxonRankRow rank={rank} label={label} nightName={nightName} />}
     </Column>
   )
 }
 
-function TaxonRankRow(props: { rank: string | undefined; label: string | undefined }) {
-  const { rank, label } = props
+function TaxonRankRow(props: { rank: string | undefined; label: string | undefined; nightName?: string }) {
+  const { rank, label, nightName } = props
 
   return (
-    <div className='w-full h-[22px] mx-4 flex gap-4 items-center '>
-      {rank && <TaxonRankLetterBadge rank={rank} size='xsm' />}
-      <Badge size='sm'>{label}</Badge>
+    <div className='w-full mx-4 flex flex-col'>
+      <div className='h-[22px] flex gap-4 items-center'>
+        {rank && <TaxonRankLetterBadge rank={rank} size='xsm' />}
+        <Badge size='sm'>{label}</Badge>
+      </div>
+      {nightName && (
+        <div className='h-[18px] flex items-center'>
+          <span className='text-[10px] text-neutral-400 font-mono truncate leading-none'>{nightName}</span>
+        </div>
+      )}
     </div>
   )
 }
