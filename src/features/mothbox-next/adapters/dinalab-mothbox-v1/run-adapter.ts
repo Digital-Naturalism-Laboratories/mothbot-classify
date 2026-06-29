@@ -33,7 +33,7 @@ export async function runDinalabMothboxV1Adapter(params: {
   const packageRelativeSourcePrefix =
     params.packageRelativeSourcePrefix ?? (archiveSourceTree || retainPatchesInSource ? PACKAGE_ARCHIVE_DIR : '')
   const packageSourceLayout = params.packageSourceLayout ?? (packageRelativeSourcePrefix === PACKAGE_ARCHIVE_DIR ? 'archive' : 'in_place')
-  const progressMessage = 'Converting legacy dataset…'
+  const progressMessage = archiveSourceTree ? 'Converting legacy dataset…' : 'Setting up dataset…'
 
   const buildParams = {
     datasetId,
