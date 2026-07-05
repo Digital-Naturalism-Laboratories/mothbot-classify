@@ -503,16 +503,32 @@ function expandLeftPanelPathForSelection(params: {
     const genusName = t?.genus
     if (orderName) keys.push(makeKey({ bucket: selectedBucket, rank: 'order', path: orderName }))
     if (orderName && familyName) keys.push(makeKey({ bucket: selectedBucket, rank: 'family', path: `${orderName}/${familyName}` }))
-    if (orderName && familyName && genusName)
-      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: `${orderName}/${familyName}/${genusName}` }))
+    if (genusName) {
+      // Build the collapse key to match GenusNode: order/family/genus when all present,
+      // order/genus when family absent, or just genus when both are absent (StandaloneGenusNode).
+      const genusPath =
+        orderName && familyName
+          ? `${orderName}/${familyName}/${genusName}`
+          : orderName
+            ? `${orderName}/${genusName}`
+            : genusName
+      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: genusPath }))
+    }
   } else if (selectedTaxon.rank === 'species') {
     const orderName = selectedBucket === 'user' ? t?.order || UNASSIGNED_LABEL : t?.order
     const familyName = selectedBucket === 'user' ? t?.family || UNASSIGNED_LABEL : t?.family
     const genusName = selectedBucket === 'user' ? t?.genus || UNASSIGNED_LABEL : t?.genus
     if (orderName) keys.push(makeKey({ bucket: selectedBucket, rank: 'order', path: orderName }))
     if (orderName && familyName) keys.push(makeKey({ bucket: selectedBucket, rank: 'family', path: `${orderName}/${familyName}` }))
-    if (orderName && familyName && genusName)
-      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: `${orderName}/${familyName}/${genusName}` }))
+    if (genusName) {
+      const genusPath =
+        orderName && familyName
+          ? `${orderName}/${familyName}/${genusName}`
+          : orderName
+            ? `${orderName}/${genusName}`
+            : genusName
+      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: genusPath }))
+    }
   }
 
   if (keys.length) expandMany(keys)

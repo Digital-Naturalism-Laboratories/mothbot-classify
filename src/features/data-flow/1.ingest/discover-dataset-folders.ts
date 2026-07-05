@@ -1,7 +1,7 @@
 import type { DatasetRegistryEntry } from '~/stores/datasets-registry'
 import { requireDatasetsFolderHandle } from './datasets-folder-handle'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
-import { classifyDatasetFolder, isReservedDatasetsChildFolderName } from './classify-dataset-folder'
+import { classifyDatasetFolder, isReservedDatasetsChildFolderName, isParquetFileName, isCsvFileName } from './classify-dataset-folder'
 import { readDatasetManifestSummary } from './dataset-manifest'
 import type { PendingDatasetMigration } from './pending-dataset-migration-types'
 
@@ -41,9 +41,15 @@ export async function discoverDatasetFoldersUnderRoot(
   }
 
   const childCandidates: Array<{ directory: DirectoryHandleWithIter; folderName: string }> = []
+  let rootHasMetadataFiles = false
 
   for await (const child of datasetsRoot.values()) {
     const candidate = child as DirectoryHandleWithIter
+    if (candidate?.kind === 'file') {
+      const fileName = (candidate as unknown as { name?: string }).name ?? ''
+      if (isParquetFileName(fileName) || isCsvFileName(fileName)) rootHasMetadataFiles = true
+      continue
+    }
     if (candidate?.kind !== 'directory') continue
 
     const folderName = candidate.name?.trim()
@@ -109,7 +115,7 @@ export async function discoverDatasetFoldersUnderRoot(
         }
       }
 
-      const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle })
+      const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle, rootHasMetadataFiles })
       if (kind !== 'package' && kind !== 'skip') {
         return { package: null, pending: { folderName, kind, processedMirrorHandle } }
       }

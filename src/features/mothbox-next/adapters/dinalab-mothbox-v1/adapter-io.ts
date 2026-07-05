@@ -14,6 +14,8 @@ export type DinalabAdapterPackageIO = {
 export type DinalabAdapterIO = {
   source: DinalabAdapterSourceIO
   package: DinalabAdapterPackageIO
+  /** Root-level metadata source (e.g. datasets root containing parquet/CSV siblings to the project folder). */
+  rootMetadata?: DinalabAdapterSourceIO
 }
 
 export type DinalabAdapterResult = {

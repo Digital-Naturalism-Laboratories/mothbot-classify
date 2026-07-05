@@ -101,17 +101,35 @@ export function TaxonomySection(props: TaxonomySectionProps) {
 
         {(nodes || []).map((node, index) => {
           const isInLastBranch = !errorsRowIsLast && index === lastNodeIndex
-          return node.rank === 'class' ? (
-            <ClassNode
-              key={`class-${node.name}`}
-              bucket={bucket}
-              classNode={node}
-              isInLastBranch={isInLastBranch}
-              selectedTaxon={selectedTaxon}
-              selectedBucket={selectedBucket}
-              onSelectTaxon={onSelectTaxon}
-            />
-          ) : (
+          if (node.rank === 'class') {
+            return (
+              <ClassNode
+                key={`class-${node.name}`}
+                bucket={bucket}
+                classNode={node}
+                isInLastBranch={isInLastBranch}
+                selectedTaxon={selectedTaxon}
+                selectedBucket={selectedBucket}
+                onSelectTaxon={onSelectTaxon}
+              />
+            )
+          }
+          // When genus nodes land at root (e.g. AMI data with no order/family/class),
+          // render them with the correct rank so clicks fire genus-level filters.
+          if (node.rank === 'genus') {
+            return (
+              <StandaloneGenusNode
+                key={`genus-${node.name}`}
+                bucket={bucket}
+                genusNode={node}
+                isInLastBranch={isInLastBranch}
+                selectedTaxon={selectedTaxon}
+                selectedBucket={selectedBucket}
+                onSelectTaxon={onSelectTaxon}
+              />
+            )
+          }
+          return (
             <OrderNode
               key={`order-${node.name}`}
               bucket={bucket}
@@ -291,18 +309,32 @@ function OrderNode(props: {
 
       {hasExpandedChildren ? (
         <IndentedBranch directRowCount={orderNode.children?.length ?? 0}>
-          {(orderNode.children || []).map((familyNode, index) => (
-            <FamilyNode
-              key={`family-${className ? `${className}-` : ''}${orderNode.name}-${familyNode.name}`}
-              bucket={bucket}
-              orderName={orderNode.name}
-              familyNode={familyNode}
-              isInLastBranch={!!isInLastBranch && index === lastChildIndex}
-              selectedTaxon={selectedTaxon}
-              selectedBucket={selectedBucket}
-              onSelectTaxon={onSelectTaxon}
-            />
-          ))}
+          {(orderNode.children || []).map((childNode, index) =>
+            childNode.rank === 'genus' ? (
+              // Family level absent (e.g. AMI order→genus→species) — render genus directly.
+              <GenusNode
+                key={`genus-${className ? `${className}-` : ''}${orderNode.name}-${childNode.name}`}
+                bucket={bucket}
+                orderName={orderNode.name}
+                genusNode={childNode}
+                isInLastBranch={!!isInLastBranch && index === lastChildIndex}
+                selectedTaxon={selectedTaxon}
+                selectedBucket={selectedBucket}
+                onSelectTaxon={onSelectTaxon}
+              />
+            ) : (
+              <FamilyNode
+                key={`family-${className ? `${className}-` : ''}${orderNode.name}-${childNode.name}`}
+                bucket={bucket}
+                orderName={orderNode.name}
+                familyNode={childNode}
+                isInLastBranch={!!isInLastBranch && index === lastChildIndex}
+                selectedTaxon={selectedTaxon}
+                selectedBucket={selectedBucket}
+                onSelectTaxon={onSelectTaxon}
+              />
+            ),
+          )}
         </IndentedBranch>
       ) : null}
     </div>
@@ -370,10 +402,76 @@ function FamilyNode(props: {
   )
 }
 
+// Renders a genus node that appears at the root of the taxonomy tree (i.e. when
+// order and family are absent from the data, as in AMI parquet-only datasets).
+// Fires rank:'genus' on click so filterPatchesByTaxon matches correctly.
+function StandaloneGenusNode(props: {
+  bucket: 'auto' | 'user'
+  genusNode: TaxonomyNode
+  isInLastBranch?: boolean
+  selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
+  selectedBucket?: 'auto' | 'user'
+  onSelectTaxon: (params: {
+    taxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
+    bucket: 'auto' | 'user'
+  }) => void
+}) {
+  const { bucket, genusNode, isInLastBranch, selectedTaxon, selectedBucket, onSelectTaxon } = props
+  const collapsedSet = useStore(collapsedKeysStore)
+  const genusKey = makeKey({ bucket, rank: 'genus', path: genusNode.name })
+  const genusExpanded = !collapsedSet.has(genusKey)
+  const hasChildren = !!(genusNode.children && genusNode.children.length)
+  const hasExpandedChildren = hasChildren && genusExpanded
+  const lastChildIndex = (genusNode.children?.length || 0) - 1
+  return (
+    <div>
+      <TaxonomyRow
+        rank='genus'
+        name={genusNode.name}
+        count={genusNode.count}
+        selected={selectedBucket === bucket && selectedTaxon?.rank === 'genus' && selectedTaxon?.name === genusNode.name}
+        onSelect={() => {
+          clearPatchSelection()
+          onSelectTaxon({ taxon: { rank: 'genus', name: genusNode.name }, bucket })
+        }}
+        canToggle={hasChildren}
+        hasChildren={hasChildren}
+        expanded={genusExpanded}
+        onToggleExpanded={() => toggleKey(genusKey)}
+        hasExpandedChildren={hasExpandedChildren}
+        isAbsoluteLast={isInLastBranch && !hasExpandedChildren}
+      />
+      {hasExpandedChildren ? (
+        <IndentedBranch directRowCount={genusNode.children?.length ?? 0}>
+          {(genusNode.children || []).map((speciesNode, index) => (
+            <div key={`species-${genusNode.name}-${speciesNode.name}`} className='relative'>
+              <TaxonomyRow
+                rank='species'
+                name={speciesNode.name}
+                count={speciesNode.count}
+                selected={
+                  selectedBucket === bucket && selectedTaxon?.rank === 'species' && selectedTaxon?.name === speciesNode.name
+                }
+                onSelect={() => {
+                  clearPatchSelection()
+                  onSelectTaxon({ taxon: { rank: 'species', name: speciesNode.name }, bucket })
+                }}
+                inBranch
+                isMorphoSpecies={speciesNode.isMorpho}
+                isAbsoluteLast={!!isInLastBranch && index === lastChildIndex}
+              />
+            </div>
+          ))}
+        </IndentedBranch>
+      ) : null}
+    </div>
+  )
+}
+
 function GenusNode(props: {
   bucket: 'auto' | 'user'
   orderName: string
-  familyName: string
+  familyName?: string
   genusNode: TaxonomyNode
   isInLastBranch?: boolean
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
@@ -385,7 +483,9 @@ function GenusNode(props: {
 }) {
   const { bucket, orderName, familyName, genusNode, isInLastBranch, selectedTaxon, selectedBucket, onSelectTaxon } = props
   const collapsedSet = useStore(collapsedKeysStore)
-  const genusPath = `${orderName}/${familyName}/${genusNode.name}`
+  // When family is absent (e.g. AMI order→genus→species), omit it from the path
+  // so the collapse key matches what expandLeftPanelPathForSelection generates.
+  const genusPath = familyName ? `${orderName}/${familyName}/${genusNode.name}` : `${orderName}/${genusNode.name}`
   const genusKey = makeKey({ bucket, rank: 'genus', path: genusPath })
   const genusExpanded = !collapsedSet.has(genusKey)
   const hasChildren = !!(genusNode.children && genusNode.children.length)
@@ -414,7 +514,7 @@ function GenusNode(props: {
       {hasExpandedChildren ? (
         <IndentedBranch directRowCount={genusNode.children?.length ?? 0}>
           {(genusNode.children || []).map((speciesNode, index) => (
-            <div key={`species-${orderName}-${familyName}-${genusNode.name}-${speciesNode.name}`} className='relative'>
+            <div key={`species-${orderName}-${familyName ?? ''}-${genusNode.name}-${speciesNode.name}`} className='relative'>
               <TaxonomyRow
                 rank='species'
                 name={speciesNode.name}

@@ -19,9 +19,11 @@ export async function buildMothboxPackageFromFolder(params: {
   kind?: DatasetSetupKind
   /** Sibling `_processed/<folderName>` directory, when JSON outputs live there instead of nested inside packageHandle. */
   processedMirrorHandle?: FileSystemDirectoryHandleLike | null
+  /** Datasets root directory, used as a fallback metadata source for AMI datasets whose parquet/CSV files sit at the root level rather than inside the project folder. */
+  rootMetadataHandle?: FileSystemDirectoryHandleLike | null
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<{ datasetId: string; patchCount: number }> {
-  const { packageHandle, folderName, processedMirrorHandle, onProgress } = params
+  const { packageHandle, folderName, processedMirrorHandle, rootMetadataHandle, onProgress } = params
   const kind = params.kind ?? (await resolveDatasetSetupKind({ directory: packageHandle, folderName }))
   const datasetId = sanitizeDatasetFolderName(folderName)
   const humanClassifierId = (userSessionStore.get()?.initials || 'user').trim().toLowerCase() || 'user'
@@ -59,7 +61,7 @@ export async function buildMothboxPackageFromFolder(params: {
     packageSourceLayout: layout.layout,
     legacySourceRootName: layout.legacySourceRootName,
     folderKind: kind,
-    io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle: effectivePackageHandle }),
+    io: createBrowserDinalabAdapterIO({ sourceHandle: layout.sourceHandle, packageHandle: effectivePackageHandle, rootMetadataHandle }),
     // For the sibling-mirror layout, full-size source photos live in the
     // original folder (packageHandle, before swapping to the mirror), not
     // in the mirror used as io.source. Let the adapter fall back to

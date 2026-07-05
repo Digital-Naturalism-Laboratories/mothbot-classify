@@ -2,7 +2,7 @@ import { parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import { buildTaxonRecord } from '~/models/taxonomy/builder'
 import type { ClassificationRecord, PatchRecord, PatchSourceRecord, DeploymentRecord, CameraDayRecord } from '../../records'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
-import { isPatchImageFileName, isCsvFileName, isParquetFileName } from '~/features/data-flow/1.ingest/classify-dataset-folder'
+import { isPatchImageFileName, isCsvFileName, isParquetFileName, isAmiCropImagePath } from '~/features/data-flow/1.ingest/classify-dataset-folder'
 import { toPackageRelativeAssetPath, type PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-package-source-layout'
 import type { DinalabAdapterIO, DinalabAdapterProgressCallback } from './adapter-io'
 import { imageMediaTypeFromPath } from './adapter-media-type'
@@ -33,6 +33,11 @@ const AMI_METADATA_COLUMNS = [
   'x2',
   'y1',
   'y2',
+  // Hubert/AMI variant column names
+  'orderlabel',
+  'orderscore',
+  'deploymentcode',
+  'deploymentyear',
 ]
 
 const AMI_PARQUET_ROW_BATCH_SIZE = 50_000
@@ -96,9 +101,17 @@ export async function buildAmiAdapterRecords(params: {
     description: 'Scanning AMI processed crops...',
   })
 
-  const cropPaths = await io.source.findFiles((name) => isPatchImageFileName(name))
+  // Scan io.source first; if no AMI crops found there (e.g. user opened the
+  // project folder directly with _processed/ inside it), fall back to scanning
+  // io.rootMetadata (the datasets root, which sees _processed/ at its own level).
+  let cropPaths = await io.source.findFiles((name) => isPatchImageFileName(name))
+  if (!cropPaths.some(isAmiCropImagePath) && io.rootMetadata) {
+    const rootCropPaths = await io.rootMetadata.findFiles((name) => isPatchImageFileName(name))
+    if (rootCropPaths.some(isAmiCropImagePath)) cropPaths = rootCropPaths
+  }
+
   const crops = cropPaths
-    .map(parseAmiCropPath)
+    .map((path) => parseAmiCropPath(path, datasetId))
     .filter((crop): crop is AmiCrop => !!crop)
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
 
@@ -236,31 +249,62 @@ async function readAmiMetadataRows(params: {
   progressMessage: string
 }) {
   const { io, cropIds, onProgress, progressMessage } = params
-  const parquetPaths = (await io.source.findFiles((name) => isParquetFileName(name))).sort()
-  const csvPaths = (await io.source.findFiles((name) => isCsvFileName(name))).sort()
+  // Parquet/CSV may live inside the dataset folder or at the datasets root
+  // (sibling to the project folder) — check both, tag each path with its
+  // source IO, and deduplicate by base filename so the same file isn't read twice.
+  type TaggedPath = { metadataPath: string; source: DinalabAdapterIO['source'] }
+  const tagPaths = (paths: string[], source: NonNullable<DinalabAdapterIO['source']>): TaggedPath[] =>
+    paths.map((metadataPath) => ({ metadataPath, source }))
+
+  const sourceParquetTagged = tagPaths(
+    (await io.source.findFiles((name) => isParquetFileName(name))).sort(),
+    io.source,
+  )
+  const sourceCsvTagged = tagPaths(
+    (await io.source.findFiles((name) => isCsvFileName(name))).sort(),
+    io.source,
+  )
+  const rootParquetTagged = io.rootMetadata
+    ? tagPaths((await io.rootMetadata.findFiles((name) => isParquetFileName(name))).sort(), io.rootMetadata)
+    : []
+  const rootCsvTagged = io.rootMetadata
+    ? tagPaths((await io.rootMetadata.findFiles((name) => isCsvFileName(name))).sort(), io.rootMetadata)
+    : []
+
+  const parquetEntries = deduplicateTaggedByFileName([...sourceParquetTagged, ...rootParquetTagged])
+  const csvEntries = deduplicateTaggedByFileName([...sourceCsvTagged, ...rootCsvTagged])
 
   const parquetRows: AmiMetadataRow[] = []
-  for (const metadataPath of parquetPaths) {
+  for (const { metadataPath, source } of parquetEntries) {
     onProgress?.({
       phase: 'scan',
       message: progressMessage,
       description: `Reading AMI parquet metadata ${metadataPath}...`,
     })
 
-    const rows = await readAmiParquetMetadataRows({ io, metadataPath, cropIds })
+    const rows = await readAmiParquetMetadataRows({ source, metadataPath, cropIds })
     parquetRows.push(...rows)
   }
 
   const parquetDetectionIds = new Set(parquetRows.map((row) => row.detectionid))
+  // Also read the CSV when the parquet only has species/genus-level rows — the CSV
+  // typically carries order-level labels that fill in the higher-taxa fields.
+  const parquetNeedsHigherTaxaEnrichment =
+    parquetRows.length > 0 &&
+    parquetRows.every((row) => {
+      const level = normalizeTaxonLevel(row.taxonlevel)
+      return level === 'species' || level === 'genus' || level === ''
+    })
   const needsCsvSupplement =
     parquetRows.length === 0 ||
     parquetRows.some((row) => !row.cropurl) ||
-    [...cropIds].some((cropId) => !parquetDetectionIds.has(cropId))
+    [...cropIds].some((cropId) => !parquetDetectionIds.has(cropId)) ||
+    parquetNeedsHigherTaxaEnrichment
 
   if (!needsCsvSupplement) return parquetRows
 
   const csvRows: AmiMetadataRow[] = []
-  for (const metadataPath of csvPaths) {
+  for (const { metadataPath, source } of csvEntries) {
     onProgress?.({
       phase: 'scan',
       message: progressMessage,
@@ -268,7 +312,7 @@ async function readAmiMetadataRows(params: {
     })
 
     csvRows.push(...readAmiCsvMetadataRows({
-      text: await io.source.readText(metadataPath),
+      text: await source.readText(metadataPath),
       metadataPath,
       cropIds,
     }))
@@ -281,12 +325,12 @@ async function readAmiMetadataRows(params: {
 }
 
 async function readAmiParquetMetadataRows(params: {
-  io: DinalabAdapterIO
+  source: DinalabAdapterIO['source']
   metadataPath: string
   cropIds: Set<string>
 }): Promise<AmiMetadataRow[]> {
-  const { io, metadataPath, cropIds } = params
-  const buffer = await io.source.readBinary(metadataPath)
+  const { source, metadataPath, cropIds } = params
+  const buffer = await source.readBinary(metadataPath)
   const file = {
     byteLength: buffer.byteLength,
     slice: async (start: number, end?: number) => buffer.slice(start, end),
@@ -323,11 +367,18 @@ function readAmiCsvMetadataRows(params: {
   const out: AmiMetadataRow[] = []
 
   for (const record of records) {
+    const inferredTaxonLevel = record.taxonlevel || (record.orderlabel ? 'order' : '')
+    // Strip AMI sub-order qualifiers like "Lepidoptera Macros" → "Lepidoptera".
+    // Only clean when the taxon level is inferred from orderlabel (not explicit).
+    const cleanedOrderLabel =
+      inferredTaxonLevel === 'order' && !record.taxonlevel && record.orderlabel
+        ? cleanAmiOrderLabel(record.orderlabel)
+        : record.orderlabel
     const row = normalizeAmiMetadataRow({
       row: {
         detectionid: record.detectionid,
-        taxonlevel: record.taxonlevel || (record.orderlabel ? 'order' : ''),
-        label: record.label || record.orderlabel,
+        taxonlevel: inferredTaxonLevel,
+        label: record.label || cleanedOrderLabel,
         labelid: record.labelid,
         score: record.score || record.orderscore,
         abovethreshold: record.abovethreshold,
@@ -367,15 +418,15 @@ function normalizeAmiMetadataRow(params: {
   return {
     detectionid,
     taxonlevel: stringValue(row.taxonlevel),
-    label: stringValue(row.label),
+    label: stringValue(row.label) ?? stringValue(row.orderlabel),
     labelid: stringValue(row.labelid),
-    score: numberValue(row.score),
+    score: numberValue(row.score) ?? numberValue(row.orderscore),
     abovethreshold: booleanValue(row.abovethreshold),
     algorithm: stringValue(row.algorithm),
     sourceimageid: stringValue(row.sourceimageid),
     cropurl: stringValue(row.cropurl),
-    code: stringValue(row.code),
-    year: stringValue(row.year) || numberValue(row.year),
+    code: stringValue(row.code) ?? stringValue(row.deploymentcode),
+    year: stringValue(row.year) ?? stringValue(row.deploymentyear) ?? numberValue(row.year),
     projectid: stringValue(row.projectid),
     partnerid: stringValue(row.partnerid),
     wktposition: stringValue(row.wktposition),
@@ -401,10 +452,26 @@ export function mergeAmiPrimaryAndSupplementalRows(params: {
 
   const supplementalByDetectionId = groupRowsByDetectionId(supplementalRows)
   const primaryDetectionIds = new Set(primaryRows.map((row) => row.detectionid))
-  const merged = primaryRows.map((row) => {
+  const merged: AmiMetadataRow[] = []
+
+  for (const row of primaryRows) {
     const supplemental = supplementalByDetectionId.get(row.detectionid)?.[0]
-    return supplemental ? mergeMissingAmiRowFields({ primary: row, supplemental }) : row
-  })
+    if (!supplemental) {
+      merged.push(row)
+      continue
+    }
+
+    merged.push(mergeMissingAmiRowFields({ primary: row, supplemental }))
+
+    // When primary and supplemental represent *different* taxon levels (e.g. parquet
+    // has species-level, CSV has order-level), keep the supplemental as a separate
+    // row so taxonFieldsFromAmiRows can extract both levels for the full taxonomy.
+    const primaryLevel = normalizeTaxonLevel(row.taxonlevel)
+    const supplLevel = normalizeTaxonLevel(supplemental.taxonlevel)
+    if (supplLevel && primaryLevel !== supplLevel && supplemental.label) {
+      merged.push(supplemental)
+    }
+  }
 
   for (const supplemental of supplementalRows) {
     if (!primaryDetectionIds.has(supplemental.detectionid)) merged.push(supplemental)
@@ -582,7 +649,7 @@ function amiClassifierPriority(algorithm: string) {
   return index >= 0 ? index : AMI_CLASSIFIER_PRIORITY.length
 }
 
-function parseAmiCropPath(relativePath: string): AmiCrop | null {
+function parseAmiCropPath(relativePath: string, fallbackProjectId?: string): AmiCrop | null {
   const normalized = relativePath.replaceAll('\\', '/')
   const parts = normalized.split('/').filter(Boolean)
 
@@ -591,8 +658,10 @@ function parseAmiCropPath(relativePath: string): AmiCrop | null {
   if (!match) return null
 
   const processedIndex = parts.findIndex((part) => part.toLowerCase() === '_processed')
-  if (processedIndex >= 1) {
-    return parseAmiProcessedCropPath({ normalized, parts, processedIndex, patchFileName, match })
+  // Allow processedIndex === 0: _processed is at the root of io.source (i.e. the
+  // user opened the project folder directly, so there is no project segment before it).
+  if (processedIndex >= 0) {
+    return parseAmiProcessedCropPath({ normalized, parts, processedIndex, patchFileName, match, fallbackProjectId })
   }
 
   const cropsIndex = parts.findIndex((part) => part.toLowerCase() === '_crops_')
@@ -609,15 +678,20 @@ function parseAmiProcessedCropPath(params: {
   processedIndex: number
   patchFileName: string
   match: RegExpMatchArray
+  fallbackProjectId?: string
 }): AmiCrop | null {
-  const { normalized, parts, processedIndex, patchFileName, match } = params
-  const projectId = parts[processedIndex - 1]
+  const { normalized, parts, processedIndex, patchFileName, match, fallbackProjectId } = params
+  // When processedIndex === 0, _processed is at the root of io.source (the project
+  // folder itself is the source root), so there is no project segment before it.
+  // Use fallbackProjectId (typically the dataset id) in that case.
+  const projectId = processedIndex >= 1 ? parts[processedIndex - 1] : fallbackProjectId
   const year = parts[processedIndex + 1]
   const country = parts[processedIndex + 2]
   const code = parts[processedIndex + 3]
   if (!projectId || !year || !country || !code) return null
 
   const sourceFileName = `${match[1]}.${match[3]}`
+  // For processedIndex === 0, there is no project prefix in the source path.
   const sourcePhotoRelativePath = joinRelative(...parts.slice(0, processedIndex), year, country, code, sourceFileName)
 
   return {
@@ -726,6 +800,12 @@ function sourceFileNameFromCropUrl(value?: string) {
   return match ? `${match[1]}.${match[2]}` : ''
 }
 
+function cleanAmiOrderLabel(label: string): string {
+  // "Lepidoptera Macros" / "Diptera Brachycera" → take only the first word (the
+  // actual order name); sub-order qualifiers used by AMI are not standard taxon ranks.
+  return label.trim().split(/\s+/)[0] ?? label
+}
+
 function normalizeTaxonLevel(value?: string) {
   const normalized = value?.trim().toLowerCase()
   if (!normalized) return ''
@@ -819,4 +899,14 @@ function bigintStringNumberValue(value: unknown) {
 
 function uniqueStrings(values: Array<string | undefined>) {
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => !!value))]
+}
+
+function deduplicateTaggedByFileName<T extends { metadataPath: string }>(entries: T[]): T[] {
+  const seen = new Set<string>()
+  return entries.filter((entry) => {
+    const base = entry.metadataPath.split('/').pop() ?? entry.metadataPath
+    if (seen.has(base)) return false
+    seen.add(base)
+    return true
+  })
 }

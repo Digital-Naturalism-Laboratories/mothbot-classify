@@ -45,8 +45,14 @@ export async function classifyDatasetFolder(params: {
    * tree, rather than nested in a `_processed` subfolder inside it.
    */
   processedMirrorHandle?: FileSystemDirectoryHandleLike | null
+  /**
+   * True when the datasets root itself contains parquet/CSV metadata files
+   * at the top level (sibling to `directory`). AMI datasets sometimes store
+   * their metadata snapshot at the root rather than inside the project folder.
+   */
+  rootHasMetadataFiles?: boolean
 }): Promise<DatasetFolderKind> {
-  const { directory, folderName, processedMirrorHandle } = params
+  const { directory, folderName, processedMirrorHandle, rootHasMetadataFiles } = params
   if (isReservedDatasetsChildFolderName(folderName)) return 'skip'
 
   if (await directoryHasDatasetManifest(directory)) return 'package'
@@ -65,7 +71,7 @@ export async function classifyDatasetFolder(params: {
 
   const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
   const metadataPaths = await findRelativeFilesUnderDirectory(directory, (name) => isParquetFileName(name) || isCsvFileName(name))
-  if (metadataPaths.length > 0 && imagePaths.some(isAmiCropImagePath)) {
+  if ((metadataPaths.length > 0 || rootHasMetadataFiles) && imagePaths.some(isAmiCropImagePath)) {
     return 'ami'
   }
 
