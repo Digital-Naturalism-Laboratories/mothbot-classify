@@ -16,6 +16,7 @@ import { WarningsBox } from './warnings-box'
 import { TaxonomySection } from './taxonomy-section'
 import { NightSelectorSection } from './night-selector'
 import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
+import { VisualizationDialog } from '~/features/data-flow/4.export/visualization/visualization-dialog'
 
 export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   const {
@@ -41,6 +42,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
 
   const detections = useStore(detectionsStore)
   const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
+  const [vizDialogOpen, setVizDialogOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(
     (d) => (d as any)?.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
   ).length
@@ -123,6 +125,14 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
         <Button className='w-full' onClick={() => showDarwinExportToast({ leafGroupId })}>
           Export Darwin CSV
         </Button>
+        <Button className='w-full mt-8' variant='outline' onClick={() => setVizDialogOpen(true)}>
+          Export Visualization
+        </Button>
+        <VisualizationDialog
+          open={vizDialogOpen}
+          onClose={() => setVizDialogOpen(false)}
+          initialLeafGroupIds={[leafGroupId]}
+        />
 
         {/* <Button
           className='w-full mt-8'
