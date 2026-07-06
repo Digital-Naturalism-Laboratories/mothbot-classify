@@ -24,6 +24,10 @@ import { SelectionBar } from './selection-bar'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { computeDetectionLongestDimension } from '~/features/patch-grid/grid-utils'
 import { countUnassignedDetectionsForNight, nightHasMachineIdentification } from '~/features/labeling/night-labeling-mode'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
+import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
+import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
 
@@ -43,6 +47,7 @@ export function NightView(props: { leafGroupId: string }) {
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
   const [sizeThreshold, setSizeThreshold] = useState(0)
   const [sortByClusters, setSortByClusters] = useState(false)
+  const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
   const hasAppliedDefaultFallbackRef = useRef(false)
@@ -50,7 +55,35 @@ export function NightView(props: { leafGroupId: string }) {
   const { setConfirmDialog } = useConfirmDialog()
 
   const activeNightIds = useStore(activeNightIdsStore)
+  const activePackage = useStore(mothboxNextPackageStore)
   const night = nights[leafGroupId]
+
+  const availableBotAlgorithms = useMemo(() => {
+    const files = activePackage?.loaded?.classificationFiles
+    if (!files) return []
+    const algSet = new Set<string>()
+    for (const file of files) {
+      for (const row of file.rows) {
+        if (row.classifier_type === 'bot' && row.classifier_id) algSet.add(row.classifier_id)
+      }
+    }
+    return [...algSet].sort()
+  }, [activePackage])
+
+  // When dataset changes, set default algorithm (the one with classified_at=1)
+  useEffect(() => {
+    const files = activePackage?.loaded?.classificationFiles
+    if (!files) { setSelectedBotAlgorithm(undefined); return }
+    for (const file of files) {
+      for (const row of file.rows) {
+        if (row.classifier_type === 'bot' && row.classified_at === 1 && row.classifier_id) {
+          setSelectedBotAlgorithm(row.classifier_id)
+          return
+        }
+      }
+    }
+    setSelectedBotAlgorithm(undefined)
+  }, [activePackage])
   const routeContext = useMemo(
     () => ({
       folderName,
@@ -204,6 +237,60 @@ export function NightView(props: { leafGroupId: string }) {
     }
   }
 
+  function onBotAlgorithmChange(algorithm: string) {
+    const files = activePackage?.loaded?.classificationFiles
+    if (!files) return
+
+    setSelectedBotAlgorithm(algorithm)
+
+    // Filter to only the selected algorithm's bot rows (keep all human rows intact)
+    const filteredFiles = files.map((file) => ({
+      ...file,
+      rows: file.rows.filter((row) => row.classifier_type !== 'bot' || row.classifier_id === algorithm),
+    }))
+
+    const flattened = flattenClassificationFiles({ files: filteredFiles })
+    const resolvedClassifications = resolveCurrentClassifications({ rows: flattened })
+    const classificationByPatch = new Map(resolvedClassifications.map((r) => [r.patch_id, r]))
+
+    const currentDetections = detectionsStore.get() || {}
+    const updatedDetections: Record<string, DetectionEntity> = {}
+
+    for (const [patchId, detection] of Object.entries(currentDetections)) {
+      const classification = classificationByPatch.get(patchId)
+      if (classification) {
+        updatedDetections[patchId] = {
+          ...detection,
+          ...detectionFromClassification({
+            row: classification,
+            leafGroupId: detection.leafGroupId,
+            photoId: detection.photoId,
+          }),
+          // Preserve geometry fields that come from patchSource, not classification
+          direction: detection.direction,
+          shapeType: detection.shapeType,
+          points: detection.points,
+          clusterId: detection.clusterId,
+        }
+      } else {
+        updatedDetections[patchId] = {
+          ...detection,
+          label: undefined,
+          taxon: undefined,
+          detectedBy: 'auto',
+          botClassifierId: undefined,
+          score: undefined,
+          classificationType: undefined,
+          humanClassifierId: undefined,
+          morphospecies: undefined,
+        }
+      }
+    }
+
+    detectionsStore.set(updatedDetections)
+    rebuildLeafGroupSummariesFromDetections(updatedDetections)
+  }
+
   async function onResetToAuto() {
     if (selectedDetectionIds.length === 0) return
 
@@ -250,6 +337,9 @@ export function NightView(props: { leafGroupId: string }) {
         sortByClusters={sortByClusters}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
+        availableBotAlgorithms={availableBotAlgorithms.length > 1 ? availableBotAlgorithms : undefined}
+        selectedBotAlgorithm={selectedBotAlgorithm}
+        onBotAlgorithmChange={onBotAlgorithmChange}
         selectedTaxon={selectedTaxon as any}
         selectedBucket={selectedBucket}
         onSelectTaxon={({ taxon, bucket }) => {

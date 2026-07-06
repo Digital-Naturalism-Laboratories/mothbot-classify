@@ -129,6 +129,7 @@ export async function buildAmiAdapterRecords(params: {
 
   const metadataRows = await readAmiMetadataRows({ io, cropIds, onProgress, progressMessage })
   const rowsByDetectionId = groupRowsByDetectionId(metadataRows)
+  const defaultAlgorithm = selectDatasetAlgorithm(metadataRows)
 
   const patches: PatchRecord[] = []
   const patchSources: PatchSourceRecord[] = []
@@ -223,8 +224,20 @@ export async function buildAmiAdapterRecords(params: {
       })
     }
 
-    const classification = classificationFromAmiRows({ patchId: crop.detectionId, rows })
-    if (classification) botRows.push(classification)
+    // Produce one classification per algorithm so the user can switch between them in the UI.
+    // The default algorithm (latest timestamp, deepest rank) gets classified_at=1 so it wins
+    // in resolveCurrentClassifications. Others get classified_at=null and are available for
+    // view-time switching without re-reading disk.
+    const algorithmGroups = groupRowsByAlgorithm(rows)
+    for (const [algorithm, algorithmRows] of algorithmGroups) {
+      const classification = classificationFromAlgorithmRows({
+        patchId: crop.detectionId,
+        algorithmRows,
+        allRowsForDetection: rows,
+        classifiedAt: algorithm === defaultAlgorithm ? 1 : null,
+      })
+      if (classification) botRows.push(classification)
+    }
   }
 
   const resolvedClassifications = resolveCurrentClassifications({
@@ -517,33 +530,86 @@ function groupRowsByDetectionId(rows: AmiMetadataRow[]) {
   return out
 }
 
-function classificationFromAmiRows(params: {
-  patchId: string
-  rows: AmiMetadataRow[]
-}): ClassificationRecord | null {
-  const { patchId, rows } = params
-  if (!rows.length) return null
+function groupRowsByAlgorithm(rows: AmiMetadataRow[]) {
+  const out = new Map<string, AmiMetadataRow[]>()
+  for (const row of rows) {
+    const key = row.algorithm || 'ami'
+    if (!out.has(key)) out.set(key, [])
+    out.get(key)!.push(row)
+  }
+  return out
+}
 
-  const selectedRows = selectAmiClassifierRows(rows)
+function selectDatasetAlgorithm(allRows: AmiMetadataRow[]): string {
+  const byAlgorithm = new Map<string, AmiMetadataRow[]>()
+  for (const row of allRows) {
+    const key = row.algorithm || 'ami'
+    if (!byAlgorithm.has(key)) byAlgorithm.set(key, [])
+    byAlgorithm.get(key)!.push(row)
+  }
+  const ranked = [...byAlgorithm.entries()]
+    .map(([algorithm, rows]) => {
+      const ranks = [...new Set(rows.map((row) => normalizeTaxonLevel(row.taxonlevel)))]
+      const deepestRankIndex = Math.max(
+        ...ranks.map((rank) => TAXON_RANK_ORDER.indexOf(rank as (typeof TAXON_RANK_ORDER)[number])),
+      )
+      const deepestRank = TAXON_RANK_ORDER[deepestRankIndex]
+      const bestScore = deepestRank
+        ? Math.max(
+            ...rows
+              .filter((row) => normalizeTaxonLevel(row.taxonlevel) === deepestRank)
+              .map((row) => row.score ?? Number.NEGATIVE_INFINITY),
+          )
+        : Number.NEGATIVE_INFINITY
+      const maxTimestamp = Math.max(
+        ...rows.map((row) => {
+          const ts = row.timestamp
+          if (typeof ts === 'bigint') return Number(ts)
+          return (ts as number | null | undefined) ?? Number.NEGATIVE_INFINITY
+        }),
+      )
+      return { algorithm, deepestRankIndex, bestScore, maxTimestamp, classifierPriority: amiClassifierPriority(algorithm) }
+    })
+    .sort((a, b) => {
+      if (a.deepestRankIndex !== b.deepestRankIndex) return b.deepestRankIndex - a.deepestRankIndex
+      if (a.maxTimestamp !== b.maxTimestamp) return b.maxTimestamp - a.maxTimestamp
+      if (a.bestScore !== b.bestScore) return b.bestScore - a.bestScore
+      if (a.classifierPriority !== b.classifierPriority) return a.classifierPriority - b.classifierPriority
+      return a.algorithm.localeCompare(b.algorithm)
+    })
+  return ranked[0]?.algorithm ?? 'ami'
+}
+
+function classificationFromAlgorithmRows(params: {
+  patchId: string
+  algorithmRows: AmiMetadataRow[]
+  allRowsForDetection: AmiMetadataRow[]
+  classifiedAt: number | null
+}): ClassificationRecord | null {
+  const { patchId, algorithmRows, allRowsForDetection, classifiedAt } = params
+  if (!algorithmRows.length) return null
+
   const primaryRank = DEEPEST_RANK_FIRST.find((rank) =>
-    selectedRows.some((row) => normalizeTaxonLevel(row.taxonlevel) === rank && row.label),
+    algorithmRows.some((row) => normalizeTaxonLevel(row.taxonlevel) === rank && row.label),
   )
   const primary = primaryRank
-    ? selectedRows
+    ? algorithmRows
         .filter((row) => normalizeTaxonLevel(row.taxonlevel) === primaryRank && row.label)
         .sort((a, b) => (b.score ?? Number.NEGATIVE_INFINITY) - (a.score ?? Number.NEGATIVE_INFINITY))[0]
-    : selectedRows[0]
+    : algorithmRows[0]
   if (!primary?.label) return null
 
-  const taxonFields = taxonFieldsFromAmiRows(selectedRows)
+  // Use only this algorithm's rows for taxonomy — mixing algorithms would produce
+  // inconsistent classifications (e.g. species from one algorithm, genus from another).
+  const taxonFields = taxonFieldsFromAmiRows(algorithmRows)
   const taxon = normalizeAmiTaxonSpecies({
     taxon: buildTaxonRecord({
       ...taxonFields,
       metadata: {
         extras: {
           ami_detection_id: patchId,
-          ami_algorithms: uniqueStrings(rows.map((row) => row.algorithm)),
-          ami_label_ids: uniqueStrings(rows.map((row) => row.labelid)),
+          ami_algorithms: uniqueStrings(allRowsForDetection.map((row) => row.algorithm)),
+          ami_label_ids: uniqueStrings(allRowsForDetection.map((row) => row.labelid)),
           ami_selected_algorithm: primary.algorithm,
         },
       },
@@ -562,7 +628,7 @@ function classificationFromAmiRows(params: {
     morphospecies: null,
     is_error: false,
     confidence: primary.score ?? null,
-    classified_at: null,
+    classified_at: classifiedAt,
     source_bot_detection_id: patchId,
   }
 }
@@ -624,20 +690,30 @@ function selectAmiClassifierRows(rows: AmiMetadataRow[]) {
               .map((row) => row.score ?? Number.NEGATIVE_INFINITY),
           )
         : Number.NEGATIVE_INFINITY
+      const maxTimestamp = Math.max(
+        ...algorithmRows.map((row) => {
+          const ts = row.timestamp
+          if (typeof ts === 'bigint') return Number(ts)
+          return (ts as number | null | undefined) ?? Number.NEGATIVE_INFINITY
+        }),
+      )
       return {
         algorithm,
         rows: algorithmRows,
         rankCount: ranks.length,
         deepestRankIndex,
         primaryScore,
+        maxTimestamp,
         classifierPriority: amiClassifierPriority(algorithm),
       }
     })
     .sort((a, b) => {
+      // Prefer deepest rank, then most recent run, then highest score, then known priority list
       if (a.deepestRankIndex !== b.deepestRankIndex) return b.deepestRankIndex - a.deepestRankIndex
+      if (a.maxTimestamp !== b.maxTimestamp) return b.maxTimestamp - a.maxTimestamp
+      if (a.primaryScore !== b.primaryScore) return b.primaryScore - a.primaryScore
       if (a.classifierPriority !== b.classifierPriority) return a.classifierPriority - b.classifierPriority
       if (a.rankCount !== b.rankCount) return b.rankCount - a.rankCount
-      if (a.primaryScore !== b.primaryScore) return b.primaryScore - a.primaryScore
       return a.algorithm.localeCompare(b.algorithm)
     })
 

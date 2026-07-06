@@ -33,6 +33,9 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     sortByClusters,
     onSizeThresholdChange,
     onSortByClustersChange,
+    availableBotAlgorithms,
+    selectedBotAlgorithm,
+    onBotAlgorithmChange,
     selectedTaxon,
     selectedBucket,
     onSelectTaxon,
@@ -93,6 +96,9 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           onSelectTaxon={onSelectTaxon}
           emptyText='No detections'
           aggregateLabel={UNAPPROVED_AGGREGATE_LABEL}
+          availableAlgorithms={availableBotAlgorithms}
+          selectedAlgorithm={selectedBotAlgorithm}
+          onAlgorithmChange={onBotAlgorithmChange}
         />
       ) : (
         <TaxonomySection

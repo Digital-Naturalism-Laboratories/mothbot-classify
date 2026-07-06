@@ -7,6 +7,10 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
 import { clearPatchSelection } from '~/stores/ui'
@@ -37,6 +41,9 @@ export type TaxonomySectionProps = {
   aggregateLabel?: string
   aggregateCount?: number
   alwaysShowAggregate?: boolean
+  availableAlgorithms?: string[]
+  selectedAlgorithm?: string
+  onAlgorithmChange?: (algorithm: string) => void
 }
 
 export function TaxonomySection(props: TaxonomySectionProps) {
@@ -55,6 +62,9 @@ export function TaxonomySection(props: TaxonomySectionProps) {
     aggregateLabel = 'All unapproved',
     aggregateCount,
     alwaysShowAggregate = false,
+    availableAlgorithms,
+    selectedAlgorithm,
+    onAlgorithmChange,
   } = props
 
   const hasNodes = Array.isArray(nodes) && nodes.length > 0
@@ -83,6 +93,9 @@ export function TaxonomySection(props: TaxonomySectionProps) {
         nodes={nodes}
         sortByClusters={sortByClusters}
         onSortByClustersChange={onSortByClustersChange}
+        availableAlgorithms={availableAlgorithms}
+        selectedAlgorithm={selectedAlgorithm}
+        onAlgorithmChange={onAlgorithmChange}
       />
 
       <div>
@@ -165,8 +178,11 @@ function SectionHeader(props: {
   nodes?: TaxonomyNode[]
   sortByClusters?: boolean
   onSortByClustersChange?: (enabled: boolean) => void
+  availableAlgorithms?: string[]
+  selectedAlgorithm?: string
+  onAlgorithmChange?: (algorithm: string) => void
 }) {
-  const { title, bucket, nodes, sortByClusters = false, onSortByClustersChange } = props
+  const { title, bucket, nodes, sortByClusters = false, onSortByClustersChange, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
   return (
     <div className='mb-6 flex items-center justify-between'>
       <PanelHeading>{title}</PanelHeading>
@@ -176,6 +192,9 @@ function SectionHeader(props: {
         nodes={nodes}
         sortByClusters={sortByClusters}
         onSortByClustersChange={onSortByClustersChange}
+        availableAlgorithms={availableAlgorithms}
+        selectedAlgorithm={selectedAlgorithm}
+        onAlgorithmChange={onAlgorithmChange}
       />
     </div>
   )
@@ -186,8 +205,12 @@ function SectionMoreMenu(props: {
   nodes?: TaxonomyNode[]
   sortByClusters?: boolean
   onSortByClustersChange?: (enabled: boolean) => void
+  availableAlgorithms?: string[]
+  selectedAlgorithm?: string
+  onAlgorithmChange?: (algorithm: string) => void
 }) {
-  const { bucket, nodes, sortByClusters = false, onSortByClustersChange } = props
+  const { bucket, nodes, sortByClusters = false, onSortByClustersChange, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
+  const showAlgorithms = bucket === 'auto' && Array.isArray(availableAlgorithms) && availableAlgorithms.length > 1
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -207,6 +230,20 @@ function SectionMoreMenu(props: {
         <DropdownMenuItem onSelect={() => expandMany(allKeysFor(nodes || [], bucket))}>Expand all</DropdownMenuItem>
 
         <DropdownMenuItem onSelect={() => collapseMany(allKeysFor(nodes || [], bucket))}>Collapse all</DropdownMenuItem>
+
+        {showAlgorithms ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>ID algorithm</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={selectedAlgorithm ?? ''} onValueChange={(v) => onAlgorithmChange?.(v)}>
+              {availableAlgorithms!.map((alg) => (
+                <DropdownMenuRadioItem key={alg} value={alg}>
+                  {alg}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

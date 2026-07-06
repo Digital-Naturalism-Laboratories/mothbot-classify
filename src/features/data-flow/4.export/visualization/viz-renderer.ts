@@ -28,8 +28,10 @@ export async function renderVisualization(
 
   if (config.chartType === 'bar') {
     await renderBarChart(ctx, canvas.width, canvas.height, data, config, imageMap)
-  } else {
+  } else if (config.chartType === 'radial') {
     await renderRadialChart(ctx, canvas.width, canvas.height, data, config, imageMap)
+  } else {
+    await renderPackChart(ctx, canvas.width, canvas.height, data, config, imageMap)
   }
 }
 
@@ -291,6 +293,129 @@ function fillSectorWithTiles(
       }
     }
   }
+}
+
+// ─── image pack (phyllotaxis radial mosaic) ───────────────────────────────────
+
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)) // ≈ 2.399 radians
+
+// A palette of distinct hues used to tint group-specific sector regions
+const GROUP_HUES = [
+  '#5c87d6', '#e06c75', '#98c379', '#e5c07b',
+  '#c678dd', '#56b6c2', '#d19a66', '#61afef',
+  '#be5046', '#3d8b37', '#9b59b6', '#1abc9c',
+]
+
+async function renderPackChart(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  width: number,
+  height: number,
+  data: VizData,
+  config: VizConfig,
+  imageMap: Map<string, ImageBitmap>,
+): Promise<void> {
+  const cx = width / 2
+  const cy = height / 2
+
+  // Usable radius leaves room for outer labels
+  const maxRadius = Math.min(width, height) * 0.42
+  const labelMargin = Math.min(width, height) * 0.08
+
+  // Flatten all detections in group order, tracking which group each belongs to
+  type PlacedDet = { patchId: string; groupIdx: number }
+  const flat: PlacedDet[] = []
+  for (let gi = 0; gi < data.groups.length; gi++) {
+    const group = data.groups[gi]!
+    const dets = config.representativeMode === 'first' ? [group.representative] : group.detections
+    for (const det of dets) flat.push({ patchId: det.patchId, groupIdx: gi })
+  }
+
+  if (flat.length === 0) {
+    drawEmptyState(ctx, width, height)
+    return
+  }
+
+  // Cell size: fit all items into the usable circle area
+  // Area of circle = π r²; divide by n items to get cell area, then sqrt for side
+  const circleArea = Math.PI * maxRadius * maxRadius
+  const rawCell = Math.sqrt(circleArea / flat.length) * 0.85
+  const cellSize = Math.max(Math.min(rawCell, maxRadius * 0.3), 8)
+  const spacing = cellSize * 1.08
+
+  // Compute phyllotaxis positions
+  type Position = { x: number; y: number; patchId: string; groupIdx: number; r: number }
+  const positions: Position[] = []
+
+  for (let i = 0; i < flat.length; i++) {
+    const r = spacing * Math.sqrt(i + 0.5)
+    const angle = i * GOLDEN_ANGLE
+    const x = cx + r * Math.cos(angle)
+    const y = cy + r * Math.sin(angle)
+    positions.push({ x, y, patchId: flat[i]!.patchId, groupIdx: flat[i]!.groupIdx, r })
+  }
+
+  // Clamp to canvas — items beyond the circle edge are skipped (they'd fall outside maxRadius)
+  const visiblePositions = positions.filter((p) => {
+    const dx = p.x - cx, dy = p.y - cy
+    return Math.sqrt(dx * dx + dy * dy) <= maxRadius - cellSize / 2
+  })
+
+  // Draw images
+  for (const pos of visiblePositions) {
+    const half = cellSize / 2
+    const bmp = imageMap.get(pos.patchId)
+    if (bmp) {
+      ctx.drawImage(bmp, pos.x - half, pos.y - half, cellSize, cellSize)
+    }
+    // Subtle group-tinted frame (very low opacity)
+    const hue = GROUP_HUES[pos.groupIdx % GROUP_HUES.length]!
+    ctx.strokeStyle = hue + '66'
+    ctx.lineWidth = 1
+    ctx.strokeRect(pos.x - half, pos.y - half, cellSize, cellSize)
+  }
+
+  // Draw group legend in a ring just outside maxRadius
+  const labelR = maxRadius + labelMargin * 0.5
+  const fontSize = Math.max(Math.round(Math.min(width, height) * 0.018), 11)
+  ctx.font = `${fontSize}px sans-serif`
+  ctx.textBaseline = 'middle'
+
+  // Distribute labels evenly around the ring
+  for (let gi = 0; gi < data.groups.length; gi++) {
+    const group = data.groups[gi]!
+    const labelAngle = (gi / data.groups.length) * Math.PI * 2 - Math.PI / 2
+    const lx = cx + labelR * Math.cos(labelAngle)
+    const ly = cy + labelR * Math.sin(labelAngle)
+
+    const hue = GROUP_HUES[gi % GROUP_HUES.length]!
+
+    // Small colored dot
+    ctx.beginPath()
+    ctx.arc(lx, ly, fontSize * 0.45, 0, Math.PI * 2)
+    ctx.fillStyle = hue
+    ctx.fill()
+
+    // Text
+    const isRightHalf = Math.cos(labelAngle) >= 0
+    ctx.textAlign = isRightHalf ? 'left' : 'right'
+    ctx.fillStyle = TEXT_COLOR
+    const textX = lx + (isRightHalf ? fontSize * 0.8 : -fontSize * 0.8)
+    const maxLabelW = width * 0.18
+    ctx.fillText(
+      truncateLabel(`${group.label} (${group.count})`, ctx, maxLabelW),
+      textX,
+      ly,
+    )
+  }
+
+  ctx.textBaseline = 'alphabetic'
+
+  // Title at top
+  const titleSize = Math.round(Math.min(width, height) * 0.025)
+  ctx.fillStyle = TEXT_COLOR + 'cc'
+  ctx.font = `${titleSize}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.fillText(buildTitle(data, config), cx, Math.round(height * 0.03))
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────

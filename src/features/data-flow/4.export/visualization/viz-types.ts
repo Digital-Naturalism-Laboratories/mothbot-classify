@@ -1,4 +1,4 @@
-export type VizChartType = 'bar' | 'radial'
+export type VizChartType = 'bar' | 'radial' | 'pack'
 export type VizGroupBy = 'cluster' | 'taxa'
 export type VizTaxaRank = 'order' | 'family' | 'genus' | 'species'
 export type VizRepresentativeMode = 'first' | 'most-common'
@@ -17,7 +17,7 @@ export type VizConfig = {
 
 export function defaultVizConfig(leafGroupIds: string[]): VizConfig {
   return {
-    chartType: 'bar',
+    chartType: 'pack',
     selectedLeafGroupIds: leafGroupIds,
     groupBy: 'taxa',
     taxaRank: 'family',

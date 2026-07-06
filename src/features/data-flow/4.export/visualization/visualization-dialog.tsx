@@ -9,7 +9,7 @@ import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { activeNightIdsStore } from '~/stores/ui'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import { patchesStore } from '~/stores/entities/5.patches'
-import { patchFileMapByNightStore } from '~/features/data-flow/1.ingest/files.state'
+import { makeIndexedFileHandle } from '~/stores/entities/photos'
 import { cn } from '~/utils/cn'
 import { buildVizData } from './viz-data'
 import { renderVisualization } from './viz-renderer'
@@ -34,7 +34,6 @@ export function VisualizationDialog(props: Props) {
   const activeNightIds = useStore(activeNightIdsStore)
   const hierarchy = useStore(activeHierarchyStore)
   const patches = useStore(patchesStore)
-  const patchMapByNight = useStore(patchFileMapByNightStore)
 
   const allLeafGroupIds = hierarchy?.leafGroupIds ?? []
 
@@ -87,14 +86,31 @@ export function VisualizationDialog(props: Props) {
         await Promise.allSettled(
           detsToLoad.map(async (det) => {
             const patch = patches[det.patchId]
-            if (!patch) return
+            const imageFile = patch?.imageFile
+            if (!imageFile) return
+
             let file: File | undefined
+
             if (config.preferNobg) {
-              const nightMap = patchMapByNight[det.leafGroupId]
-              const baseName = patch.name.replace(/\.[^.]+$/, '')
-              file = nightMap?.[`${baseName}_nobg.png`]?.file
+              const parentDir = (imageFile as any).parentDir as
+                | { getFileHandle?: (n: string) => Promise<{ getFile: () => Promise<File> }> }
+                | undefined
+              if (parentDir?.getFileHandle) {
+                const nobgName = imageFile.name.replace(/\.jpg$/i, '_nobg.png')
+                file = await parentDir.getFileHandle(nobgName)
+                  .then((h) => h.getFile())
+                  .catch(() => undefined)
+              }
             }
-            if (!file) file = patch.imageFile?.file
+
+            if (!file) {
+              file = imageFile.file
+              if (!file) {
+                const handle = makeIndexedFileHandle(imageFile)
+                file = await handle?.getFile().catch(() => undefined)
+              }
+            }
+
             if (!file) return
             try {
               imageMap.set(det.patchId, await createImageBitmap(file))
@@ -116,7 +132,7 @@ export function VisualizationDialog(props: Props) {
 
     void render()
     return () => { cancelled = true }
-  }, [open, config, patches, patchMapByNight])
+  }, [open, config, patches])
 
   const handleExport = useCallback(async () => {
     setExporting(true)
@@ -124,7 +140,11 @@ export function VisualizationDialog(props: Props) {
       const result = await exportVisualization(config)
       if (result) {
         toast.success('Visualization exported', {
-          description: result.folderPath,
+          description: result.filePath,
+          action: {
+            label: 'Copy file path',
+            onClick: () => void navigator.clipboard.writeText(result.filePath).catch(() => null),
+          },
           cancel: {
             label: 'Copy folder path',
             onClick: () => void navigator.clipboard.writeText(result.folderPath).catch(() => null),
@@ -199,6 +219,7 @@ export function VisualizationDialog(props: Props) {
             <SegmentedControl
               value={config.chartType}
               options={[
+                { value: 'pack', label: 'Image Pack' },
                 { value: 'bar', label: 'Bar' },
                 { value: 'radial', label: 'Radial' },
               ]}

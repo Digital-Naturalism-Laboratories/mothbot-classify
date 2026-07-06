@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react'
 import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
-import { activeNightIdsStore, toggleActiveNightId } from '~/stores/ui'
+import { activeNightIdsStore, setActiveNightIds, toggleActiveNightId } from '~/stores/ui'
 import { PanelHeading } from '~/styles'
 import { cn } from '~/utils/cn'
 
@@ -25,9 +25,29 @@ export function NightSelectorSection(props: Props) {
 
   if (nights.length < 2) return null
 
+  const allSelected = nights.every((n) => activeNightIds.has(n.id))
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      // Deselect all but keep the first one active (at least one must be selected)
+      setActiveNightIds([nights[0]!.id])
+    } else {
+      setActiveNightIds(nights.map((n) => n.id))
+    }
+  }
+
   return (
     <div className={cn('mb-16', className)}>
-      <PanelHeading className='mb-6'>Nights</PanelHeading>
+      <div className='mb-6 flex items-center justify-between'>
+        <PanelHeading>Nights</PanelHeading>
+        <button
+          type='button'
+          onClick={toggleSelectAll}
+          className='text-12 text-blue-600 hover:text-blue-800 cursor-pointer select-none'
+        >
+          {allSelected ? 'Deselect all' : 'Select all'}
+        </button>
+      </div>
       <div className='space-y-2'>
         {nights.map((night) => {
           const checked = activeNightIds.has(night.id)

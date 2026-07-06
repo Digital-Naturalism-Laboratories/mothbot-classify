@@ -1,14 +1,17 @@
 import { ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
 import { patchesStore } from '~/stores/entities/5.patches'
-import { patchFileMapByNightStore } from '~/features/data-flow/1.ingest/files.state'
+import { photosStore, makeIndexedFileHandle } from '~/stores/entities/photos'
 import { fsaaWriteBytes, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { idbGet } from '~/utils/index-db'
+import { getNightDiskPathFromPhotos } from '~/utils/paths'
 import { formatTodayYyyyMm_Dd, getProjectExportPath, sanitizeForFileName } from '../export-utils'
 import { buildVizData } from './viz-data'
 import { renderVisualization } from './viz-renderer'
 import type { VizConfig } from './viz-types'
 
-export type VizExportResult = { folderPath: string } | null
+type ParentDir = { getFileHandle?: (name: string) => Promise<{ getFile: () => Promise<File> }> }
+
+export type VizExportResult = { folderPath: string; filePath: string } | null
 
 export async function exportVisualization(config: VizConfig): Promise<VizExportResult> {
   if (!config.selectedLeafGroupIds.length) return null
@@ -34,15 +37,29 @@ export async function exportVisualization(config: VizConfig): Promise<VizExportR
   const blob = await canvas.convertToBlob({ type: 'image/png' })
   const bytes = new Uint8Array(await blob.arrayBuffer())
 
-  const exportPath = getProjectExportPath({ leafGroupId: config.selectedLeafGroupIds[0]! })
-  const pathParts = exportPath.split('/').filter(Boolean)
+  const folderPath = resolveExportFolderPath(config)
+  const pathParts = folderPath.split('/').filter(Boolean)
   const fileName = buildVizFileName(config)
 
   await fsaaWriteBytes(root, [...pathParts, fileName], bytes)
 
   for (const bmp of imageMap.values()) bmp.close()
 
-  return { folderPath: exportPath }
+  return { folderPath, filePath: [...pathParts, fileName].join('/') }
+}
+
+function resolveExportFolderPath(config: VizConfig): string {
+  // Derive from actual photo disk paths for consistency with Darwin CSV path style
+  const allPhotos = Object.values(photosStore.get() ?? {})
+  for (const leafGroupId of config.selectedLeafGroupIds) {
+    const photos = allPhotos.filter((p) => p.leafGroupId === leafGroupId)
+    const nightPath = getNightDiskPathFromPhotos({ photos })
+    if (nightPath) {
+      const projectRoot = nightPath.split('/').filter(Boolean)[0]
+      if (projectRoot) return `${projectRoot}/exports`
+    }
+  }
+  return getProjectExportPath({ leafGroupId: config.selectedLeafGroupIds[0]! })
 }
 
 async function loadPatchImages(
@@ -50,7 +67,6 @@ async function loadPatchImages(
   preferNobg: boolean,
 ): Promise<Map<string, ImageBitmap>> {
   const patches = patchesStore.get()
-  const patchMapByNight = patchFileMapByNightStore.get()
   const result = new Map<string, ImageBitmap>()
 
   await Promise.allSettled(
@@ -58,17 +74,28 @@ async function loadPatchImages(
       const patch = patches[det.patchId]
       if (!patch) return
 
+      const imageFile = patch.imageFile
+      if (!imageFile) return
+
       let file: File | undefined = undefined
 
       if (preferNobg) {
-        const nightMap = patchMapByNight[det.leafGroupId]
-        const baseName = patch.name.replace(/\.[^.]+$/, '')
-        const nobgName = `${baseName}_nobg.png`
-        file = nightMap?.[nobgName]?.file
+        const parentDir = imageFile.parentDir as ParentDir | undefined
+        if (parentDir?.getFileHandle) {
+          const nobgName = imageFile.name.replace(/\.jpg$/i, '_nobg.png')
+          file = await parentDir.getFileHandle(nobgName)
+            .then((h) => h.getFile())
+            .catch(() => undefined)
+        }
       }
 
       if (!file) {
-        file = patch.imageFile?.file
+        // Try pre-loaded file, then fall back to handle-based loading
+        file = imageFile.file
+        if (!file) {
+          const handle = makeIndexedFileHandle(imageFile)
+          file = await handle?.getFile().catch(() => undefined)
+        }
       }
 
       if (!file) return

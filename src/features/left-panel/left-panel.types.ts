@@ -25,6 +25,9 @@ export type LeafGroupLeftPanelProps = {
   sortByClusters: boolean
   onSizeThresholdChange: (value: number) => void
   onSortByClustersChange: (enabled: boolean) => void
+  availableBotAlgorithms?: string[]
+  selectedBotAlgorithm?: string
+  onBotAlgorithmChange?: (algorithm: string) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
