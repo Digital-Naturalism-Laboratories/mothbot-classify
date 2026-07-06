@@ -312,6 +312,7 @@ export function hydratePackageEntities(params: {
       ...(latitude ? { latitude } : {}),
       ...(longitude ? { longitude } : {}),
       ...(botDetectionJsonName ? { botDetectionJsonName } : {}),
+      ...(botDetectionPath ? { originalBotDetectionPath: botDetectionPath } : {}),
     }
 
     const patchDetectionMetadata = detectionMetadataFromPatch({

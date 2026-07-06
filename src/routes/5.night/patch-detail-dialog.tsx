@@ -174,6 +174,11 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             <div>
               <span className='font-medium'>Patch:</span> {patch?.name ?? '—'}
             </div>
+            {patch?.originalBotDetectionPath ? (
+              <div className='break-all'>
+                <span className='font-medium'>Source data file:</span> {patch.originalBotDetectionPath}
+              </div>
+            ) : null}
             {(() => {
               const lat = patch?.latitude || botData?.latitude
               const lon = patch?.longitude || botData?.longitude
