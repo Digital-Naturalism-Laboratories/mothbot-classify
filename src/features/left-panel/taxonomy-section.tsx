@@ -70,7 +70,8 @@ export function TaxonomySection(props: TaxonomySectionProps) {
   const hasNodes = Array.isArray(nodes) && nodes.length > 0
   const hasErrors = bucket === 'user' && (errorsCount || 0) > 0
   const showAggregate = bucket === 'auto' && (alwaysShowAggregate || hasNodes)
-  if (!hasNodes && !hasErrors && !showAggregate) {
+  const showAlgorithms = bucket === 'auto' && Array.isArray(availableAlgorithms) && availableAlgorithms.length >= 1
+  if (!hasNodes && !hasErrors && !showAggregate && !showAlgorithms) {
     return (
       <div className={className}>
         <PanelHeading className='mb-6'>{title}</PanelHeading>
@@ -167,6 +168,10 @@ export function TaxonomySection(props: TaxonomySectionProps) {
             }}
           />
         ) : null}
+
+        {!hasNodes && !showAggregate && !hasErrors ? (
+          <p className='text-13 text-neutral-500'>{emptyText}</p>
+        ) : null}
       </div>
     </div>
   )
@@ -210,7 +215,7 @@ function SectionMoreMenu(props: {
   onAlgorithmChange?: (algorithm: string) => void
 }) {
   const { bucket, nodes, sortByClusters = false, onSortByClustersChange, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
-  const showAlgorithms = bucket === 'auto' && Array.isArray(availableAlgorithms) && availableAlgorithms.length > 1
+  const showAlgorithms = bucket === 'auto' && Array.isArray(availableAlgorithms) && availableAlgorithms.length >= 1
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -234,14 +239,23 @@ function SectionMoreMenu(props: {
         {showAlgorithms ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>ID algorithm</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={selectedAlgorithm ?? ''} onValueChange={(v) => onAlgorithmChange?.(v)}>
-              {availableAlgorithms!.map((alg) => (
-                <DropdownMenuRadioItem key={alg} value={alg}>
-                  {alg}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
+            {availableAlgorithms!.length === 1 ? (
+              <>
+                <DropdownMenuLabel>ID algorithm</DropdownMenuLabel>
+                <div className='px-8 py-4 text-12 text-neutral-500 select-none'>{availableAlgorithms![0]}</div>
+              </>
+            ) : (
+              <>
+                <DropdownMenuLabel>ID algorithm</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={selectedAlgorithm ?? ''} onValueChange={(v) => onAlgorithmChange?.(v)}>
+                  {availableAlgorithms!.map((alg) => (
+                    <DropdownMenuRadioItem key={alg} value={alg}>
+                      {alg}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </>
+            )}
           </>
         ) : null}
       </DropdownMenuContent>

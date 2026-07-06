@@ -84,7 +84,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
       </LayoutOptionsSection>
 
-      {hasMachineIdentification ? (
+      {(hasMachineIdentification || (availableBotAlgorithms && availableBotAlgorithms.length > 0)) ? (
         <TaxonomySection
           title='Machine identified'
           nodes={taxonomyAuto}

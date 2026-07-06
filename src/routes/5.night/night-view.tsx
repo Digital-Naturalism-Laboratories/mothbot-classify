@@ -64,25 +64,32 @@ export function NightView(props: { leafGroupId: string }) {
     const algSet = new Set<string>()
     for (const file of files) {
       for (const row of file.rows) {
-        if (row.classifier_type === 'bot' && row.classifier_id) algSet.add(row.classifier_id)
+        // Exclude detector model names (end in .pt) — they aren't species-ID algorithms
+        if (row.classifier_type === 'bot' && row.classifier_id && !row.classifier_id.endsWith('.pt')) algSet.add(row.classifier_id)
       }
     }
     return [...algSet].sort()
   }, [activePackage])
 
-  // When dataset changes, set default algorithm (the one with classified_at=1)
+  // When dataset changes, set default algorithm: prefer the row marked classified_at=1
+  // (AMI convention), otherwise fall back to the first valid bot classifier found
+  // (Mothbot data, which has only one algorithm and doesn't use the marker).
   useEffect(() => {
     const files = activePackage?.loaded?.classificationFiles
     if (!files) { setSelectedBotAlgorithm(undefined); return }
+    let fallback: string | undefined
     for (const file of files) {
       for (const row of file.rows) {
-        if (row.classifier_type === 'bot' && row.classified_at === 1 && row.classifier_id) {
-          setSelectedBotAlgorithm(row.classifier_id)
-          return
+        if (row.classifier_type === 'bot' && row.classifier_id && !row.classifier_id.endsWith('.pt')) {
+          if (row.classified_at === 1) {
+            setSelectedBotAlgorithm(row.classifier_id)
+            return
+          }
+          fallback ??= row.classifier_id
         }
       }
     }
-    setSelectedBotAlgorithm(undefined)
+    setSelectedBotAlgorithm(fallback)
   }, [activePackage])
   const routeContext = useMemo(
     () => ({
@@ -337,7 +344,7 @@ export function NightView(props: { leafGroupId: string }) {
         sortByClusters={sortByClusters}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
-        availableBotAlgorithms={availableBotAlgorithms.length > 1 ? availableBotAlgorithms : undefined}
+        availableBotAlgorithms={availableBotAlgorithms.length > 0 ? availableBotAlgorithms : undefined}
         selectedBotAlgorithm={selectedBotAlgorithm}
         onBotAlgorithmChange={onBotAlgorithmChange}
         selectedTaxon={selectedTaxon as any}

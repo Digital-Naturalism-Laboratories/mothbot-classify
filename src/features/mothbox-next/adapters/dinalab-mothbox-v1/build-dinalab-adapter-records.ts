@@ -2,7 +2,7 @@ import type { PatchRecord, PatchSourceRecord, ClassificationRecord } from '../..
 import { classificationFromBotShape, classificationFromIdentifiedShape } from '../../bot-shape-to-classification'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
 import { extractPatchFilename } from '../../patch-path'
-import { readLegacyDetectionShapes } from '../../legacy-detection-file'
+import { readLegacyDetectionShapes, type LegacyDetectionShape } from '../../legacy-detection-file'
 import type { DinalabAdapterIO, DinalabAdapterProgressCallback } from './adapter-io'
 import { imageMediaTypeFromPath } from './adapter-media-type'
 import { formatProgressFraction } from './adapter-progress'
@@ -104,6 +104,10 @@ export async function buildDinalabMothboxV1Records(params: {
 
     const shapes = readLegacyDetectionShapes(await io.source.readText(botRelativePath))
 
+    // Pre-scan: find the identifier_bot used across this file so shapes that
+    // are individually missing the field still get the correct classifier_id.
+    const fileIdentifierBot = findFileIdentifierBot(shapes)
+
     for (const shape of shapes) {
       const patchFileName = extractPatchFilename({ patchPath: String(shape.patch_path ?? '') })
       if (!patchFileName) continue
@@ -183,7 +187,8 @@ export async function buildDinalabMothboxV1Records(params: {
         ...(cropShapeType ? { crop_shape_type: cropShapeType } : {}),
       })
 
-      const classifierId = extractClassifierIdFromPatch(patchId)
+      const identifierBot = typeof shape.identifier_bot === 'string' ? shape.identifier_bot.trim() : ''
+      const classifierId = identifierBot || fileIdentifierBot || 'mothbot'
       botRows.push(
         classificationFromBotShape({
           shape,
@@ -320,10 +325,16 @@ function uniqueStrings(values: string[]) {
   return [...new Set(values.filter(Boolean))]
 }
 
-function extractClassifierIdFromPatch(patchId: string): string {
-  const basePatchId = patchId.split('@')[0] ?? patchId
-  const match = basePatchId.match(/_Mothbot_([^/]+)$/i) ?? basePatchId.match(/_([^_]+\.pt)$/i)
-  return match?.[1] ?? 'mothbot'
+// Finds the most common non-empty identifier_bot value across all shapes in a file.
+// Used as a fallback so shapes that individually lack the field still get the right classifier_id.
+function findFileIdentifierBot(shapes: LegacyDetectionShape[]): string | null {
+  const counts = new Map<string, number>()
+  for (const shape of shapes) {
+    const bot = typeof shape.identifier_bot === 'string' ? shape.identifier_bot.trim() : ''
+    if (bot) counts.set(bot, (counts.get(bot) ?? 0) + 1)
+  }
+  if (counts.size === 0) return null
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]![0]
 }
 
 function buildCameraDayIdFromParts(params: { deploymentId: string; nightDate: string }) {
