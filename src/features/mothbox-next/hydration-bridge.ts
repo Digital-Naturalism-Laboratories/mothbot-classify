@@ -299,7 +299,8 @@ export function hydratePackageEntities(params: {
     const latitude = typeof sourceMeta?.latitude === 'string' ? sourceMeta.latitude : null
     const longitude = typeof sourceMeta?.longitude === 'string' ? sourceMeta.longitude : null
 
-    const botDetectionPath = patchSourcesById[patch.patch_id]?.original_bot_detection_path
+    const patchSourceRecord = patchSourcesById[patch.patch_id]
+    const botDetectionPath = patchSourceRecord?.original_bot_detection_path ?? patchSourceRecord?.metadata_path
     const botDetectionJsonName = botDetectionPath ? botDetectionPath.replace(/\\/g, '/').split('/').pop() : undefined
 
     patchesOut[patch.patch_id] = {
