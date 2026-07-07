@@ -200,8 +200,15 @@ export function NightView(props: { leafGroupId: string }) {
   }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, routeContext, singleLeafDataset])
 
   const list = useMemo(() => {
-    return Object.values(patches).filter((patch) => activeNightIds.has(patch.leafGroupId))
-  }, [patches, activeNightIds])
+    const multiDetector = availableDetectorIds.length > 1
+    return Object.values(patches).filter((patch) => {
+      if (!activeNightIds.has(patch.leafGroupId)) return false
+      // When multiple detectors are loaded, only show patches for the active
+      // detector so the other detector's patches don't bleed through as Unassigned.
+      if (multiDetector && selectedDetectorId) return patch.detectorId === selectedDetectorId
+      return true
+    })
+  }, [patches, activeNightIds, availableDetectorIds, selectedDetectorId])
   const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'auto' }), [detections, activeNightIds])
   const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'user' }), [detections, activeNightIds])
   const totalDetections = useMemo(() => Object.values(detections ?? {}).filter((d) => activeNightIds.has(d.leafGroupId)).length, [detections, activeNightIds])
