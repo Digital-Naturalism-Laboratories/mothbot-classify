@@ -3,10 +3,7 @@ import type { DinalabAdapterIO } from './adapter-io'
 import type { BuiltDinalabAdapterRecords } from './build-dinalab-adapter-records'
 import type { PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-package-source-layout'
 import { PACKAGE_ARCHIVE_DIR } from '~/features/data-flow/1.ingest/reserved-paths'
-import {
-  hierarchyForDinalabWriter,
-  hierarchyForPatchImagesWriter,
-} from '~/features/mothbox-next/hierarchy-manifest'
+import { hierarchyForDinalabWriter } from '~/features/mothbox-next/hierarchy-manifest'
 import type { DatasetFolderKind } from '~/features/data-flow/1.ingest/classify-dataset-folder'
 
 export async function writeDinalabMothboxV1Package(params: {
@@ -101,10 +98,7 @@ export async function writeDinalabMothboxV1Package(params: {
     ],
   }
 
-  const hierarchy =
-    folderKind === 'patch-images-only'
-      ? hierarchyForPatchImagesWriter(manifestBase)
-      : hierarchyForDinalabWriter(manifestBase)
+  const hierarchy = hierarchyForDinalabWriter(manifestBase)
 
   const manifest = {
     ...manifestBase,

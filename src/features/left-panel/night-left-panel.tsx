@@ -33,6 +33,9 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     sortByClusters,
     onSizeThresholdChange,
     onSortByClustersChange,
+    availableDetectorIds,
+    selectedDetectorId,
+    onDetectorChange,
     availableBotAlgorithms,
     selectedBotAlgorithm,
     onBotAlgorithmChange,
@@ -53,6 +56,14 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   return (
     <Column className={cn('bg-sidebar pl-14 pr-16 py-20 pt-12', className)}>
       <NightSelectorSection />
+      {availableDetectorIds && availableDetectorIds.length > 1 ? (
+        <DetectorSelectorSection
+          detectorIds={availableDetectorIds}
+          selectedDetectorId={selectedDetectorId}
+          onDetectorChange={onDetectorChange}
+          className='mb-16'
+        />
+      ) : null}
       <WarningsBox warnings={warnings} className='mb-16' />
       <div className='mb-16'>
         <PanelHeading className='mb-6'>Summary</PanelHeading>
@@ -155,6 +166,39 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
         </Button> */}
       </div>
     </Column>
+  )
+}
+
+type DetectorSelectorSectionProps = {
+  detectorIds: string[]
+  selectedDetectorId?: string
+  onDetectorChange?: (id: string) => void
+  className?: string
+}
+
+function DetectorSelectorSection(props: DetectorSelectorSectionProps) {
+  const { detectorIds, selectedDetectorId, onDetectorChange, className } = props
+  return (
+    <div className={cn('mb-16', className)}>
+      <PanelHeading className='mb-6'>Detection run</PanelHeading>
+      <div className='space-y-2'>
+        {detectorIds.map((id) => (
+          <label key={id} className='flex items-center gap-8 cursor-pointer text-13 select-none'>
+            <input
+              type='radio'
+              name='detector-version'
+              value={id}
+              checked={selectedDetectorId === id}
+              onChange={() => onDetectorChange?.(id)}
+              className='accent-blue-600 cursor-pointer'
+            />
+            <span className={cn('flex-1 truncate', selectedDetectorId === id ? 'text-ink-primary font-medium' : 'text-ink-secondary')}>
+              {id}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
   )
 }
 

@@ -25,6 +25,9 @@ export type LeafGroupLeftPanelProps = {
   sortByClusters: boolean
   onSizeThresholdChange: (value: number) => void
   onSortByClustersChange: (enabled: boolean) => void
+  availableDetectorIds?: string[]
+  selectedDetectorId?: string
+  onDetectorChange?: (detectorId: string) => void
   availableBotAlgorithms?: string[]
   selectedBotAlgorithm?: string
   onBotAlgorithmChange?: (algorithm: string) => void

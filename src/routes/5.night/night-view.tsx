@@ -48,6 +48,8 @@ export function NightView(props: { leafGroupId: string }) {
   const [sizeThreshold, setSizeThreshold] = useState(0)
   const [sortByClusters, setSortByClusters] = useState(false)
   const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
+  const [selectedDetectorId, setSelectedDetectorId] = useState<string | undefined>(undefined)
+  const allDetectionsRef = useRef<Record<string, DetectionEntity>>({})
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
   const hasAppliedDefaultFallbackRef = useRef(false)
@@ -90,6 +92,28 @@ export function NightView(props: { leafGroupId: string }) {
       }
     }
     setSelectedBotAlgorithm(fallback)
+  }, [activePackage])
+
+  // Detector versions — derived from unique detectorId values across all loaded patches.
+  const availableDetectorIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const patch of Object.values(patches)) {
+      if (patch.detectorId) ids.add(patch.detectorId)
+    }
+    return [...ids].sort()
+  }, [activePackage, patches])
+
+  // When the package loads, snapshot all detections so detector switching can
+  // restore them without a full reload. Also set the default detector (prefer
+  // bot runs over human).
+  useEffect(() => {
+    allDetectionsRef.current = { ...(detectionsStore.get() || {}) }
+    if (availableDetectorIds.length > 1) {
+      const defaultDetector = availableDetectorIds.find((id) => id !== 'HumanDetection') ?? availableDetectorIds[0]
+      setSelectedDetectorId(defaultDetector)
+    } else {
+      setSelectedDetectorId(availableDetectorIds[0])
+    }
   }, [activePackage])
   const routeContext = useMemo(
     () => ({
@@ -298,6 +322,17 @@ export function NightView(props: { leafGroupId: string }) {
     rebuildLeafGroupSummariesFromDetections(updatedDetections)
   }
 
+  function onDetectorChange(detectorId: string) {
+    const allDetections = allDetectionsRef.current
+    const currentPatches = Object.values(patchesStore.get())
+    const detectorPatchIds = new Set(currentPatches.filter((p) => p.detectorId === detectorId).map((p) => p.id))
+    const filtered = Object.fromEntries(Object.entries(allDetections).filter(([id]) => detectorPatchIds.has(id)))
+    detectionsStore.set(filtered)
+    rebuildLeafGroupSummariesFromDetections(filtered)
+    setSelectedDetectorId(detectorId)
+    setSelectedBotAlgorithm(undefined)
+  }
+
   async function onResetToAuto() {
     if (selectedDetectionIds.length === 0) return
 
@@ -344,6 +379,9 @@ export function NightView(props: { leafGroupId: string }) {
         sortByClusters={sortByClusters}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
+        availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
+        selectedDetectorId={selectedDetectorId}
+        onDetectorChange={onDetectorChange}
         availableBotAlgorithms={availableBotAlgorithms.length > 0 ? availableBotAlgorithms : undefined}
         selectedBotAlgorithm={selectedBotAlgorithm}
         onBotAlgorithmChange={onBotAlgorithmChange}

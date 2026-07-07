@@ -41,4 +41,5 @@ export type DetectionEntity = {
   pixelMassPixels?: number
   pixelMassMm2?: number | null
   pixelMassTimestamp?: string
+  detectorId?: string
 }

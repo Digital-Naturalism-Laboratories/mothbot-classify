@@ -12,6 +12,7 @@ export type PatchEntity = {
   longitude?: string | null
   botDetectionJsonName?: string
   originalBotDetectionPath?: string
+  detectorId?: string
 }
 
 export const patchesStore = atom<Record<string, PatchEntity>>({})

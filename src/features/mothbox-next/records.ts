@@ -11,6 +11,7 @@ export type PatchRecord = {
   camera_day_id?: string
   cluster_id?: number
   clustered_at?: string
+  detector_id?: string
 }
 
 export type PatchSourceRecord = {

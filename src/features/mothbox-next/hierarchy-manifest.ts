@@ -107,6 +107,3 @@ export function hierarchyForDinalabWriter(manifest: MothboxNextDatasetManifest):
   return defaultDinalabHierarchy(manifest)
 }
 
-export function hierarchyForPatchImagesWriter(manifest: MothboxNextDatasetManifest): HierarchyDef {
-  return defaultPatchImagesOnlyHierarchy(manifest)
-}

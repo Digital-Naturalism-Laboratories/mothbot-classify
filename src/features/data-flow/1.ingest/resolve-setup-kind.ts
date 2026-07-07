@@ -3,10 +3,6 @@ import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
 export type DatasetSetupKind = Exclude<DatasetFolderKind, 'package' | 'skip'>
 
-export function isPatchImagesOnlyKind(kind: DatasetSetupKind) {
-  return kind === 'patch-images-only'
-}
-
 export async function resolveDatasetSetupKind(params: {
   directory: FileSystemDirectoryHandleLike
   folderName: string

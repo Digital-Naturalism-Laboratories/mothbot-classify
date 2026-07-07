@@ -3,7 +3,6 @@ import { findRelativeFilesUnderDirectory } from './fs-find-files'
 import { normalizeIngestRelativePath, PACKAGE_ARCHIVE_DIR } from './reserved-paths'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
-const DATE_SUFFIX_RE = /\d{4}-\d{2}-\d{2}$/
 
 export const RESERVED_DATASETS_CHILD_NAMES = new Set(['species', '_processed'])
 
@@ -14,7 +13,6 @@ export type DatasetFolderKind =
   | 'mothbox-processed'
   | 'mothbox-processed-sibling'
   | 'ami'
-  | 'patch-images-only'
   | 'skip'
 
 export function isPatchImageFileName(fileName: string) {
@@ -62,11 +60,7 @@ export async function classifyDatasetFolder(params: {
   if (processedBotPaths.length > 0) return 'mothbox-processed'
 
   if (!botPaths.length && processedMirrorHandle) {
-    // Can't scan inside date-named subdirectories: Chrome pre-fetches all
-    // FileSystemFileHandle objects for entries() and crashes on large flat dirs.
-    // Presence of any date-named subdir in the mirror is a reliable signal that
-    // the Legacy Converter moved patches/JSONs there — classify as sibling.
-    if (await directoryHasDateSubdirectory(processedMirrorHandle)) return 'mothbox-processed-sibling'
+    if (await directoryHasSubdirectory(processedMirrorHandle)) return 'mothbox-processed-sibling'
   }
 
   const imagePaths = await findRelativeFilesUnderDirectory(directory, (name) => isPatchImageFileName(name))
@@ -76,7 +70,6 @@ export async function classifyDatasetFolder(params: {
   }
 
   if (!botPaths.length) {
-    if (imagePaths.length > 0) return 'patch-images-only'
     return 'skip'
   }
 
@@ -105,18 +98,15 @@ export function isAmiCropImagePath(relativePath: string) {
   return parts.includes('_processed') || parts.includes('_crops_')
 }
 
-async function directoryHasDateSubdirectory(
-  dir: FileSystemDirectoryHandleLike,
-  remainingDepth = 3,
-): Promise<boolean> {
-  if (remainingDepth <= 0) return false
+// Returns true if `dir` contains any subdirectory — used to confirm that a
+// sibling `_processed/{name}` folder is a real processed mirror. Any subdir
+// signals structured Mothbot output. We avoid recursing to prevent Chrome
+// crashes on large flat directories that contain many patch image files.
+async function directoryHasSubdirectory(dir: FileSystemDirectoryHandleLike): Promise<boolean> {
   const d = dir as { entries?: () => AsyncIterable<[string, { kind?: string }]> }
   if (!d.entries) return false
-  for await (const [name, handle] of d.entries()) {
-    if ((handle as { kind?: string })?.kind !== 'directory') continue
-    if (DATE_SUFFIX_RE.test(name)) return true
-    // Safe to recurse into non-date-named dirs (few entries, no large image dirs)
-    if (await directoryHasDateSubdirectory(handle as FileSystemDirectoryHandleLike, remainingDepth - 1)) return true
+  for await (const [, handle] of d.entries()) {
+    if ((handle as { kind?: string })?.kind === 'directory') return true
   }
   return false
 }

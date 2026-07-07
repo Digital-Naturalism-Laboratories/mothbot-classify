@@ -1,10 +1,6 @@
 import { findRelativeFilesUnderDirectory } from './fs-find-files'
-import { isPatchImageFileName, type DatasetFolderKind } from './classify-dataset-folder'
-import {
-  listImagePathsUnderDirectory,
-  resolveLegacyContentRootHandleFromPaths,
-  resolveLegacyWrapperDirNameFromRelativePaths,
-} from './legacy-wrapper-paths'
+import type { DatasetFolderKind } from './classify-dataset-folder'
+import { resolveLegacyWrapperDirNameFromRelativePaths } from './legacy-wrapper-paths'
 import { resolveLegacyContentRootHandle } from './resolve-legacy-content-root'
 import { getPackageSourceDirectoryHandle } from './move-legacy-into-package-source'
 import { PACKAGE_ARCHIVE_DIR } from './reserved-paths'
@@ -61,18 +57,8 @@ export async function resolvePackageSourceLayout(params: {
     }
   }
 
-  const legacyRoot =
-    kind === 'patch-images-only'
-      ? await resolveLegacyContentRootHandleFromPaths({
-          packageHandle,
-          listRelativePaths: listImagePathsUnderDirectory,
-        })
-      : await resolveLegacyContentRootHandle(packageHandle)
-
-  const assetPaths =
-    kind === 'patch-images-only'
-      ? await findRelativeFilesUnderDirectory(legacyRoot, (name) => isPatchImageFileName(name))
-      : await findRelativeFilesUnderDirectory(legacyRoot, (name) => name.endsWith('_botdetection.json'))
+  const legacyRoot = await resolveLegacyContentRootHandle(packageHandle)
+  const assetPaths = await findRelativeFilesUnderDirectory(legacyRoot, (name) => name.endsWith('_botdetection.json'))
 
   const wrapperName = resolveLegacyWrapperDirNameFromRelativePaths(assetPaths)
   const legacyRootName = (legacyRoot as { name?: string }).name?.trim()

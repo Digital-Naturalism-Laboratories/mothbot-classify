@@ -81,28 +81,38 @@ export async function buildDinalabMothboxV1Records(params: {
   })
 
   const botJsonPaths = await io.source.findFiles((name) => name.endsWith('_botdetection.json'))
+  const humanJsonPaths = await io.source.findFiles((name) => name.endsWith('_humandetection.json'))
+  const allDetectionPaths = [...botJsonPaths, ...humanJsonPaths]
 
   onProgress?.({
     phase: 'scan',
     message: progressMessage,
-    description: `Found ${botJsonPaths.length.toLocaleString()} bot detection file${botJsonPaths.length === 1 ? '' : 's'}`,
+    description: `Found ${botJsonPaths.length.toLocaleString()} bot + ${humanJsonPaths.length.toLocaleString()} human detection file${allDetectionPaths.length === 1 ? '' : 's'}`,
   })
 
-  for (let botFileIndex = 0; botFileIndex < botJsonPaths.length; botFileIndex++) {
-    const botRelativePath = botJsonPaths[botFileIndex]
+  for (let botFileIndex = 0; botFileIndex < allDetectionPaths.length; botFileIndex++) {
+    const botRelativePath = allDetectionPaths[botFileIndex]
     const patchIdByPatchFileName = new Map<string, string>()
     const shouldReportPatchProgress =
-      botJsonPaths.length <= 20 || botFileIndex === 0 || botFileIndex === botJsonPaths.length - 1 || botFileIndex % 5 === 0
+      allDetectionPaths.length <= 20 || botFileIndex === 0 || botFileIndex === allDetectionPaths.length - 1 || botFileIndex % 5 === 0
 
     if (shouldReportPatchProgress) {
       onProgress?.({
         phase: 'patches',
         message: progressMessage,
-        description: `Processing bot detections ${formatProgressFraction({ current: botFileIndex + 1, total: botJsonPaths.length })} · ${patches.length.toLocaleString()} patches`,
+        description: `Processing detections ${formatProgressFraction({ current: botFileIndex + 1, total: allDetectionPaths.length })} · ${patches.length.toLocaleString()} patches`,
       })
     }
 
-    const shapes = readLegacyDetectionShapes(await io.source.readText(botRelativePath))
+    const jsonText = await io.source.readText(botRelativePath)
+    // Read the top-level `version` field as the detector identity (e.g. "Mothbot_yolo11m_..." or "HumanDetection")
+    let detectorId: string | undefined
+    try {
+      const parsed = JSON.parse(jsonText) as { version?: unknown }
+      detectorId = typeof parsed.version === 'string' && parsed.version.trim() ? parsed.version.trim() : undefined
+    } catch { /* readLegacyDetectionShapes will surface the error */ }
+
+    const shapes = readLegacyDetectionShapes(jsonText)
 
     // Pre-scan: find the identifier_bot used across this file so shapes that
     // are individually missing the field still get the correct classifier_id.
@@ -156,6 +166,7 @@ export async function buildDinalabMothboxV1Records(params: {
         camera_day_id: cameraDayId,
         ...(clusterId !== undefined ? { cluster_id: clusterId } : {}),
         ...(clusteredAt ? { clustered_at: clusteredAt } : {}),
+        ...(detectorId ? { detector_id: detectorId } : {}),
       })
 
       const botAssetPath = toPackageRelativeAssetPath({
@@ -198,8 +209,11 @@ export async function buildDinalabMothboxV1Records(params: {
       )
     }
 
-    const identifiedRelative = botRelativePath.replace('_botdetection.json', '_identified.json')
-    if (await io.source.exists(identifiedRelative)) {
+    // Only bot detection files have a paired _identified.json (human identifications)
+    const identifiedRelative = botRelativePath.endsWith('_botdetection.json')
+      ? botRelativePath.replace('_botdetection.json', '_identified.json')
+      : null
+    if (identifiedRelative && await io.source.exists(identifiedRelative)) {
       const identifiedShapes = readLegacyDetectionShapes(await io.source.readText(identifiedRelative))
       for (const shape of identifiedShapes) {
         const patchFileName = extractPatchFilename({ patchPath: String(shape.patch_path ?? '') })

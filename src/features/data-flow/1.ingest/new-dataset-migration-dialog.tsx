@@ -4,7 +4,6 @@ import { Button } from '~/components/ui/button'
 import { Loader } from '~/components/atomic/Loader'
 import { closeGlobalDialog, openGlobalDialog } from '~/components/dialogs/global-dialog'
 import type { PendingDatasetMigration } from './pending-dataset-migration-types'
-import { isPatchImagesOnlyKind } from './resolve-setup-kind'
 import { dismissPendingMigrationFolders } from '~/stores/pending-dataset-migration'
 import { buildPendingDatasetSetupCopy } from './pending-dataset-setup-copy'
 import {
@@ -38,13 +37,9 @@ export function NewDatasetMigrationDialogContent(props: NewDatasetMigrationDialo
   const count = pending.length
   const selectedCount = selected.size
   const selectedItems = useMemo(() => pending.filter((item) => selected.has(item.folderName)), [pending, selected])
-  const imageOnlyCount = selectedItems.filter((item) => isPatchImagesOnlyKind(item.kind)).length
-  const legacyCount = selectedItems.length - imageOnlyCount
   const copy = buildPendingDatasetSetupCopy({
     count: selectedCount,
     folderNames: selectedItems.map((item) => item.folderName),
-    imageOnlyCount,
-    legacyCount,
   })
 
   function toggleFolder(folderName: string) {
@@ -207,8 +202,6 @@ function FolderRow(props: { item: PendingDatasetMigration; isSelected: boolean; 
 
 function describeSetupKind(kind: PendingDatasetMigration['kind']): string {
   switch (kind) {
-    case 'patch-images-only':
-      return 'Patch images only, no detection data'
     case 'mothbox-processed':
     case 'mothbox-processed-sibling':
       return 'Mothbox processed detections'

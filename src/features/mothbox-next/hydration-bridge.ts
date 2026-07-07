@@ -314,6 +314,7 @@ export function hydratePackageEntities(params: {
       ...(longitude ? { longitude } : {}),
       ...(botDetectionJsonName ? { botDetectionJsonName } : {}),
       ...(botDetectionPath ? { originalBotDetectionPath: botDetectionPath } : {}),
+      ...(patch.detector_id ? { detectorId: patch.detector_id } : {}),
     }
 
     const patchDetectionMetadata = detectionMetadataFromPatch({
@@ -330,6 +331,7 @@ export function hydratePackageEntities(params: {
           photoId,
         }),
         ...patchDetectionMetadata,
+        ...(patch.detector_id ? { detectorId: patch.detector_id } : {}),
       }
     } else {
       detections[patch.patch_id] = {
@@ -339,6 +341,7 @@ export function hydratePackageEntities(params: {
         leafGroupId,
         detectedBy: 'auto',
         ...patchDetectionMetadata,
+        ...(patch.detector_id ? { detectorId: patch.detector_id } : {}),
       }
     }
   }

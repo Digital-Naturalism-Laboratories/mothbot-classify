@@ -101,7 +101,14 @@ export function inferNightDateFromBotJsonPath(botRelativePath: string): string |
   const folderDate = nightFolder.match(/(\d{4}-\d{2}-\d{2})$/)?.[1]
   if (folderDate) return folderDate
 
-  return inferNightDateFromPatchId(nightFolder)
+  const fromFolder = inferNightDateFromPatchId(nightFolder)
+  if (fromFolder) return fromFolder
+
+  // No date in parent folder — extract date from the filename itself.
+  // Handles layouts where images land directly in a location folder
+  // (e.g. CIID_FenceYard/bowedBarbo_2026-07-06T22-03-07+02-00_botdetection.json).
+  const fileName = segments[segments.length - 1] ?? ''
+  return fileName.match(/(\d{4}-\d{2}-\d{2})/)?.[1]
 }
 
 export function resolveDeploymentContextFromPatchPath(params: {
