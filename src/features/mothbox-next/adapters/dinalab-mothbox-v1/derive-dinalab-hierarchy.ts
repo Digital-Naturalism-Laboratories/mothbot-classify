@@ -93,6 +93,12 @@ export function inferNightDateFromPatchId(patchId: string): string | undefined {
   return `${match[1]}-${match[2]}-${match[3]}`
 }
 
+function subtractOneDay(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  const d = new Date(Date.UTC(year, month - 1, day - 1))
+  return d.toISOString().slice(0, 10)
+}
+
 export function inferNightDateFromBotJsonPath(botRelativePath: string): string | undefined {
   const segments = botRelativePath.replaceAll('\\', '/').split('/').filter(Boolean)
   const nightFolder = segments.length >= 2 ? segments[segments.length - 2] : undefined
@@ -107,7 +113,16 @@ export function inferNightDateFromBotJsonPath(botRelativePath: string): string |
   // No date in parent folder — extract date from the filename itself.
   // Handles layouts where images land directly in a location folder
   // (e.g. CIID_FenceYard/bowedBarbo_2026-07-06T22-03-07+02-00_botdetection.json).
+  // Apply the noon boundary: hour < 12 means the image belongs to the previous
+  // calendar night (recording sessions run noon-to-noon, not midnight-to-midnight).
   const fileName = segments[segments.length - 1] ?? ''
+  const tsMatch = fileName.match(/(\d{4}-\d{2}-\d{2})T(\d{2})/i)
+  if (tsMatch) {
+    const [, date, hourStr] = tsMatch
+    if (parseInt(hourStr, 10) < 12) return subtractOneDay(date)
+    return date
+  }
+  // Filename has a date but no time — use calendar date as-is.
   return fileName.match(/(\d{4}-\d{2}-\d{2})/)?.[1]
 }
 
