@@ -12,11 +12,13 @@ export type SelectionBarProps = {
   onUnselect: () => void
   onSelectAll: () => void
   onResetToAuto?: () => void
+  onUncluster?: () => void
+  onSplitCluster?: () => void
   className?: string
 }
 
 export function SelectionBar(props: SelectionBarProps) {
-  const { selectedCount, onIdentify, onAccept, onUnselect, onSelectAll, onResetToAuto, className } = props
+  const { selectedCount, onIdentify, onAccept, onUnselect, onSelectAll, onResetToAuto, onUncluster, onSplitCluster, className } = props
 
   const hasSelection = selectedCount > 0
   const label = useMemo(() => `${selectedCount} selected`, [selectedCount])
@@ -44,6 +46,8 @@ export function SelectionBar(props: SelectionBarProps) {
         <ActionButton label='Unselect' keys={['U']} onClick={onUnselect} />
         <ActionButton label='Select All' keys={['⇧', 'A']} onClick={onSelectAll} />
         {onResetToAuto ? <ActionButton label='Reset' onClick={onResetToAuto} /> : null}
+        {onUncluster ? <ActionButton label='Uncluster' onClick={onUncluster} tooltip='Remove selected from their clusters' /> : null}
+        {onSplitCluster ? <ActionButton label='Split cluster' onClick={onSplitCluster} tooltip='Move selected into a new cluster' /> : null}
       </div>
     </div>
   )

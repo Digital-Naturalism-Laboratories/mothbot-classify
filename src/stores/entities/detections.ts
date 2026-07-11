@@ -500,3 +500,56 @@ function getSpeciesListContextForDetection(params: { detection: DetectionEntity 
 
   return { speciesListId, speciesListDOI }
 }
+
+/**
+ * Assigns detections to a cluster by top-level cluster ID.
+ * In-memory only — cluster assignments are not persisted via classification files.
+ */
+export function assignDetectionsToCluster(params: { detectionIds: string[]; clusterId: number }) {
+  const { detectionIds, clusterId } = params
+  if (!detectionIds.length) return
+  const current = detectionsStore.get() || {}
+  const updated: Record<string, DetectionEntity> = { ...current }
+  for (const id of detectionIds) {
+    if (updated[id]) updated[id] = { ...updated[id], clusterId }
+  }
+  detectionsStore.set(updated)
+}
+
+/**
+ * Removes detections from their cluster by setting clusterId to -1 (unclustered/noise).
+ * In-memory only — cluster assignments are not persisted via classification files.
+ */
+export function removeDetectionsFromCluster(params: { detectionIds: string[] }) {
+  const { detectionIds } = params
+  if (!detectionIds.length) return
+  const current = detectionsStore.get() || {}
+  const updated: Record<string, DetectionEntity> = { ...current }
+  for (const id of detectionIds) {
+    if (updated[id]) updated[id] = { ...updated[id], clusterId: -1 }
+  }
+  detectionsStore.set(updated)
+}
+
+/**
+ * Moves detections into a brand-new cluster (max existing top-level ID + 1 within the leaf group).
+ * In-memory only — cluster assignments are not persisted via classification files.
+ */
+export function splitDetectionsToNewCluster(params: { detectionIds: string[]; leafGroupId: string }) {
+  const { detectionIds, leafGroupId } = params
+  if (!detectionIds.length) return
+  const current = detectionsStore.get() || {}
+  let maxTopId = -1
+  for (const det of Object.values(current)) {
+    if ((det as any)?.leafGroupId === leafGroupId && typeof det?.clusterId === 'number' && det.clusterId >= 0) {
+      const topId = Math.trunc(det.clusterId)
+      if (topId > maxTopId) maxTopId = topId
+    }
+  }
+  const newClusterId = maxTopId + 1
+  const updated: Record<string, DetectionEntity> = { ...current }
+  for (const id of detectionIds) {
+    if (updated[id]) updated[id] = { ...updated[id], clusterId: newClusterId }
+  }
+  detectionsStore.set(updated)
+}

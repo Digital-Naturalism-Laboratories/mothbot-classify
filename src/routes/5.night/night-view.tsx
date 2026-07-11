@@ -11,7 +11,7 @@ import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import type { PatchEntity } from '~/stores/entities/5.patches'
 import { patchesStore } from '~/stores/entities/5.patches'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import { acceptDetections, detectionsStore, labelDetections, resetDetections } from '~/stores/entities/detections'
+import { acceptDetections, detectionsStore, labelDetections, resetDetections, removeDetectionsFromCluster, splitDetectionsToNewCluster } from '~/stores/entities/detections'
 import { photosStore } from '~/stores/entities/photos'
 import { clearPatchSelection, selectedPatchIdsStore, setSelection, markLeafGroupAsActive, getActiveLeafGroupIds, activeNightIdsStore, setActiveNightIds } from '~/stores/ui'
 import { clearFileObjectsForInactiveLeafGroups } from '~/stores/entities'
@@ -257,6 +257,31 @@ export function NightView(props: { leafGroupId: string }) {
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
   const selectedDetectionIds = useMemo(() => Array.from(selected ?? []), [selected])
 
+  const hasSelectedInCluster = useMemo(() => {
+    if (!selected?.size) return false
+    for (const id of Array.from(selected)) {
+      const det = detections?.[id]
+      if (typeof det?.clusterId === 'number' && det.clusterId >= 0) return true
+    }
+    return false
+  }, [selected, detections])
+
+  const hasMultipleSelectedInSameCluster = useMemo(() => {
+    if ((selected?.size ?? 0) < 2) return false
+    const clusterCounts = new Map<number, number>()
+    for (const id of Array.from(selected!)) {
+      const det = detections?.[id]
+      if (typeof det?.clusterId === 'number' && det.clusterId >= 0) {
+        const topId = Math.trunc(det.clusterId)
+        clusterCounts.set(topId, (clusterCounts.get(topId) ?? 0) + 1)
+      }
+    }
+    for (const count of clusterCounts.values()) {
+      if (count >= 2) return true
+    }
+    return false
+  }, [selected, detections])
+
   const leafGroupWarnings = useMemo(
     () => computeLeafGroupWarnings({ photos, detections, patches, leafGroupId }),
     [photos, detections, patches, leafGroupId],
@@ -389,6 +414,16 @@ export function NightView(props: { leafGroupId: string }) {
     })
   }
 
+  function onRemoveSelectedFromCluster() {
+    if (!selectedDetectionIds.length) return
+    removeDetectionsFromCluster({ detectionIds: selectedDetectionIds })
+  }
+
+  function onSplitSelectedCluster() {
+    if (!selectedDetectionIds.length || !leafGroupId) return
+    splitDetectionsToNewCluster({ detectionIds: selectedDetectionIds, leafGroupId })
+  }
+
   function onOpenPatchDetail(id: string) {
     if (!id) return
     setDetailPatchId(id)
@@ -456,6 +491,8 @@ export function NightView(props: { leafGroupId: string }) {
           onUnselect={onUnselect}
           onSelectAll={onSelectAll}
           onResetToAuto={onResetToAuto}
+          onUncluster={hasSelectedInCluster ? onRemoveSelectedFromCluster : undefined}
+          onSplitCluster={hasMultipleSelectedInSameCluster ? onSplitSelectedCluster : undefined}
         />
       </div>
       <IdentifyDialog

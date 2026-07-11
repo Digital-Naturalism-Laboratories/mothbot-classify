@@ -2,7 +2,7 @@ import { memo, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { PatchDownloadContextMenu } from '~/components/atomic/patch-download-context-menu'
 import { ContextMenuSeparator, ContextMenuItem } from '~/components/ui/context-menu'
-import { detectionStoreById, detectionsStore } from '~/stores/entities/detections'
+import { detectionStoreById, detectionsStore, assignDetectionsToCluster, removeDetectionsFromCluster, splitDetectionsToNewCluster } from '~/stores/entities/detections'
 import { patchStoreById } from '~/stores/entities/patch-selectors'
 import { Badge } from '~/components/ui/badge'
 import { TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
@@ -99,6 +99,43 @@ function PatchItemImpl(props: PatchItemProps) {
 
   const clusterVariant: BadgeVariants['variant'] | undefined =
     props?.clusterVariant ?? (typeof clusterId === 'number' ? getClusterVariant(clusterId) : undefined)
+
+  // Cluster operation targets:
+  // "remove/split" uses the selection if this patch is in it (same leaf group), else just this patch.
+  // "add to cluster" uses the selection from the same leaf group regardless of whether this patch is selected.
+  const hasActiveSelection = (selected?.size ?? 0) > 0 && selectionLeafGroupIdStore.get() === patch?.leafGroupId
+  const clusterTargetIds =
+    selected?.has(id) && hasActiveSelection ? Array.from(selected) : [id]
+  const clusterTargetCount = clusterTargetIds.length
+
+  const addToClusterTargetIds = hasActiveSelection ? Array.from(selected!) : [id]
+  const addToClusterCount = addToClusterTargetIds.length
+  // Non-trivial when there are multiple items OR the single selected item differs from the right-clicked patch
+  const canAddToCluster = addToClusterCount > 1 || (hasActiveSelection && !selected?.has(id))
+
+  const topClusterIdOfPatch = typeof clusterId === 'number' && clusterId >= 0 ? Math.trunc(clusterId) : undefined
+  // Items among clusterTargetIds that share the same top-level cluster as the right-clicked patch
+  const sameClusterTargetIds = topClusterIdOfPatch !== undefined
+    ? clusterTargetIds.filter((tid) => {
+        const det = detections?.[tid]
+        return typeof det?.clusterId === 'number' && det.clusterId >= 0 && Math.trunc(det.clusterId) === topClusterIdOfPatch
+      })
+    : []
+  const canSplit = sameClusterTargetIds.length > 1
+
+  function onAssignToCluster(topClusterId: number) {
+    assignDetectionsToCluster({ detectionIds: addToClusterTargetIds, clusterId: topClusterId })
+  }
+
+  function onRemoveFromCluster() {
+    removeDetectionsFromCluster({ detectionIds: clusterTargetIds })
+  }
+
+  function onSplitToNewCluster() {
+    const leafGroupId = patch?.leafGroupId
+    if (!leafGroupId) return
+    splitDetectionsToNewCluster({ detectionIds: sameClusterTargetIds, leafGroupId })
+  }
 
   function onSelectCluster(e?: React.MouseEvent | React.KeyboardEvent) {
     const leafGroupId = patch?.leafGroupId
@@ -231,11 +268,28 @@ function PatchItemImpl(props: PatchItemProps) {
         originalUrl={url}
         originalDownloadName={patch?.name ?? 'patch.jpg'}
         extraItems={
-          typeof clusterId === 'number' && clusterId >= 0 && onToggleClusterCollapse ? (
+          typeof clusterId === 'number' && clusterId >= 0 ? (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => onToggleClusterCollapse(Math.trunc(clusterId))}>
-                {isClusterCollapsed ? `Expand cluster C${Math.trunc(clusterId)}` : `Collapse cluster C${Math.trunc(clusterId)}`}
+              {onToggleClusterCollapse ? (
+                <ContextMenuItem onSelect={() => onToggleClusterCollapse(Math.trunc(clusterId))}>
+                  {isClusterCollapsed ? `Expand cluster C${Math.trunc(clusterId)}` : `Collapse cluster C${Math.trunc(clusterId)}`}
+                </ContextMenuItem>
+              ) : null}
+              {canAddToCluster ? (
+                <ContextMenuItem onSelect={() => onAssignToCluster(Math.trunc(clusterId))}>
+                  {addToClusterCount > 1
+                    ? `Add ${addToClusterCount} selected to C${Math.trunc(clusterId)}`
+                    : `Add selected to C${Math.trunc(clusterId)}`}
+                </ContextMenuItem>
+              ) : null}
+              {canSplit ? (
+                <ContextMenuItem onSelect={() => onSplitToNewCluster()}>
+                  {`Split ${sameClusterTargetIds.length} into new cluster`}
+                </ContextMenuItem>
+              ) : null}
+              <ContextMenuItem onSelect={() => onRemoveFromCluster()}>
+                {clusterTargetCount > 1 ? `Uncluster ${clusterTargetCount} selected` : 'Remove from cluster'}
               </ContextMenuItem>
             </>
           ) : null
