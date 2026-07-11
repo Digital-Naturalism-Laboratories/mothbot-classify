@@ -63,6 +63,8 @@ export type PatchGridProps = {
   selectedBucket?: 'auto' | 'user'
   sortByClusters?: boolean
   hasMachineIdentification?: boolean
+  collapsedClusterSet?: Set<number>
+  onClusterCollapseToggle?: (topClusterId: number) => void
 }
 
 export function PatchGrid(props: PatchGridProps) {
@@ -77,6 +79,8 @@ export function PatchGrid(props: PatchGridProps) {
     selectedBucket,
     sortByClusters = false,
     hasMachineIdentification = true,
+    collapsedClusterSet,
+    onClusterCollapseToggle,
   } = props
 
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -92,6 +96,11 @@ export function PatchGrid(props: PatchGridProps) {
 
   const detections = useStore(detectionsStore)
   const orderedIds = useMemo(() => orderPatchIds({ patches, detections }), [patches, detections])
+
+  const { displayIds, patchClusterMeta } = useMemo(
+    () => computeDisplayIds({ orderedIds, detections, collapsedClusterSet, hasToggle: !!onClusterCollapseToggle }),
+    [orderedIds, detections, collapsedClusterSet, onClusterCollapseToggle],
+  )
 
   const containerWidth = useContainerWidth(containerRef)
 
@@ -121,8 +130,8 @@ export function PatchGrid(props: PatchGridProps) {
   }, [itemWidth, gapPx])
 
   const blocks = useMemo(() => {
-    return buildGridBlocks({ orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification })
-  }, [orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification])
+    return buildGridBlocks({ orderedIds: displayIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification })
+  }, [displayIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification])
 
   const visualOrderIds = useMemo(() => {
     return flattenBlocksToVisualOrder({ blocks })
@@ -190,7 +199,7 @@ export function PatchGrid(props: PatchGridProps) {
     setScrollTop(0)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [orderedIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
+  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
 
   useEffect(() => {
     const el = containerRef.current
@@ -205,7 +214,7 @@ export function PatchGrid(props: PatchGridProps) {
       rowVirtualizer.measure()
     })
     return () => cancelAnimationFrame(id)
-  }, [rowHeight, columns, containerWidth, orderedIds.length, blocks.length, rowVirtualizer])
+  }, [rowHeight, columns, containerWidth, displayIds.length, blocks.length, rowVirtualizer])
 
   const [loadedCount, setLoadedCount] = useState<number>(0)
   const totalCount = patches?.length || 0
@@ -366,6 +375,8 @@ export function PatchGrid(props: PatchGridProps) {
                   onOpenPatchDetail={onOpenPatchDetail}
                   onImageLoad={() => setLoadedCount((c) => c + 1)}
                   onImageError={() => setLoadedCount((c) => c + 1)}
+                  patchClusterMeta={patchClusterMeta}
+                  onClusterCollapseToggle={onClusterCollapseToggle}
                 />
               ) : null}
             </div>
@@ -777,6 +788,8 @@ function GroupHeader(props: {
   )
 }
 
+type PatchClusterMeta = { size: number; isCollapsed: boolean }
+
 type RowGridProps = {
   itemIds: string[]
   columns: number
@@ -786,10 +799,12 @@ type RowGridProps = {
   onOpenPatchDetail: (id: string) => void
   onImageLoad: (id: string) => void
   onImageError: (id: string) => void
+  patchClusterMeta?: Map<string, PatchClusterMeta> | null
+  onClusterCollapseToggle?: (topClusterId: number) => void
 }
 
 function RowGrid(props: RowGridProps) {
-  const { itemIds, columns, gapPx, itemWidth, itemIndexById, onOpenPatchDetail, onImageLoad, onImageError } = props
+  const { itemIds, columns, gapPx, itemWidth, itemIndexById, onOpenPatchDetail, onImageLoad, onImageError, patchClusterMeta, onClusterCollapseToggle } = props
 
   const compact = (itemWidth || 0) < FOOTER_HIDE_THRESHOLD
 
@@ -806,6 +821,7 @@ function RowGrid(props: RowGridProps) {
       {itemIds.map((id) => {
         const index = itemIndexById.get(id)
         if (typeof index !== 'number') return null
+        const meta = patchClusterMeta?.get(id)
         return (
           <PatchItem
             id={id}
@@ -815,6 +831,9 @@ function RowGrid(props: RowGridProps) {
             onOpenDetail={onOpenPatchDetail}
             onImageLoad={onImageLoad}
             onImageError={onImageError}
+            collapsedClusterSize={meta?.isCollapsed ? meta.size : undefined}
+            isClusterCollapsed={meta?.isCollapsed}
+            onToggleClusterCollapse={onClusterCollapseToggle}
           />
         )
       })}
@@ -857,4 +876,58 @@ function getVisualIndexFromEvent(e: React.MouseEvent) {
   if (indexAttr == null) return null
   const index = Number(indexAttr)
   return Number.isNaN(index) ? null : index
+}
+
+function computeDisplayIds(params: {
+  orderedIds: string[]
+  detections: Record<string, DetectionEntity>
+  collapsedClusterSet?: Set<number>
+  hasToggle: boolean
+}): { displayIds: string[]; patchClusterMeta: Map<string, PatchClusterMeta> | null } {
+  const { orderedIds, detections, collapsedClusterSet, hasToggle } = params
+
+  const hasCollapsed = (collapsedClusterSet?.size ?? 0) > 0
+
+  if (!hasCollapsed && !hasToggle) {
+    return { displayIds: orderedIds, patchClusterMeta: null }
+  }
+
+  // Count patches per top-level cluster
+  const clusterSizes = new Map<number, number>()
+  for (const id of orderedIds) {
+    const det = detections?.[id]
+    const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any).clusterId as number : undefined
+    if (clusterId != null && clusterId >= 0) {
+      const topId = Math.trunc(clusterId)
+      clusterSizes.set(topId, (clusterSizes.get(topId) ?? 0) + 1)
+    }
+  }
+
+  const meta = new Map<string, PatchClusterMeta>()
+  const seenCollapsed = new Set<number>()
+  const filtered: string[] = []
+
+  for (const id of orderedIds) {
+    const det = detections?.[id]
+    const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any).clusterId as number : undefined
+    const topId = clusterId != null && clusterId >= 0 ? Math.trunc(clusterId) : undefined
+
+    const isCollapsed = topId !== undefined && (collapsedClusterSet?.has(topId) ?? false)
+
+    if (topId !== undefined) {
+      const size = clusterSizes.get(topId) ?? 1
+      meta.set(id, { size, isCollapsed })
+    }
+
+    if (isCollapsed && topId !== undefined) {
+      if (!seenCollapsed.has(topId)) {
+        seenCollapsed.add(topId)
+        filtered.push(id)
+      }
+    } else {
+      filtered.push(id)
+    }
+  }
+
+  return { displayIds: filtered, patchClusterMeta: meta }
 }

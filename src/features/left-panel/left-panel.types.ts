@@ -23,8 +23,10 @@ export type LeafGroupLeftPanelProps = {
   sizeThreshold: number
   sizeThresholdMax: number
   sortByClusters: boolean
+  clustersCollapsed: boolean
   onSizeThresholdChange: (value: number) => void
   onSortByClustersChange: (enabled: boolean) => void
+  onClustersCollapsedChange: (enabled: boolean) => void
   availableDetectorIds?: string[]
   selectedDetectorId?: string
   onDetectorChange?: (detectorId: string) => void

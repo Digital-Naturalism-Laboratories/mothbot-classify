@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { PatchDownloadContextMenu } from '~/components/atomic/patch-download-context-menu'
+import { ContextMenuSeparator, ContextMenuItem } from '~/components/ui/context-menu'
 import { detectionStoreById, detectionsStore } from '~/stores/entities/detections'
 import { patchStoreById } from '~/stores/entities/patch-selectors'
 import { Badge } from '~/components/ui/badge'
@@ -41,10 +42,13 @@ export type PatchItemProps = {
   onImageError?: (id: string) => void
   compact?: boolean
   clusterVariant?: BadgeVariants['variant']
+  collapsedClusterSize?: number
+  isClusterCollapsed?: boolean
+  onToggleClusterCollapse?: (topClusterId: number) => void
 }
 
 function PatchItemImpl(props: PatchItemProps) {
-  const { id, index, compact } = props
+  const { id, index, compact, collapsedClusterSize, isClusterCollapsed, onToggleClusterCollapse } = props
   const patch = useStore(patchStoreById(id))
   const detection = useStore(detectionStoreById(id))
   const summaries = useStore(leafGroupSummariesStore)
@@ -226,9 +230,19 @@ function PatchItemImpl(props: PatchItemProps) {
         handle={makeIndexedFileHandle(patch?.imageFile)}
         originalUrl={url}
         originalDownloadName={patch?.name ?? 'patch.jpg'}
+        extraItems={
+          typeof clusterId === 'number' && clusterId >= 0 && onToggleClusterCollapse ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => onToggleClusterCollapse(Math.trunc(clusterId))}>
+                {isClusterCollapsed ? `Expand cluster C${Math.trunc(clusterId)}` : `Collapse cluster C${Math.trunc(clusterId)}`}
+              </ContextMenuItem>
+            </>
+          ) : null
+        }
       >
         {url ? (
-          <div className='flex-1'>
+          <div className='flex-1 relative'>
             <img
               src={url}
               alt={patch?.name ?? 'patch'}
@@ -245,6 +259,11 @@ function PatchItemImpl(props: PatchItemProps) {
                 props?.onImageError?.(id)
               }}
             />
+            {collapsedClusterSize != null && collapsedClusterSize > 1 && (
+              <div className='absolute bottom-4 right-4 bg-black/65 text-white text-[10px] font-mono font-semibold px-[5px] py-[2px] rounded pointer-events-none leading-none'>
+                ×{collapsedClusterSize}
+              </div>
+            )}
           </div>
         ) : (
           <div className='aspect-square w-full ' />

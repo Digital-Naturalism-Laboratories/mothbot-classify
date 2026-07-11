@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useHotkey } from '~/utils/use-hotkey'
 import { useRouter } from '@tanstack/react-router'
 import { expandMany, makeKey } from '~/features/left-panel/collapse.store'
 import { ensureSpeciesListSelection } from '~/features/data-flow/2.identify/species-picker.state'
@@ -47,6 +48,8 @@ export function NightView(props: { leafGroupId: string }) {
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
   const [sizeThreshold, setSizeThreshold] = useState(0)
   const [sortByClusters, setSortByClusters] = useState(false)
+  const [clustersCollapsed, setClustersCollapsed] = useState(false)
+  const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
   const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
   const [selectedDetectorId, setSelectedDetectorId] = useState<string | undefined>(undefined)
   const allDetectionsRef = useRef<Record<string, DetectionEntity>>({})
@@ -198,6 +201,31 @@ export function NightView(props: { leafGroupId: string }) {
     setSelectedTaxon(fallbackTaxon)
     navigateToTaxonSelection({ router, routeContext, taxon: fallbackTaxon, bucket: 'user', singleLeafDataset })
   }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, routeContext, singleLeafDataset])
+
+  const collapsedClusterSet = useMemo(() => {
+    if (!clustersCollapsed && clusterOverrides.size === 0) return new Set<number>()
+    const allTopIds = new Set<number>()
+    for (const det of Object.values(detections)) {
+      if (activeNightIds.has((det as any).leafGroupId) && typeof (det as any).clusterId === 'number' && (det as any).clusterId >= 0) {
+        allTopIds.add(Math.trunc((det as any).clusterId as number))
+      }
+    }
+    const result = new Set<number>()
+    for (const topId of allTopIds) {
+      const overridden = clusterOverrides.has(topId)
+      if (overridden ? !clustersCollapsed : clustersCollapsed) result.add(topId)
+    }
+    return result
+  }, [clustersCollapsed, clusterOverrides, detections, activeNightIds])
+
+  const onClusterCollapseToggle = useCallback((topClusterId: number) => {
+    setClusterOverrides((prev) => {
+      const next = new Set(prev)
+      if (next.has(topClusterId)) next.delete(topClusterId)
+      else next.add(topClusterId)
+      return next
+    })
+  }, [])
 
   const list = useMemo(() => {
     const multiDetector = availableDetectorIds.length > 1
@@ -367,6 +395,11 @@ export function NightView(props: { leafGroupId: string }) {
     setDetailOpen(true)
   }
 
+  useHotkey('c', () => {
+    setClustersCollapsed((prev) => !prev)
+    setClusterOverrides(new Set())
+  }, [])
+
   if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
 
   return (
@@ -384,8 +417,10 @@ export function NightView(props: { leafGroupId: string }) {
         sizeThresholdMax={sizeThresholdMax}
         warnings={leafGroupWarnings}
         sortByClusters={sortByClusters}
+        clustersCollapsed={clustersCollapsed}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
+        onClustersCollapsedChange={(v) => { setClustersCollapsed(v); setClusterOverrides(new Set()) }}
         availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
         selectedDetectorId={selectedDetectorId}
         onDetectorChange={onDetectorChange}
@@ -411,6 +446,8 @@ export function NightView(props: { leafGroupId: string }) {
           selectedBucket={selectedBucket}
           sortByClusters={sortByClusters}
           hasMachineIdentification={hasMachineIdentification}
+          collapsedClusterSet={collapsedClusterSet.size > 0 ? collapsedClusterSet : undefined}
+          onClusterCollapseToggle={onClusterCollapseToggle}
         />
         <SelectionBar
           selectedCount={selectedCount}

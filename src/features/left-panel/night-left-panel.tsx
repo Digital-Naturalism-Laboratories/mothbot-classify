@@ -31,8 +31,10 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     sizeThreshold,
     sizeThresholdMax,
     sortByClusters,
+    clustersCollapsed,
     onSizeThresholdChange,
     onSortByClustersChange,
+    onClustersCollapsedChange,
     availableDetectorIds,
     selectedDetectorId,
     onDetectorChange,
@@ -102,6 +104,8 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           bucket='auto'
           sortByClusters={sortByClusters}
           onSortByClustersChange={onSortByClustersChange}
+          clustersCollapsed={clustersCollapsed}
+          onClustersCollapsedChange={onClustersCollapsedChange}
           selectedTaxon={selectedTaxon}
           selectedBucket={selectedBucket}
           onSelectTaxon={onSelectTaxon}
