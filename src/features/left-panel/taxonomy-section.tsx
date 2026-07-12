@@ -4,7 +4,6 @@ import { EllipsisIcon } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -27,10 +26,6 @@ export type TaxonomySectionProps = {
   title: string
   nodes?: TaxonomyNode[]
   bucket: 'auto' | 'user'
-  sortByClusters?: boolean
-  onSortByClustersChange?: (enabled: boolean) => void
-  clustersCollapsed?: boolean
-  onClustersCollapsedChange?: (enabled: boolean) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {
@@ -53,10 +48,6 @@ export function TaxonomySection(props: TaxonomySectionProps) {
     title,
     nodes,
     bucket,
-    sortByClusters = false,
-    onSortByClustersChange,
-    clustersCollapsed = false,
-    onClustersCollapsedChange,
     selectedTaxon,
     selectedBucket,
     onSelectTaxon,
@@ -96,10 +87,6 @@ export function TaxonomySection(props: TaxonomySectionProps) {
         title={title}
         bucket={bucket}
         nodes={nodes}
-        sortByClusters={sortByClusters}
-        onSortByClustersChange={onSortByClustersChange}
-        clustersCollapsed={clustersCollapsed}
-        onClustersCollapsedChange={onClustersCollapsedChange}
         availableAlgorithms={availableAlgorithms}
         selectedAlgorithm={selectedAlgorithm}
         onAlgorithmChange={onAlgorithmChange}
@@ -187,15 +174,11 @@ function SectionHeader(props: {
   title: string
   bucket: 'auto' | 'user'
   nodes?: TaxonomyNode[]
-  sortByClusters?: boolean
-  onSortByClustersChange?: (enabled: boolean) => void
-  clustersCollapsed?: boolean
-  onClustersCollapsedChange?: (enabled: boolean) => void
   availableAlgorithms?: string[]
   selectedAlgorithm?: string
   onAlgorithmChange?: (algorithm: string) => void
 }) {
-  const { title, bucket, nodes, sortByClusters = false, onSortByClustersChange, clustersCollapsed = false, onClustersCollapsedChange, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
+  const { title, bucket, nodes, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
   return (
     <div className='mb-6 flex items-center justify-between'>
       <PanelHeading>{title}</PanelHeading>
@@ -203,10 +186,6 @@ function SectionHeader(props: {
       <SectionMoreMenu
         bucket={bucket}
         nodes={nodes}
-        sortByClusters={sortByClusters}
-        onSortByClustersChange={onSortByClustersChange}
-        clustersCollapsed={clustersCollapsed}
-        onClustersCollapsedChange={onClustersCollapsedChange}
         availableAlgorithms={availableAlgorithms}
         selectedAlgorithm={selectedAlgorithm}
         onAlgorithmChange={onAlgorithmChange}
@@ -218,15 +197,11 @@ function SectionHeader(props: {
 function SectionMoreMenu(props: {
   bucket: 'auto' | 'user'
   nodes?: TaxonomyNode[]
-  sortByClusters?: boolean
-  onSortByClustersChange?: (enabled: boolean) => void
-  clustersCollapsed?: boolean
-  onClustersCollapsedChange?: (enabled: boolean) => void
   availableAlgorithms?: string[]
   selectedAlgorithm?: string
   onAlgorithmChange?: (algorithm: string) => void
 }) {
-  const { bucket, nodes, sortByClusters = false, onSortByClustersChange, clustersCollapsed = false, onClustersCollapsedChange, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
+  const { bucket, nodes, availableAlgorithms, selectedAlgorithm, onAlgorithmChange } = props
   const showAlgorithms = bucket === 'auto' && Array.isArray(availableAlgorithms) && availableAlgorithms.length >= 1
   return (
     <DropdownMenu>
@@ -235,23 +210,6 @@ function SectionMoreMenu(props: {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent side='right' align='start' sideOffset={4}>
-        {bucket === 'auto' ? (
-          <>
-            <DropdownMenuCheckboxItem
-              checked={sortByClusters}
-              onCheckedChange={(checked) => onSortByClustersChange?.(checked === true)}
-            >
-              Sort by clusters
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={clustersCollapsed}
-              onCheckedChange={(checked) => onClustersCollapsedChange?.(checked === true)}
-            >
-              Collapse all clusters
-            </DropdownMenuCheckboxItem>
-          </>
-        ) : null}
-
         <DropdownMenuItem onSelect={() => expandMany(allKeysFor(nodes || [], bucket))}>Expand all</DropdownMenuItem>
 
         <DropdownMenuItem onSelect={() => collapseMany(allKeysFor(nodes || [], bucket))}>Collapse all</DropdownMenuItem>

@@ -49,7 +49,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   } = props
 
   const detections = useStore(detectionsStore)
-  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
+  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(true)
   const [vizDialogOpen, setVizDialogOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(
     (d) => (d as any)?.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
@@ -95,6 +95,16 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
       >
         <PatchSizeControl compact />
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
+        <LabeledCheckboxControl
+          label='Sort by clusters'
+          checked={sortByClusters}
+          onChange={onSortByClustersChange}
+        />
+        <LabeledCheckboxControl
+          label='Collapse all clusters'
+          checked={clustersCollapsed}
+          onChange={onClustersCollapsedChange}
+        />
       </LayoutOptionsSection>
 
       {(hasMachineIdentification || (availableBotAlgorithms && availableBotAlgorithms.length > 0)) ? (
@@ -102,10 +112,6 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           title='Machine identified'
           nodes={taxonomyAuto}
           bucket='auto'
-          sortByClusters={sortByClusters}
-          onSortByClustersChange={onSortByClustersChange}
-          clustersCollapsed={clustersCollapsed}
-          onClustersCollapsedChange={onClustersCollapsedChange}
           selectedTaxon={selectedTaxon}
           selectedBucket={selectedBucket}
           onSelectTaxon={onSelectTaxon}
@@ -303,4 +309,25 @@ function getSizeThresholdLabel(params: { value: number; max: number }) {
   if (max <= 0) return 'No size data'
   if (value <= 0) return 'All sizes'
   return `>= ${value}px`
+}
+
+type LabeledCheckboxControlProps = {
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}
+
+function LabeledCheckboxControl(props: LabeledCheckboxControlProps) {
+  const { label, checked, onChange } = props
+  return (
+    <label className='flex items-center justify-between gap-8 text-13 cursor-pointer select-none'>
+      <span className='text-ink-secondary'>{label}</span>
+      <input
+        type='checkbox'
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className='accent-blue-600 cursor-pointer'
+      />
+    </label>
+  )
 }

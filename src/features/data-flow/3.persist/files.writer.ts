@@ -8,6 +8,7 @@ import { morphoLinksStore } from './links'
 import { getPhotoBaseFromPhotoId, getNightDiskPathFromPhoto } from '~/utils/paths'
 import { buildIdentifiedJsonShapeFromDetection } from '~/models/detection-shapes'
 import { setDetectionSaveScheduler } from './detection-persistence'
+import { setClusterOverridesSaveScheduler, saveClusterOverrides } from './cluster-overrides'
 import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
 import { exportUserDetectionsForMothboxNextPackage } from '~/features/mothbox-next/persist/package-fs-writer'
 import { buildLeafGroupSummary } from '~/stores/entities/night-summaries'
@@ -183,5 +184,20 @@ async function writeJson(root: FileSystemDirectoryHandleLike, path: string[], da
   await writable.close()
 }
 
-// Initialize the scheduler so detections.ts can use it without circular dependency
+// Initialize schedulers so detections.ts can trigger saves without circular dependencies
 setDetectionSaveScheduler(scheduleSaveUserDetections)
+
+const pendingClusterOverridesTimers: Record<string, number> = {}
+setClusterOverridesSaveScheduler((leafGroupId: string) => {
+  const prev = pendingClusterOverridesTimers[leafGroupId]
+  if (prev) window.clearTimeout(prev)
+  pendingClusterOverridesTimers[leafGroupId] = window.setTimeout(() => {
+    const all = detectionsStore.get() || {}
+    const overrides: Record<string, number> = {}
+    for (const det of Object.values(all)) {
+      if ((det as any).leafGroupId !== leafGroupId) continue
+      if (typeof det.clusterId === 'number') overrides[det.id] = det.clusterId
+    }
+    void saveClusterOverrides(leafGroupId, overrides)
+  }, 400)
+})

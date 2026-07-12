@@ -251,6 +251,28 @@ export function PatchGrid(props: PatchGridProps) {
 
   function handleItemMouseDown(e: React.MouseEvent, index: number, patchId: string) {
     e.preventDefault()
+
+    // When clicking a collapsed cluster representative, select ALL members of that cluster
+    const meta = patchClusterMeta?.get(patchId)
+    if (meta?.isCollapsed) {
+      const allDetections = detectionsStore.get() || {}
+      const det = allDetections[patchId]
+      const topClusterId = typeof det?.clusterId === 'number' ? Math.trunc(det.clusterId) : undefined
+      if (topClusterId !== undefined) {
+        const clusterIds = Object.values(allDetections)
+          .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc(d.clusterId) === topClusterId)
+          .map((d) => d?.id)
+          .filter((id): id is string => typeof id === 'string')
+        const base = e.shiftKey || e.metaKey || e.ctrlKey ? new Set(selected ?? new Set<string>()) : new Set<string>()
+        for (const id of clusterIds) base.add(id)
+        setSelection({ leafGroupId, patchIds: Array.from(base) })
+        setAnchorIndex(index)
+        setFocusIndex(index)
+        focusItem(index)
+        return
+      }
+    }
+
     if (e.shiftKey) {
       const rangeIds = computeShiftSelectionRange({ anchorIndex, currentIndex: index, visualOrderIds })
       const current = new Set(selected ?? new Set())
@@ -282,6 +304,7 @@ export function PatchGrid(props: PatchGridProps) {
   }
 
   function onMouseDownContainer(e: React.MouseEvent) {
+    if (e.button === 2) return  // right-click: let context menu open without toggling selection
     const index = getVisualIndexFromEvent(e)
     if (index == null) return
     const id = visualOrderIds[index]

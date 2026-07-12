@@ -8,6 +8,7 @@ import { detectionsStore, type DetectionEntity } from '~/stores/entities/detecti
 import { normalizeLegacyNightId, parsePathParts } from './ingest-paths'
 import { parseNightBotDetections, overlayNightUserDetections } from './ingest-night'
 import { isMothboxNextIngestMode } from './ingest-mode'
+import { applyClusterOverridesForLeafGroup } from '~/features/data-flow/3.persist/cluster-overrides'
 
 export async function ingestFilesToStores(params: {
   files: IndexedFile[]
@@ -138,6 +139,9 @@ export async function ingestFilesToStores(params: {
     }
     await parseNightBotDetections({ photos, files, patchMap, parseDetectionsForNightId: targetNightId, patches, detections })
     await overlayNightUserDetections({ photos, parseDetectionsForNightId: targetNightId, detections })
+    if (typeof targetNightId === 'string') {
+      await applyClusterOverridesForLeafGroup({ leafGroupId: targetNightId, detections, photos })
+    }
   }
 
   if (typeof targetNightId === 'string') {

@@ -13,6 +13,7 @@ import {
   updateDetectionAsError,
 } from '~/models/detection-shapes'
 import { scheduleSaveForLeafGroup } from '~/features/data-flow/3.persist/detection-persistence'
+import { triggerClusterOverridesSave } from '~/features/data-flow/3.persist/cluster-overrides'
 import { ensureDetectionsLoadedForNight } from '~/features/data-flow/1.ingest/night-detection-loader'
 import { clearMorphoCover } from '~/features/data-flow/3.persist/covers'
 import { setMorphoLink } from '~/features/data-flow/3.persist/links'
@@ -503,7 +504,6 @@ function getSpeciesListContextForDetection(params: { detection: DetectionEntity 
 
 /**
  * Assigns detections to a cluster by top-level cluster ID.
- * In-memory only — cluster assignments are not persisted via classification files.
  */
 export function assignDetectionsToCluster(params: { detectionIds: string[]; clusterId: number }) {
   const { detectionIds, clusterId } = params
@@ -514,11 +514,11 @@ export function assignDetectionsToCluster(params: { detectionIds: string[]; clus
     if (updated[id]) updated[id] = { ...updated[id], clusterId }
   }
   detectionsStore.set(updated)
+  triggerClusterOverridesSaveForTouched(detectionIds, updated)
 }
 
 /**
  * Removes detections from their cluster by setting clusterId to -1 (unclustered/noise).
- * In-memory only — cluster assignments are not persisted via classification files.
  */
 export function removeDetectionsFromCluster(params: { detectionIds: string[] }) {
   const { detectionIds } = params
@@ -529,11 +529,11 @@ export function removeDetectionsFromCluster(params: { detectionIds: string[] }) 
     if (updated[id]) updated[id] = { ...updated[id], clusterId: -1 }
   }
   detectionsStore.set(updated)
+  triggerClusterOverridesSaveForTouched(detectionIds, updated)
 }
 
 /**
  * Moves detections into a brand-new cluster (max existing top-level ID + 1 within the leaf group).
- * In-memory only — cluster assignments are not persisted via classification files.
  */
 export function splitDetectionsToNewCluster(params: { detectionIds: string[]; leafGroupId: string }) {
   const { detectionIds, leafGroupId } = params
@@ -552,4 +552,14 @@ export function splitDetectionsToNewCluster(params: { detectionIds: string[]; le
     if (updated[id]) updated[id] = { ...updated[id], clusterId: newClusterId }
   }
   detectionsStore.set(updated)
+  triggerClusterOverridesSave(leafGroupId)
+}
+
+function triggerClusterOverridesSaveForTouched(detectionIds: string[], detections: Record<string, DetectionEntity>) {
+  const leafGroupIds = new Set<string>()
+  for (const id of detectionIds) {
+    const lgId = detections[id]?.leafGroupId
+    if (lgId) leafGroupIds.add(lgId)
+  }
+  for (const lgId of leafGroupIds) triggerClusterOverridesSave(lgId)
 }

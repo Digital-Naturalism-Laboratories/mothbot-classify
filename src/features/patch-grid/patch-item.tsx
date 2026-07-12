@@ -137,6 +137,12 @@ function PatchItemImpl(props: PatchItemProps) {
     splitDetectionsToNewCluster({ detectionIds: sameClusterTargetIds, leafGroupId })
   }
 
+  function onCreateNewCluster() {
+    const leafGroupId = patch?.leafGroupId
+    if (!leafGroupId) return
+    splitDetectionsToNewCluster({ detectionIds: clusterTargetIds, leafGroupId })
+  }
+
   function onSelectCluster(e?: React.MouseEvent | React.KeyboardEvent) {
     const leafGroupId = patch?.leafGroupId
 
@@ -268,31 +274,43 @@ function PatchItemImpl(props: PatchItemProps) {
         originalUrl={url}
         originalDownloadName={patch?.name ?? 'patch.jpg'}
         extraItems={
-          typeof clusterId === 'number' && clusterId >= 0 ? (
-            <>
-              <ContextMenuSeparator />
-              {onToggleClusterCollapse ? (
-                <ContextMenuItem onSelect={() => onToggleClusterCollapse(Math.trunc(clusterId))}>
-                  {isClusterCollapsed ? `Expand cluster C${Math.trunc(clusterId)}` : `Collapse cluster C${Math.trunc(clusterId)}`}
-                </ContextMenuItem>
-              ) : null}
-              {canAddToCluster ? (
-                <ContextMenuItem onSelect={() => onAssignToCluster(Math.trunc(clusterId))}>
-                  {addToClusterCount > 1
-                    ? `Add ${addToClusterCount} selected to C${Math.trunc(clusterId)}`
-                    : `Add selected to C${Math.trunc(clusterId)}`}
-                </ContextMenuItem>
-              ) : null}
-              {canSplit ? (
-                <ContextMenuItem onSelect={() => onSplitToNewCluster()}>
-                  {`Split ${sameClusterTargetIds.length} into new cluster`}
-                </ContextMenuItem>
-              ) : null}
-              <ContextMenuItem onSelect={() => onRemoveFromCluster()}>
-                {clusterTargetCount > 1 ? `Uncluster ${clusterTargetCount} selected` : 'Remove from cluster'}
-              </ContextMenuItem>
-            </>
-          ) : null
+          (() => {
+            const isInCluster = typeof clusterId === 'number' && clusterId >= 0
+            const showMenu = isInCluster || clusterTargetCount > 1
+            if (!showMenu) return null
+            return (
+              <>
+                <ContextMenuSeparator />
+                {isInCluster && onToggleClusterCollapse ? (
+                  <ContextMenuItem onSelect={() => onToggleClusterCollapse(Math.trunc(clusterId as number))}>
+                    {isClusterCollapsed ? `Expand cluster C${Math.trunc(clusterId as number)}` : `Collapse cluster C${Math.trunc(clusterId as number)}`}
+                  </ContextMenuItem>
+                ) : null}
+                {isInCluster && canAddToCluster ? (
+                  <ContextMenuItem onSelect={() => onAssignToCluster(Math.trunc(clusterId as number))}>
+                    {addToClusterCount > 1
+                      ? `Add ${addToClusterCount} selected to C${Math.trunc(clusterId as number)}`
+                      : `Add selected to C${Math.trunc(clusterId as number)}`}
+                  </ContextMenuItem>
+                ) : null}
+                {isInCluster && canSplit ? (
+                  <ContextMenuItem onSelect={() => onSplitToNewCluster()}>
+                    {`Split ${sameClusterTargetIds.length} into new cluster`}
+                  </ContextMenuItem>
+                ) : null}
+                {isInCluster ? (
+                  <ContextMenuItem onSelect={() => onRemoveFromCluster()}>
+                    {clusterTargetCount > 1 ? `Uncluster ${clusterTargetCount} selected` : 'Remove from cluster'}
+                  </ContextMenuItem>
+                ) : null}
+                {clusterTargetCount > 1 ? (
+                  <ContextMenuItem onSelect={() => onCreateNewCluster()}>
+                    {`Create new cluster from ${clusterTargetCount} selected`}
+                  </ContextMenuItem>
+                ) : null}
+              </>
+            )
+          })()
         }
       >
         {url ? (
