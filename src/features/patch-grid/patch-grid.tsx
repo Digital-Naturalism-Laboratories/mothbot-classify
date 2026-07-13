@@ -244,7 +244,7 @@ export function PatchGrid(props: PatchGridProps) {
 
   function focusItem(index: number) {
     requestAnimationFrame(() => {
-      const el = containerRef.current?.querySelector(`[data-index="${index}"]`) as HTMLElement | null
+      const el = containerRef.current?.querySelector(`[data-id][data-index="${index}"]`) as HTMLElement | null
       el?.focus({ preventScroll: true })
     })
   }
@@ -380,6 +380,7 @@ export function PatchGrid(props: PatchGridProps) {
             <div
               key={stripe.key}
               ref={rowVirtualizer.measureElement}
+              data-index={stripe.index}
               data-block-index={stripe.index}
               data-kind={block?.kind}
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${stripe.start}px)` }}
@@ -895,7 +896,7 @@ function computeShiftSelectionRange(params: { anchorIndex: number | null; curren
 
 function getVisualIndexFromEvent(e: React.MouseEvent) {
   const target = e.target as HTMLElement
-  const indexAttr = target?.closest('[data-index]')?.getAttribute('data-index')
+  const indexAttr = target?.closest('[data-id][data-index]')?.getAttribute('data-index')
   if (indexAttr == null) return null
   const index = Number(indexAttr)
   return Number.isNaN(index) ? null : index

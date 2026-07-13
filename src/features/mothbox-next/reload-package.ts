@@ -25,6 +25,7 @@ import { joinRelativePaths } from './package-paths'
 import { restoreSpeciesListSelectionFromPackage } from './restore-species-selection-from-package'
 import { applyMorphoLinksFromPackage } from './morpho-links-package'
 import { applyIndexedFilesState } from '~/features/data-flow/1.ingest/files.initialize'
+import { applyClusterOverridesForLeafGroup } from '~/features/data-flow/3.persist/cluster-overrides'
 import { rebuildLeafGroupSummariesFromDetections } from './rebuild-night-summaries'
 import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
 import { resolveLegacySourceRootForPackage } from './adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
@@ -235,8 +236,17 @@ export async function applyLoadedPackageToStores(params: {
   leafGroupsStore.set(hydrated.nights)
   photosStore.set(hydrated.photos)
   patchesStore.set(hydrated.patches)
-  detectionsStore.set(hydrated.detections)
-  rebuildLeafGroupSummariesFromDetections(hydrated.detections)
+
+  const detections = { ...hydrated.detections }
+  const leafGroupIds = new Set<string>()
+  for (const det of Object.values(detections)) {
+    if (det.leafGroupId) leafGroupIds.add(det.leafGroupId)
+  }
+  for (const leafGroupId of leafGroupIds) {
+    await applyClusterOverridesForLeafGroup({ leafGroupId, detections, photos: hydrated.photos })
+  }
+  detectionsStore.set(detections)
+  rebuildLeafGroupSummariesFromDetections(detections)
 
   applyActiveHierarchyFromPackageRecords({
     manifest: loaded.manifest,

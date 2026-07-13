@@ -195,7 +195,7 @@ setClusterOverridesSaveScheduler((leafGroupId: string) => {
     const all = detectionsStore.get() || {}
     const overrides: Record<string, number> = {}
     for (const det of Object.values(all)) {
-      if ((det as any).leafGroupId !== leafGroupId) continue
+      if (det.leafGroupId !== leafGroupId) continue
       if (typeof det.clusterId === 'number') overrides[det.id] = det.clusterId
     }
     void saveClusterOverrides(leafGroupId, overrides)
