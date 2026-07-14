@@ -10,6 +10,7 @@ import {
   selectedPatchIdsStore,
   togglePatchSelection,
   setSelection,
+  clearPatchSelection,
   selectedClusterIdStore,
   setSelectedClusterId,
   selectedSubClusterIdStore,
@@ -125,22 +126,26 @@ function PatchItemImpl(props: PatchItemProps) {
 
   function onAssignToCluster(topClusterId: number) {
     assignDetectionsToCluster({ detectionIds: addToClusterTargetIds, clusterId: topClusterId })
+    clearPatchSelection()
   }
 
   function onRemoveFromCluster() {
     removeDetectionsFromCluster({ detectionIds: clusterTargetIds })
+    clearPatchSelection()
   }
 
   function onSplitToNewCluster() {
     const leafGroupId = patch?.leafGroupId
     if (!leafGroupId) return
     splitDetectionsToNewCluster({ detectionIds: sameClusterTargetIds, leafGroupId })
+    clearPatchSelection()
   }
 
   function onCreateNewCluster() {
     const leafGroupId = patch?.leafGroupId
     if (!leafGroupId) return
     splitDetectionsToNewCluster({ detectionIds: clusterTargetIds, leafGroupId })
+    clearPatchSelection()
   }
 
   function onSelectCluster(e?: React.MouseEvent | React.KeyboardEvent) {

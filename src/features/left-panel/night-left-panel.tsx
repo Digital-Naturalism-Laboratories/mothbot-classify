@@ -6,6 +6,7 @@ import { useStore } from '@nanostores/react'
 import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
 import { detectionsStore } from '~/stores/entities/detections'
+import { selectedPatchIdsStore } from '~/stores/ui'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
 import { Number } from '~/components/atomic/number'
@@ -49,6 +50,8 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   } = props
 
   const detections = useStore(detectionsStore)
+  const selectedPatchIds = useStore(selectedPatchIdsStore)
+  const selectedCount = selectedPatchIds?.size ?? 0
   const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(true)
   const [vizDialogOpen, setVizDialogOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(
@@ -85,6 +88,12 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           <div className='pt-4'>
             <Progress value={totalDetections ? Math.round((totalIdentified / totalDetections) * 100) : 0} />
           </div>
+          {selectedCount > 0 && (
+            <div className='flex items-center justify-between pt-2'>
+              <span className='text-blue-600'>Selected</span>
+              <span className='font-medium tabular-nums text-blue-600'>{selectedCount}</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -12,6 +12,8 @@ import type { PatchEntity } from '~/stores/entities/5.patches'
 import { patchesStore } from '~/stores/entities/5.patches'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import { acceptDetections, detectionsStore, labelDetections, resetDetections, removeDetectionsFromCluster, splitDetectionsToNewCluster } from '~/stores/entities/detections'
+import { popClusterUndo } from '~/stores/cluster-undo'
+import { triggerClusterOverridesSave } from '~/features/data-flow/3.persist/cluster-overrides'
 import { photosStore } from '~/stores/entities/photos'
 import { clearPatchSelection, selectedPatchIdsStore, setSelection, markLeafGroupAsActive, getActiveLeafGroupIds, activeNightIdsStore, setActiveNightIds } from '~/stores/ui'
 import { clearFileObjectsForInactiveLeafGroups } from '~/stores/entities'
@@ -417,11 +419,13 @@ export function NightView(props: { leafGroupId: string }) {
   function onRemoveSelectedFromCluster() {
     if (!selectedDetectionIds.length) return
     removeDetectionsFromCluster({ detectionIds: selectedDetectionIds })
+    clearPatchSelection()
   }
 
   function onSplitSelectedCluster() {
     if (!selectedDetectionIds.length || !leafGroupId) return
     splitDetectionsToNewCluster({ detectionIds: selectedDetectionIds, leafGroupId })
+    clearPatchSelection()
   }
 
   function onOpenPatchDetail(id: string) {
@@ -433,6 +437,19 @@ export function NightView(props: { leafGroupId: string }) {
   useHotkey('c', () => {
     setClustersCollapsed((prev) => !prev)
     setClusterOverrides(new Set())
+  }, [])
+
+  useHotkey('mod+z', () => {
+    const snapshot = popClusterUndo()
+    if (!snapshot) return
+    const { prevClusterIds, leafGroupIds } = snapshot
+    const current = detectionsStore.get() || {}
+    const updated = { ...current }
+    for (const [id, clusterId] of Object.entries(prevClusterIds)) {
+      if (updated[id]) updated[id] = { ...updated[id], clusterId }
+    }
+    detectionsStore.set(updated)
+    for (const lgId of leafGroupIds) triggerClusterOverridesSave(lgId)
   }, [])
 
   if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>

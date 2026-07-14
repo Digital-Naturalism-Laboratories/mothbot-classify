@@ -14,6 +14,7 @@ import {
 } from '~/models/detection-shapes'
 import { scheduleSaveForLeafGroup } from '~/features/data-flow/3.persist/detection-persistence'
 import { triggerClusterOverridesSave } from '~/features/data-flow/3.persist/cluster-overrides'
+import { pushClusterUndo } from '~/stores/cluster-undo'
 import { ensureDetectionsLoadedForNight } from '~/features/data-flow/1.ingest/night-detection-loader'
 import { clearMorphoCover } from '~/features/data-flow/3.persist/covers'
 import { setMorphoLink } from '~/features/data-flow/3.persist/links'
@@ -509,6 +510,7 @@ export function assignDetectionsToCluster(params: { detectionIds: string[]; clus
   const { detectionIds, clusterId } = params
   if (!detectionIds.length) return
   const current = detectionsStore.get() || {}
+  snapshotForUndo(detectionIds, current)
   const updated: Record<string, DetectionEntity> = { ...current }
   for (const id of detectionIds) {
     if (updated[id]) updated[id] = { ...updated[id], clusterId }
@@ -524,6 +526,7 @@ export function removeDetectionsFromCluster(params: { detectionIds: string[] }) 
   const { detectionIds } = params
   if (!detectionIds.length) return
   const current = detectionsStore.get() || {}
+  snapshotForUndo(detectionIds, current)
   const updated: Record<string, DetectionEntity> = { ...current }
   for (const id of detectionIds) {
     if (updated[id]) updated[id] = { ...updated[id], clusterId: -1 }
@@ -539,6 +542,7 @@ export function splitDetectionsToNewCluster(params: { detectionIds: string[]; le
   const { detectionIds, leafGroupId } = params
   if (!detectionIds.length) return
   const current = detectionsStore.get() || {}
+  snapshotForUndo(detectionIds, current)
   let maxTopId = -1
   for (const det of Object.values(current)) {
     if ((det as any)?.leafGroupId === leafGroupId && typeof det?.clusterId === 'number' && det.clusterId >= 0) {
@@ -553,6 +557,18 @@ export function splitDetectionsToNewCluster(params: { detectionIds: string[]; le
   }
   detectionsStore.set(updated)
   triggerClusterOverridesSave(leafGroupId)
+}
+
+function snapshotForUndo(detectionIds: string[], current: Record<string, DetectionEntity>) {
+  const prev: Record<string, number | undefined> = {}
+  const leafGroupIds = new Set<string>()
+  for (const id of detectionIds) {
+    if (current[id]) {
+      prev[id] = current[id].clusterId
+      if (current[id].leafGroupId) leafGroupIds.add(current[id].leafGroupId)
+    }
+  }
+  pushClusterUndo({ leafGroupIds: Array.from(leafGroupIds), prevClusterIds: prev })
 }
 
 function triggerClusterOverridesSaveForTouched(detectionIds: string[], detections: Record<string, DetectionEntity>) {
