@@ -252,7 +252,35 @@ export function PatchGrid(props: PatchGridProps) {
   function handleItemMouseDown(e: React.MouseEvent, index: number, patchId: string) {
     e.preventDefault()
 
-    // When clicking a collapsed cluster representative, select ALL members of that cluster
+    if (e.shiftKey) {
+      // Range shift-select: expand any collapsed cluster representatives in the range to all their members
+      const rangeIds = computeShiftSelectionRange({ anchorIndex, currentIndex: index, visualOrderIds })
+      const allDetections = detectionsStore.get() || {}
+      const base = new Set(selected ?? new Set<string>())
+      for (const rangeId of rangeIds) {
+        const rangeMeta = patchClusterMeta?.get(rangeId)
+        if (rangeMeta?.isCollapsed) {
+          const det = allDetections[rangeId]
+          const topClusterId = typeof det?.clusterId === 'number' ? Math.trunc(det.clusterId) : undefined
+          if (topClusterId !== undefined) {
+            for (const d of Object.values(allDetections)) {
+              if (d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc(d.clusterId) === topClusterId && d.id) {
+                base.add(d.id)
+              }
+            }
+            continue
+          }
+        }
+        base.add(rangeId)
+      }
+      setSelection({ leafGroupId, patchIds: Array.from(base) })
+      setAnchorIndex(index)
+      setFocusIndex(index)
+      focusItem(index)
+      return
+    }
+
+    // Non-shift click on a collapsed cluster representative: select ALL members of that cluster
     const meta = patchClusterMeta?.get(patchId)
     if (meta?.isCollapsed) {
       const allDetections = detectionsStore.get() || {}
@@ -263,7 +291,7 @@ export function PatchGrid(props: PatchGridProps) {
           .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc(d.clusterId) === topClusterId)
           .map((d) => d?.id)
           .filter((id): id is string => typeof id === 'string')
-        const base = e.shiftKey || e.metaKey || e.ctrlKey ? new Set(selected ?? new Set<string>()) : new Set<string>()
+        const base = e.metaKey || e.ctrlKey ? new Set(selected ?? new Set<string>()) : new Set<string>()
         for (const id of clusterIds) base.add(id)
         setSelection({ leafGroupId, patchIds: Array.from(base) })
         setAnchorIndex(index)
@@ -271,17 +299,6 @@ export function PatchGrid(props: PatchGridProps) {
         focusItem(index)
         return
       }
-    }
-
-    if (e.shiftKey) {
-      const rangeIds = computeShiftSelectionRange({ anchorIndex, currentIndex: index, visualOrderIds })
-      const current = new Set(selected ?? new Set())
-      for (const id of rangeIds) current.add(id)
-      setSelection({ leafGroupId, patchIds: Array.from(current) })
-      setAnchorIndex(index)
-      setFocusIndex(index)
-      focusItem(index)
-      return
     }
 
     togglePatchSelection({ patchId })
