@@ -98,8 +98,8 @@ export function PatchGrid(props: PatchGridProps) {
   const orderedIds = useMemo(() => orderPatchIds({ patches, detections }), [patches, detections])
 
   const { displayIds, patchClusterMeta } = useMemo(
-    () => computeDisplayIds({ orderedIds, detections, collapsedClusterSet, hasToggle: !!onClusterCollapseToggle }),
-    [orderedIds, detections, collapsedClusterSet, onClusterCollapseToggle],
+    () => computeDisplayIds({ orderedIds, detections, leafGroupId, collapsedClusterSet, hasToggle: !!onClusterCollapseToggle }),
+    [orderedIds, detections, leafGroupId, collapsedClusterSet, onClusterCollapseToggle],
   )
 
   const containerWidth = useContainerWidth(containerRef)
@@ -922,10 +922,11 @@ function getVisualIndexFromEvent(e: React.MouseEvent) {
 function computeDisplayIds(params: {
   orderedIds: string[]
   detections: Record<string, DetectionEntity>
+  leafGroupId: string
   collapsedClusterSet?: Set<number>
   hasToggle: boolean
 }): { displayIds: string[]; patchClusterMeta: Map<string, PatchClusterMeta> | null } {
-  const { orderedIds, detections, collapsedClusterSet, hasToggle } = params
+  const { orderedIds, detections, leafGroupId, collapsedClusterSet, hasToggle } = params
 
   const hasCollapsed = (collapsedClusterSet?.size ?? 0) > 0
 
@@ -933,10 +934,10 @@ function computeDisplayIds(params: {
     return { displayIds: orderedIds, patchClusterMeta: null }
   }
 
-  // Count patches per top-level cluster
+  // Count patches per top-level cluster across ALL detections for this leaf group (not just filtered view)
   const clusterSizes = new Map<number, number>()
-  for (const id of orderedIds) {
-    const det = detections?.[id]
+  for (const det of Object.values(detections)) {
+    if ((det as any)?.leafGroupId !== leafGroupId) continue
     const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any).clusterId as number : undefined
     if (clusterId != null && clusterId >= 0) {
       const topId = Math.trunc(clusterId)
