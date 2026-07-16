@@ -1,10 +1,11 @@
 import { ensureReadPermission, loadDatasetsDirectory } from '~/features/data-flow/3.persist/files.persistence'
-import { clearDatasetsRegistry } from '~/stores/datasets-registry'
+import { clearDatasetsRegistry, activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { clearDatasetsWorkspace, setDatasetsWorkspaceFolderName } from '~/stores/datasets-workspace'
 import { pickerErrorStore } from '~/stores/ui'
 import { rememberDefaultDatasetSelection } from './ensure-default-dataset-open'
 import { loadWorkspaceSpeciesLists } from './load-workspace-species-lists'
 import { scanDatasetsFolder, type ScanDatasetsFolderOptions } from './scan-datasets-folder'
+import { openDatasetByFolderName } from './open-dataset-by-folder'
 
 export type DatasetsWorkspaceSetupResult = {
   rememberedDefaultDataset: boolean
@@ -76,5 +77,13 @@ export async function finishDatasetsWorkspaceSetup(
 export async function scanDatasetsRegistry(options?: ScanDatasetsFolderOptions) {
   const entries = await scanDatasetsFolder(options)
   rememberDefaultDatasetSelection()
+
+  // If a dataset is already open, reload it so any new night folders added on
+  // disk are picked up without requiring a full dataset reset.
+  const activeFolderName = activeDatasetFolderNameStore.get()
+  if (activeFolderName) {
+    await openDatasetByFolderName({ folderName: activeFolderName, showSuccessToast: false })
+  }
+
   return entries
 }

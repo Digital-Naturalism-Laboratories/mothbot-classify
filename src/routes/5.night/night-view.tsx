@@ -14,6 +14,7 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import { acceptDetections, detectionsStore, labelDetections, resetDetections, removeDetectionsFromCluster, splitDetectionsToNewCluster } from '~/stores/entities/detections'
 import { popClusterUndo } from '~/stores/cluster-undo'
 import { triggerClusterOverridesSave } from '~/features/data-flow/3.persist/cluster-overrides'
+import { scheduleSaveForLeafGroup } from '~/features/data-flow/3.persist/detection-persistence'
 import { photosStore } from '~/stores/entities/photos'
 import { clearPatchSelection, selectedPatchIdsStore, setSelection, markLeafGroupAsActive, getActiveLeafGroupIds, activeNightIdsStore, setActiveNightIds } from '~/stores/ui'
 import { clearFileObjectsForInactiveLeafGroups } from '~/stores/entities'
@@ -442,14 +443,23 @@ export function NightView(props: { leafGroupId: string }) {
   useHotkey('mod+z', () => {
     const snapshot = popClusterUndo()
     if (!snapshot) return
-    const { prevClusterIds, leafGroupIds } = snapshot
     const current = detectionsStore.get() || {}
-    const updated = { ...current }
-    for (const [id, clusterId] of Object.entries(prevClusterIds)) {
-      if (updated[id]) updated[id] = { ...updated[id], clusterId }
+
+    if (snapshot.kind === 'cluster-move') {
+      const { prevClusterIds, leafGroupIds } = snapshot
+      const updated = { ...current }
+      for (const [id, clusterId] of Object.entries(prevClusterIds)) {
+        if (updated[id]) updated[id] = { ...updated[id], clusterId }
+      }
+      detectionsStore.set(updated)
+      for (const lgId of leafGroupIds) triggerClusterOverridesSave(lgId)
+    } else if (snapshot.kind === 'identification') {
+      const { prevDetections, leafGroupIds } = snapshot
+      const updated = { ...current, ...prevDetections }
+      detectionsStore.set(updated)
+      rebuildLeafGroupSummariesFromDetections(updated)
+      for (const lgId of leafGroupIds) scheduleSaveForLeafGroup(lgId)
     }
-    detectionsStore.set(updated)
-    for (const lgId of leafGroupIds) triggerClusterOverridesSave(lgId)
   }, [])
 
   if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>

@@ -104,6 +104,7 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
   if (!hasTaxon && !trimmed && !isError) return
 
   const current = detectionsStore.get() || {}
+  snapshotLabelForUndo(detectionIds, current)
   const updated: Record<string, DetectionEntity> = { ...current }
   const humanClassifierId = currentHumanClassifierId()
 
@@ -157,6 +158,7 @@ export function acceptDetections(params: { detectionIds: string[] }) {
   if (!Array.isArray(detectionIds) || detectionIds.length === 0) return
 
   const current = detectionsStore.get() || {}
+  snapshotLabelForUndo(detectionIds, current)
   const updated: Record<string, DetectionEntity> = { ...current }
   const humanClassifierId = currentHumanClassifierId()
 
@@ -568,7 +570,19 @@ function snapshotForUndo(detectionIds: string[], current: Record<string, Detecti
       if (current[id].leafGroupId) leafGroupIds.add(current[id].leafGroupId)
     }
   }
-  pushClusterUndo({ leafGroupIds: Array.from(leafGroupIds), prevClusterIds: prev })
+  pushClusterUndo({ kind: 'cluster-move', leafGroupIds: Array.from(leafGroupIds), prevClusterIds: prev })
+}
+
+function snapshotLabelForUndo(detectionIds: string[], current: Record<string, DetectionEntity>) {
+  const prevDetections: Record<string, DetectionEntity> = {}
+  const leafGroupIds = new Set<string>()
+  for (const id of detectionIds) {
+    if (current[id]) {
+      prevDetections[id] = current[id]
+      if (current[id].leafGroupId) leafGroupIds.add(current[id].leafGroupId)
+    }
+  }
+  pushClusterUndo({ kind: 'identification', leafGroupIds: Array.from(leafGroupIds), prevDetections })
 }
 
 function triggerClusterOverridesSaveForTouched(detectionIds: string[], detections: Record<string, DetectionEntity>) {
