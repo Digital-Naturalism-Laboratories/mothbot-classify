@@ -98,8 +98,8 @@ export function PatchGrid(props: PatchGridProps) {
   const orderedIds = useMemo(() => orderPatchIds({ patches, detections }), [patches, detections])
 
   const { displayIds, patchClusterMeta } = useMemo(
-    () => computeDisplayIds({ orderedIds, detections, leafGroupId, collapsedClusterSet, hasToggle: !!onClusterCollapseToggle }),
-    [orderedIds, detections, leafGroupId, collapsedClusterSet, onClusterCollapseToggle],
+    () => computeDisplayIds({ orderedIds, detections, leafGroupId, collapsedClusterSet }),
+    [orderedIds, detections, leafGroupId, collapsedClusterSet],
   )
 
   const containerWidth = useContainerWidth(containerRef)
@@ -924,13 +924,12 @@ function computeDisplayIds(params: {
   detections: Record<string, DetectionEntity>
   leafGroupId: string
   collapsedClusterSet?: Set<number>
-  hasToggle: boolean
 }): { displayIds: string[]; patchClusterMeta: Map<string, PatchClusterMeta> | null } {
-  const { orderedIds, detections, leafGroupId, collapsedClusterSet, hasToggle } = params
+  const { orderedIds, detections, leafGroupId, collapsedClusterSet } = params
 
   const hasCollapsed = (collapsedClusterSet?.size ?? 0) > 0
 
-  if (!hasCollapsed && !hasToggle) {
+  if (!hasCollapsed) {
     return { displayIds: orderedIds, patchClusterMeta: null }
   }
 

@@ -32,6 +32,7 @@ import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
 import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
 import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
 
@@ -64,6 +65,7 @@ export function NightView(props: { leafGroupId: string }) {
 
   const activeNightIds = useStore(activeNightIdsStore)
   const activePackage = useStore(mothboxNextPackageStore)
+  const leafGroupSummaries = useStore(leafGroupSummariesStore)
   const night = nights[leafGroupId]
 
   const availableBotAlgorithms = useMemo(() => {
@@ -242,10 +244,13 @@ export function NightView(props: { leafGroupId: string }) {
   }, [patches, activeNightIds, availableDetectorIds, selectedDetectorId])
   const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'auto' }), [detections, activeNightIds])
   const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'user' }), [detections, activeNightIds])
-  const totalDetections = useMemo(() => Object.values(detections ?? {}).filter((d) => activeNightIds.has(d.leafGroupId)).length, [detections, activeNightIds])
+  const totalDetections = useMemo(
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + (leafGroupSummaries[id]?.totalDetections ?? 0), 0),
+    [leafGroupSummaries, activeNightIds],
+  )
   const totalIdentified = useMemo(
-    () => Object.values(detections ?? {}).filter((d) => activeNightIds.has(d.leafGroupId) && (d as any)?.detectedBy === 'user').length,
-    [detections, activeNightIds],
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + (leafGroupSummaries[id]?.totalIdentified ?? 0), 0),
+    [leafGroupSummaries, activeNightIds],
   )
   const sizeThresholdMax = useMemo(() => {
     return getMaxDetectionLongestDimension({ patches: list, detections })

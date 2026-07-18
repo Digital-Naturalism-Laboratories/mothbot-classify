@@ -237,16 +237,14 @@ export async function applyLoadedPackageToStores(params: {
   photosStore.set(hydrated.photos)
   patchesStore.set(hydrated.patches)
 
-  const detections = { ...hydrated.detections }
-  const leafGroupIds = new Set<string>()
-  for (const det of Object.values(detections)) {
-    if (det.leafGroupId) leafGroupIds.add(det.leafGroupId)
-  }
+  // Derive leaf group IDs from the already-built nights index (avoids scanning all detections)
+  const leafGroupIds = Object.keys(hydrated.nights)
+  // Apply overrides directly into hydrated.detections — it's a local object, mutation is safe
   for (const leafGroupId of leafGroupIds) {
-    await applyClusterOverridesForLeafGroup({ leafGroupId, detections, photos: hydrated.photos })
+    await applyClusterOverridesForLeafGroup({ leafGroupId, detections: hydrated.detections, photos: hydrated.photos })
   }
-  detectionsStore.set(detections)
-  rebuildLeafGroupSummariesFromDetections(detections)
+  detectionsStore.set(hydrated.detections)
+  rebuildLeafGroupSummariesFromDetections(hydrated.detections)
 
   applyActiveHierarchyFromPackageRecords({
     manifest: loaded.manifest,

@@ -40,27 +40,16 @@ export function detectionStoreById(id: string) {
 }
 
 /**
- * Computed store: detections grouped by leafGroupId.
- * Provides O(1) lookup for leaf-group-specific detections.
- */
-export const detectionsByLeafGroupStore = computed(detectionsStore, (all) => {
-  const byLeafGroup: Record<string, DetectionEntity[]> = {}
-  for (const d of Object.values(all)) {
-    const leafGroupId = d.leafGroupId
-    if (!leafGroupId) continue
-    if (!byLeafGroup[leafGroupId]) byLeafGroup[leafGroupId] = []
-    byLeafGroup[leafGroupId].push(d)
-  }
-  return byLeafGroup
-})
-
-/**
  * Selector: Get all detections for a specific leaf group.
- * Uses the computed store for efficient lookup.
+ * Filters on demand — avoids maintaining a reactive secondary index over all detections.
  */
 export function getDetectionsForLeafGroup(leafGroupId: string): DetectionEntity[] {
-  const byLeafGroup = detectionsByLeafGroupStore.get()
-  return byLeafGroup[leafGroupId] || []
+  const all = detectionsStore.get() || {}
+  const result: DetectionEntity[] = []
+  for (const d of Object.values(all)) {
+    if (d.leafGroupId === leafGroupId) result.push(d)
+  }
+  return result
 }
 
 /**
