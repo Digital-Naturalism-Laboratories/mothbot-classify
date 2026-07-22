@@ -1,16 +1,18 @@
 import { useMemo } from 'react'
 import { useStore } from '@nanostores/react'
 import { detectionsStore } from '~/stores/entities/detections'
-import { buildVizData, getAvailableTaxaKeys, type VizData } from './viz-data'
+import { selectedPatchIdsStore } from '~/stores/ui'
+import { buildVizDetections, getAvailableTaxaKeysForConfig, type VizDetectionSet } from './viz-data'
 import type { VizConfig } from './viz-types'
 
-export function useVizData(config: VizConfig): VizData {
-  // Subscribe to detections so this updates when detections change
+export function useVizDetections(config: VizConfig): VizDetectionSet {
   useStore(detectionsStore)
-  return useMemo(() => buildVizData(config), [config])
+  useStore(selectedPatchIdsStore)
+  return useMemo(() => buildVizDetections(config), [config])
 }
 
-export function useAvailableTaxaKeys(leafGroupIds: string[], taxaRank: VizConfig['taxaRank']): string[] {
+export function useAvailableTaxaKeys(config: VizConfig): string[] {
   useStore(detectionsStore)
-  return useMemo(() => getAvailableTaxaKeys(leafGroupIds, taxaRank), [leafGroupIds, taxaRank])
+  useStore(selectedPatchIdsStore)
+  return useMemo(() => getAvailableTaxaKeysForConfig(config), [config])
 }
