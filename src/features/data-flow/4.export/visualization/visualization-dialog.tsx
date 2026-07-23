@@ -23,7 +23,7 @@ import type {
 const PREVIEW_WIDTH = 760
 const PREVIEW_HEIGHT = 507
 const PREVIEW_RENDER_WIDTH = 1100 // pack at a reduced width for a responsive preview
-const PREVIEW_MAX_ITEMS = 700
+const PREVIEW_MAX_ITEMS = 1500
 
 type Props = { open: boolean; onClose: () => void; initialLeafGroupIds?: string[] }
 
@@ -74,9 +74,12 @@ export function VisualizationDialog(props: Props) {
     const timer = setTimeout(async () => {
       setRendering(true)
       try {
+        // Pack at a reduced width but scale proportionally so the preview reads
+        // like the full-resolution export, just smaller.
         const previewConfig: VizConfig = {
           ...config,
           outputWidth: PREVIEW_RENDER_WIDTH,
+          scale: config.scale * (PREVIEW_RENDER_WIDTH / Math.max(1, config.outputWidth)),
           limit: config.limit > 0 ? Math.min(config.limit, PREVIEW_MAX_ITEMS) : PREVIEW_MAX_ITEMS,
         }
         const { detections, scopeLabel } = buildVizDetections(previewConfig)
@@ -246,7 +249,7 @@ export function VisualizationDialog(props: Props) {
                 onChange={(v) => update({ onePerCluster: v })} />
               <SwitchRow label='Exclude unclustered / noise' checked={config.excludeNoise}
                 onChange={(v) => update({ excludeNoise: v })} />
-              <NumberRow label='Limit (0 = all)' value={config.limit} min={0} step={100}
+              <NumberRow label='Limit (0 = all)' value={config.limit} min={0}
                 onChange={(v) => update({ limit: v })} />
             </div>
           </Section>
@@ -273,10 +276,10 @@ export function VisualizationDialog(props: Props) {
           {/* Canvas */}
           <Section label='Canvas'>
             <div className='space-y-10'>
-              <NumberRow label='Width (px)' value={config.outputWidth} min={200} step={100}
+              <NumberRow label='Width (px)' value={config.outputWidth} min={200}
                 onChange={(v) => update({ outputWidth: v })} />
-              <div className='flex items-center justify-between gap-8'>
-                <span className='text-13 text-ink-secondary'>Background</span>
+              <div className='flex items-center gap-12'>
+                <span className='text-13 text-ink-secondary w-[120px] shrink-0'>Background</span>
                 <div className='flex items-center gap-8'>
                   <SegmentedControl value={config.background}
                     options={[{ value: 'transparent', label: 'None' }, { value: 'black', label: 'Black' }, { value: 'white', label: 'White' }, { value: 'custom', label: 'Custom' }]}
@@ -337,8 +340,8 @@ function SegmentedControl(props: { value: string; options: { value: string; labe
 
 function SwitchRow(props: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className='flex items-center justify-between gap-8 cursor-pointer'>
-      <span className='text-13 text-ink-secondary'>{props.label}</span>
+    <label className='flex items-center gap-12 cursor-pointer'>
+      <span className='text-13 text-ink-secondary w-[240px] shrink-0'>{props.label}</span>
       <Switch checked={props.checked} onCheckedChange={props.onChange} />
     </label>
   )
@@ -346,25 +349,32 @@ function SwitchRow(props: { label: string; checked: boolean; onChange: (v: boole
 
 function SliderRow(props: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
   return (
-    <label className='flex items-center justify-between gap-8'>
-      <span className='text-13 text-ink-secondary'>{props.label}</span>
-      <div className='flex items-center gap-8'>
-        <input type='range' min={props.min} max={props.max} step={props.step} value={props.value}
-          onChange={(e) => props.onChange(Number(e.target.value))} className='w-[120px] accent-blue-600' />
-        <span className='text-12 tabular-nums w-32 text-right text-ink-primary'>{props.value}</span>
-      </div>
-    </label>
+    <div className='flex items-center gap-12'>
+      <span className='text-13 text-ink-secondary w-[120px] shrink-0'>{props.label}</span>
+      <input type='range' min={props.min} max={props.max} step={props.step} value={props.value}
+        onChange={(e) => props.onChange(Number(e.target.value))} className='flex-1 max-w-[220px] accent-blue-600' />
+      <span className='text-12 tabular-nums w-32 text-right text-ink-primary'>{props.value}</span>
+    </div>
   )
 }
 
-function NumberRow(props: { label: string; value: number; min: number; step: number; onChange: (v: number) => void }) {
+/** Free-typing number field that commits on blur / Enter (not on every keystroke). */
+function NumberRow(props: { label: string; value: number; min: number; onChange: (v: number) => void }) {
+  const [text, setText] = useState(String(props.value))
+  useEffect(() => { setText(String(props.value)) }, [props.value])
+  const commit = () => {
+    const n = Number(text)
+    props.onChange(Number.isFinite(n) ? Math.max(props.min, Math.round(n)) : props.value)
+  }
   return (
-    <label className='flex items-center justify-between gap-8'>
-      <span className='text-13 text-ink-secondary'>{props.label}</span>
-      <input type='number' min={props.min} step={props.step} value={props.value}
-        onChange={(e) => props.onChange(Math.max(props.min, Number(e.target.value) || 0))}
-        className='w-[100px] rounded border border-neutral-300 dark:border-neutral-600 px-8 py-4 text-13 bg-background' />
-    </label>
+    <div className='flex items-center gap-12'>
+      <span className='text-13 text-ink-secondary w-[120px] shrink-0'>{props.label}</span>
+      <input type='text' inputMode='numeric' value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur() } }}
+        className='w-[110px] rounded border border-neutral-300 dark:border-neutral-600 px-8 py-4 text-13 bg-background' />
+    </div>
   )
 }
 
