@@ -17,6 +17,7 @@ export type VizConfig = {
   taxaFilter: string[]
   onePerCluster: boolean
   excludeNoise: boolean
+  includeErrors: boolean // normally off — exclude Error-marked detections
   limit: number // 0 = all
 
   // patch images
@@ -44,6 +45,7 @@ export function defaultVizConfig(leafGroupIds: string[], hasSelection: boolean):
     taxaFilter: [],
     onePerCluster: false,
     excludeNoise: false,
+    includeErrors: false,
     limit: 0, // all
     preferNobg: true,
     requireNobg: false,

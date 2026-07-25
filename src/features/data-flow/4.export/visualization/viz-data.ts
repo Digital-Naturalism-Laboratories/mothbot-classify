@@ -49,7 +49,8 @@ function resolveScopeDetections(config: VizConfig): DetectionEntity[] {
 }
 
 export function buildVizDetections(config: VizConfig): VizDetectionSet {
-  let dets = resolveScopeDetections(config).filter((d) => !d.isError)
+  let dets = resolveScopeDetections(config)
+  if (!config.includeErrors) dets = dets.filter((d) => !d.isError)
   const totalInScope = dets.length
 
   if (config.taxaFilter.length > 0) {
@@ -136,7 +137,7 @@ function scopeLabelFor(config: VizConfig, count: number): string {
 export function getAvailableTaxaKeysForConfig(config: VizConfig): string[] {
   const keys = new Set<string>()
   for (const det of resolveScopeDetections(config)) {
-    if (det.isError) continue
+    if (!config.includeErrors && det.isError) continue
     const key = getGroupKey(det, 'taxa', config.taxaRank)
     if (key && key !== 'Unknown') keys.add(key)
   }
