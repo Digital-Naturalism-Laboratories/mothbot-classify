@@ -10,7 +10,9 @@ import {
   useOpenDirectoryMutation,
   useRestoreDirectoryQuery,
   useScanDatasetsFolderMutation,
+  useAppLoading,
 } from '~/features/data-flow/1.ingest/files-queries'
+import { cancelDatasetAutoLoad } from '~/features/data-flow/1.ingest/dataset-auto-load'
 import { isDirectoryPickerAvailable, pickDirectoryHandle } from '~/features/data-flow/1.ingest/directory-picker'
 import { datasetsWorkspaceStore } from '~/stores/datasets-workspace'
 import { Loader } from '~/components/atomic/Loader'
@@ -89,11 +91,16 @@ export function Nav() {
 
   const isOpening = useIsMutating({ mutationKey: ['fs', 'open'] }) > 0
   const isScanningDatasets = useIsMutating({ mutationKey: ['fs', 'scan-datasets'] }) > 0
+  const { isWarmingDataset } = useAppLoading()
   const folderStatus = getFolderStatusMessage({
     restoring: restoreQuery.isLoading,
     scanning: isScanningDatasets,
     opening: isOpening,
   })
+  // Show a stop control whenever the previous dataset is auto-loading, including
+  // the background warm phase (not covered by getFolderStatusMessage).
+  const loadingDatasetMessage = folderStatus ?? (isWarmingDataset ? '🌀 Opening previous dataset…' : null)
+  const canStopAutoLoad = restoreQuery.isLoading || isWarmingDataset
 
   return (
     <header className='border-b bg-white'>
@@ -136,10 +143,19 @@ export function Nav() {
           ) : null}
         </div>
 
-        {folderStatus ? (
+        {loadingDatasetMessage ? (
           <div className='flex min-w-0 items-center gap-8 text-12 text-neutral-600' aria-live='polite' aria-busy>
             <Loader size={14} className='inline-block shrink-0' />
-            <span className='truncate whitespace-nowrap'>{folderStatus}</span>
+            <span className='truncate whitespace-nowrap'>{loadingDatasetMessage}</span>
+            {canStopAutoLoad ? (
+              <button
+                className='shrink-0 rounded border border-red-300 px-6 py-2 text-11 font-medium text-red-600 hover:bg-red-50'
+                onClick={() => cancelDatasetAutoLoad()}
+                title="Stop loading and don't auto-open this dataset next time"
+              >
+                Stop
+              </button>
+            ) : null}
           </div>
         ) : null}
         <SpeciesPicker />

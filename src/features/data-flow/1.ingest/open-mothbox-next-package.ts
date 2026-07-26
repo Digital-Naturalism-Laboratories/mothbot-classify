@@ -13,8 +13,10 @@ import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/pack
 import { tryRestorePackageFromSessionCache } from '~/features/data-flow/3.persist/restore-package-session-cache'
 import { savePackageSessionCacheFromStores } from '~/features/data-flow/3.persist/save-package-session-cache'
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
+import { cancelDatasetAutoLoad, OPEN_PACKAGE_TOAST_ID } from './dataset-auto-load'
 
-const OPEN_PACKAGE_TOAST_ID = 'open-mothbox-next-package'
+/** Cancel button attached to the "Opening dataset…" toast. */
+const CANCEL_LOAD_ACTION = { label: 'Cancel', onClick: () => cancelDatasetAutoLoad() }
 
 export type OpenPackageResult =
   | { ok: true; fromCache?: boolean }
@@ -43,6 +45,8 @@ export async function openMothboxNextPackageFromHandle(
   toast.loading('Opening dataset…', {
     id: OPEN_PACKAGE_TOAST_ID,
     description: `Reading ${folderName} from disk.`,
+    duration: Infinity,
+    action: CANCEL_LOAD_ACTION,
   })
 
   try {
@@ -113,6 +117,8 @@ export async function openMothboxNextPackageFromHandle(
     toast.loading('Opening dataset…', {
       id: OPEN_PACKAGE_TOAST_ID,
       description: `Loading ${normalizedIndexed.length.toLocaleString()} file${normalizedIndexed.length === 1 ? '' : 's'}…`,
+      duration: Infinity,
+      action: CANCEL_LOAD_ACTION,
     })
 
     const hydrated = await hydrateIndexedForIngest(normalizedIndexed)

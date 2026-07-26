@@ -72,6 +72,35 @@ export function clearLastActiveDatasetFolderName() {
   writeLocalStorage(LAST_ACTIVE_DATASET_FOLDER_NAME_KEY, '')
 }
 
+const AUTO_LOAD_DISABLED_KEY = 'mbl/autoLoadDisabled'
+
+/** When set, startup skips auto-opening the previous dataset (user cancelled a
+ * stuck/too-big load). Cleared when the user manually opens any dataset. */
+export function isDatasetAutoLoadDisabled(): boolean {
+  return readLocalStorage(AUTO_LOAD_DISABLED_KEY) === '1'
+}
+
+export function setDatasetAutoLoadDisabled(disabled: boolean) {
+  writeLocalStorage(AUTO_LOAD_DISABLED_KEY, disabled ? '1' : '')
+}
+
+const AUTO_LOAD_IN_FLIGHT_KEY = 'mbl/autoLoadInFlight'
+
+/** Name of the dataset whose startup auto-load began but has not finished. A
+ * leftover value on the next launch means the previous load froze/crashed/OOM'd
+ * — the crash-loop guard uses this to skip re-opening it. */
+export function getDatasetAutoLoadInFlight(): string | null {
+  return readLocalStorage(AUTO_LOAD_IN_FLIGHT_KEY) || null
+}
+
+export function setDatasetAutoLoadInFlight(folderName: string) {
+  writeLocalStorage(AUTO_LOAD_IN_FLIGHT_KEY, folderName)
+}
+
+export function clearDatasetAutoLoadInFlight() {
+  writeLocalStorage(AUTO_LOAD_IN_FLIGHT_KEY, '')
+}
+
 function readLocalStorage(key: string) {
   try {
     return localStorage.getItem(key)?.trim() ?? ''

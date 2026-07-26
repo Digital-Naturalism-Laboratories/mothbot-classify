@@ -1,7 +1,7 @@
 import { useIsMutating, useMutation, useQuery } from '@tanstack/react-query'
 import { useStore } from '@nanostores/react'
 import { appReadyStore, userSessionLoadedStore } from '~/stores/ui'
-import { loadDatasetsDirectory } from '~/features/data-flow/3.persist/files.persistence'
+import { clearDatasetAutoLoadInFlight, loadDatasetsDirectory, setDatasetAutoLoadDisabled } from '~/features/data-flow/3.persist/files.persistence'
 import { openDirectory, tryRestoreLegacyPickedDirectory } from './files.service'
 import { setupDatasetsFolder } from './choose-datasets-folder'
 import { hydrateDatasetsWorkspaceFromDisk, scanDatasetsRegistry } from './datasets-workspace-setup'
@@ -77,7 +77,11 @@ export function useSetupDatasetsFolderMutation() {
 export function useOpenDatasetMutation() {
   return useMutation({
     mutationKey: ['fs', 'open-dataset'],
-    mutationFn: async (params: { folderName: string }) => openDatasetByFolderName(params),
+    mutationFn: async (params: { folderName: string }) => {
+      setDatasetAutoLoadDisabled(false) // manual open re-enables startup auto-open
+      clearDatasetAutoLoadInFlight() // and clears any stale crash-guard marker
+      return openDatasetByFolderName(params)
+    },
     retry: false,
   })
 }
@@ -100,20 +104,26 @@ export function useScanDatasetsFolderMutation() {
 
 function useFilesystemActivity() {
   const restoreQuery = useRestoreDirectoryQuery()
-  useWarmDefaultDatasetQuery()
+  const warmQuery = useWarmDefaultDatasetQuery()
   const isOpening = useIsMutating({ mutationKey: ['fs', 'open'] }) > 0
   const isChoosingDatasets = useIsMutating({ mutationKey: ['fs', 'choose-datasets'] }) > 0
   const isOpeningDataset = useIsMutating({ mutationKey: ['fs', 'open-dataset'] }) > 0
   const isScanningDatasets = useIsMutating({ mutationKey: ['fs', 'scan-datasets'] }) > 0
   const sessionLoaded = useStore(userSessionLoadedStore)
+  const isWarmingDataset = warmQuery.isFetching
 
   const isBlockingLoading = !sessionLoaded || restoreQuery.isLoading || isOpening || isChoosingDatasets
 
   const isLoading = isBlockingLoading || isOpeningDataset || isScanningDatasets
 
+  // A startup auto-open of the previous dataset is in progress (or about to be).
+  const isAutoLoadingDataset = restoreQuery.isLoading || isWarmingDataset || isOpeningDataset
+
   return {
     isLoading,
     isBlockingLoading,
+    isAutoLoadingDataset,
+    isWarmingDataset,
     sessionLoaded,
     isOpening,
     isChoosingDatasets,
