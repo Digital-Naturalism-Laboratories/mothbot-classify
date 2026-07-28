@@ -60,8 +60,15 @@ export function buildVizDetections(config: VizConfig): VizDetectionSet {
   if (config.excludeNoise) dets = dets.filter((d) => !isNoise(d))
   if (config.onePerCluster) dets = pickRepresentatives(dets)
 
+  // Cap to the most prominent items *independent of the display sort*. Applying
+  // the limit after a taxon/cluster sort would keep only the alphabetically- or
+  // id-first groups and silently drop the rest (e.g. the large green geometrids);
+  // selecting the largest N first keeps the same visible set for every sort, and
+  // the display sort then only arranges them.
+  if (config.limit > 0 && dets.length > config.limit) {
+    dets = [...dets].sort((a, b) => detSize(b) - detSize(a)).slice(0, config.limit)
+  }
   dets = sortDetections(dets, config)
-  if (config.limit > 0) dets = dets.slice(0, config.limit)
 
   return { detections: dets, totalInScope, scopeLabel: scopeLabelFor(config, totalInScope) }
 }

@@ -67,11 +67,16 @@ export function VisualizationDialog(props: Props) {
 
   const availableTaxa = useAvailableTaxaKeys(config)
 
-  // Debounced preview render.
+  // Debounced preview render. Runs whenever the dialog is open and the config /
+  // mask changes — including the first open. The canvas-ref check lives inside
+  // the timer so a not-yet-mounted ref (Radix portals the content in) doesn't
+  // skip the initial render.
   useEffect(() => {
-    if (!open || !canvasRef.current) return
+    if (!open) return
     let cancelled = false
     const timer = setTimeout(async () => {
+      const target = canvasRef.current
+      if (!target || cancelled) return
       setRendering(true)
       try {
         // Pack at a reduced width but scale proportionally so the preview reads
@@ -87,10 +92,10 @@ export function VisualizationDialog(props: Props) {
           preferNobg: config.preferNobg, requireNobg: config.requireNobg,
         })
         if (cancelled) { for (const b of images.values()) b.close(); return }
-        const { canvas, stats } = await renderMosaicFromDetections(detections, previewConfig, images, baseMask)
+        const { canvas: mosaic, stats } = await renderMosaicFromDetections(detections, previewConfig, images, baseMask)
         for (const b of images.values()) b.close()
         if (cancelled) return
-        drawMosaicToPreview(canvasRef.current!, canvas, resolveBackground(config))
+        drawMosaicToPreview(target, mosaic, resolveBackground(config))
         setStatus(`${scopeLabel} · placed ${stats.placed}/${detections.length}` +
           (stats.filtered ? ` · filtered ${stats.filtered}` : '') +
           (config.limit > 0 && detections.length >= PREVIEW_MAX_ITEMS ? ' · preview capped' : ''))
