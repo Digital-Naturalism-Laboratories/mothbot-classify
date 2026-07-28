@@ -236,20 +236,22 @@ export function updateDetectionAsMorphospecies(params: UpdateDetectionAsMorphosp
 
 export type UpdateDetectionAsErrorParams = {
   existing: DetectionEntity
+  /** Optional error sub-category label, e.g. "ERROR_Frass". */
+  label?: string
   speciesListId?: string
   speciesListDOI?: string
 }
 
 /**
- * Marks a detection as an error.
+ * Marks a detection as an error (optionally with a sub-category label).
  * Delegates to identifyDetection() for the actual logic.
  */
 export function updateDetectionAsError(params: UpdateDetectionAsErrorParams): DetectionEntity {
-  const { existing, speciesListId, speciesListDOI } = params
+  const { existing, label, speciesListId, speciesListDOI } = params
 
   const result = identifyDetection({
     detection: existing,
-    input: { type: 'error' },
+    input: { type: 'error', label },
     context: { speciesListId, speciesListDOI },
   })
 

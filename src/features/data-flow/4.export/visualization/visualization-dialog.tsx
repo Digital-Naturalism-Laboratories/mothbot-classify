@@ -164,7 +164,7 @@ export function VisualizationDialog(props: Props) {
   const nobgMode: NobgMode = config.requireNobg ? 'only' : config.preferNobg ? 'prefer' : 'jpg'
 
   return (
-    <Dialog open={open}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent align='vhSide' onClose={onClose} className='flex flex-col'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-8'>

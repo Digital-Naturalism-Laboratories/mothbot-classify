@@ -314,6 +314,12 @@ export function NightView(props: { leafGroupId: string }) {
     clearPatchSelection()
   }
 
+  function onMarkError() {
+    if (selectedDetectionIds.length === 0) return
+    labelDetections({ detectionIds: selectedDetectionIds, label: 'ERROR' })
+    clearPatchSelection()
+  }
+
   function onSubmitLabel(label: string, taxon?: any) {
     if (!label) return
     if (selectedDetectionIds.length === 0) return
@@ -520,6 +526,7 @@ export function NightView(props: { leafGroupId: string }) {
           selectedCount={selectedCount}
           onIdentify={onIdentify}
           onAccept={onAccept}
+          onMarkError={onMarkError}
           onUnselect={onUnselect}
           onSelectAll={onSelectAll}
           onResetToAuto={onResetToAuto}

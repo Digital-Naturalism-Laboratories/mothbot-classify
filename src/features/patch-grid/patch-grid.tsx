@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkey } from '~/utils/use-hotkey'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '~/utils/cn'
@@ -14,7 +14,7 @@ import { PatchItem } from './patch-item'
 import { selectedPatchIdsStore, selectionLeafGroupIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
 import {
   addRowBlocks,
-  computeDetectionArea,
+  computeDetectionWidth,
   getRankValue,
   isMorphospeciesDetection,
   separateRegularAndMorphoItems,
@@ -145,11 +145,21 @@ export function PatchGrid(props: PatchGridProps) {
     return computeBlockStartOffsets({ blocks, rowHeight, gapPx })
   }, [blocks, rowHeight, gapPx])
 
-  const [scrollTop, setScrollTop] = useState(0)
+  // Track only which sticky-header block is active, and update it only when it
+  // actually changes (crossing a taxa boundary) rather than on every scroll
+  // frame — the old per-frame setState re-rendered the whole grid and caused the
+  // scroll jank when several taxa were on screen at once.
+  const [activeHeaderBlockIndex, setActiveHeaderBlockIndex] = useState<number>(-1)
 
-  const activeHeaderBlockIndex = useMemo(() => {
-    return findActiveHeaderBlockIndex({ blocks, blockStartOffsets, scrollTop })
-  }, [blocks, blockStartOffsets, scrollTop])
+  const updateActiveHeader = useCallback((top: number) => {
+    const idx = findActiveHeaderBlockIndex({ blocks, blockStartOffsets, scrollTop: top })
+    setActiveHeaderBlockIndex((prev) => (prev === idx ? prev : idx))
+  }, [blocks, blockStartOffsets])
+
+  // Recompute from the live scroll position when the layout (blocks/offsets) changes.
+  useEffect(() => {
+    updateActiveHeader(containerRef.current?.scrollTop ?? 0)
+  }, [updateActiveHeader])
 
   const activeHeaderBlock =
     activeHeaderBlockIndex >= 0 && blocks[activeHeaderBlockIndex]?.kind === 'header'
@@ -196,7 +206,7 @@ export function PatchGrid(props: PatchGridProps) {
 
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
-    setScrollTop(0)
+    setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
   }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
@@ -204,7 +214,7 @@ export function PatchGrid(props: PatchGridProps) {
   useEffect(() => {
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
-    setScrollTop(0)
+    setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
   }, [desiredColumns, rowVirtualizer, columns, rowHeight])
@@ -218,6 +228,8 @@ export function PatchGrid(props: PatchGridProps) {
 
   const [loadedCount, setLoadedCount] = useState<number>(0)
   const totalCount = patches?.length || 0
+  // Stable callback so memoized PatchItems don't re-render on every grid update.
+  const bumpLoaded = useCallback(() => setLoadedCount((c) => c + 1), [])
   useEffect(() => {
     setLoadedCount(0)
   }, [leafGroupId, patches])
@@ -386,7 +398,7 @@ export function PatchGrid(props: PatchGridProps) {
         onMouseDown={onMouseDownContainer}
         onMouseMove={onMouseMoveContainer}
         onMouseLeave={onMouseLeaveContainer}
-        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        onScroll={(e) => updateActiveHeader(e.currentTarget.scrollTop)}
       >
       <div style={{ height: rowVirtualizer.getTotalSize() + 88, width: '100%', position: 'relative' }}>
         {!orderedIds.length ? <div className='p-8 text-sm text-neutral-500'>No patches found</div> : null}
@@ -414,8 +426,8 @@ export function PatchGrid(props: PatchGridProps) {
                   itemWidth={itemWidth}
                   itemIndexById={visualIndexById}
                   onOpenPatchDetail={onOpenPatchDetail}
-                  onImageLoad={() => setLoadedCount((c) => c + 1)}
-                  onImageError={() => setLoadedCount((c) => c + 1)}
+                  onImageLoad={bumpLoaded}
+                  onImageError={bumpLoaded}
                   patchClusterMeta={patchClusterMeta}
                   onClusterCollapseToggle={onClusterCollapseToggle}
                 />
@@ -727,8 +739,9 @@ function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<stri
   const withSortKey = patches.map((p) => {
     const det = detections?.[p.id]
     const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any)?.clusterId : undefined
-    const area = computeDetectionArea({ detection: det })
-    return { id: p.id, name: p.name, clusterId, area }
+    // Width (not area) so unclustered patches of a similar shape sit together.
+    const width = computeDetectionWidth({ detection: det })
+    return { id: p.id, name: p.name, clusterId, width }
   })
   withSortKey.sort((a, b) => {
     const aClusterId = a.clusterId
@@ -743,14 +756,14 @@ function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<stri
     if (aIsValid && bClusterId === undefined) return -1
     if (aIsUnclustered && bIsValid) return 1
     if (aIsUnclustered && bIsUnclustered) {
-      if (b.area !== a.area) return b.area - a.area
+      if (b.width !== a.width) return b.width - a.width
       return (a?.name || '').localeCompare(b?.name || '')
     }
     if (aIsUnclustered && bClusterId === undefined) return -1
     if (aClusterId === undefined && bIsValid) return 1
     if (aClusterId === undefined && bIsUnclustered) return 1
     if (aClusterId === undefined && bClusterId === undefined) {
-      if (b.area !== a.area) return b.area - a.area
+      if (b.width !== a.width) return b.width - a.width
       return (a?.name || '').localeCompare(b?.name || '')
     }
     return 0

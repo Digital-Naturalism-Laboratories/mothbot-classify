@@ -27,6 +27,13 @@ export function computeDetectionLongestDimension(params: { detection?: Detection
   return longestDimension
 }
 
+/** Bounding-box width — matches the displayed patch width, used to order
+ * unclustered patches so similarly-shaped ones sit next to each other. */
+export function computeDetectionWidth(params: { detection?: DetectionEntity }) {
+  const bounds = computeDetectionBounds({ detection: params.detection })
+  return bounds ? bounds.width : 0
+}
+
 function computeDetectionBounds(params: { detection?: DetectionEntity }) {
   const { detection } = params
   const points = detection?.points

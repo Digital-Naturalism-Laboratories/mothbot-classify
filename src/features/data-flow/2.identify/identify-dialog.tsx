@@ -18,6 +18,13 @@ import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { detectMissingRanks } from '~/models/taxonomy/rank'
 import { TaxonomyGapFillDialogContent } from './taxonomy-gap-fill-dialog'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
+import { matchDefaultTaxa } from './default-taxa'
+import {
+  STANDARD_ERROR_REASONS,
+  addCustomErrorReason,
+  customErrorReasonsStore,
+  errorLabelForReason,
+} from './error-categories'
 
 const MAX_SPECIES_UI_RESULTS = 50
 
@@ -36,6 +43,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   const [query, setQuery] = useState('')
   const selection = useStore(projectSpeciesSelectionStore)
   const detections = useStore(detectionsStore)
+  const customErrorReasons = useStore(customErrorReasonsStore)
   const leafGroups = useStore(leafGroupsStore)
   const isSpeciesLoading = useStore(speciesListsLoadingStore)
   const listRef = useRef<HTMLDivElement>(null)
@@ -93,6 +101,25 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   const morphoOptionsLimited = useMemo(() => {
     return limitOptions(morphoOptions || [])
   }, [morphoOptions])
+
+  const standardTaxaMatches = useMemo(() => matchDefaultTaxa(query), [query])
+
+  const errorReasons = useMemo(() => [...STANDARD_ERROR_REASONS, ...customErrorReasons], [customErrorReasons])
+
+  const errorUi = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    // "error frass" / "err blur" lets the user name a (possibly new) sub-category.
+    const prefixMatch = /^err(?:or)?\s+(.+)$/i.exec(query.trim())
+    const typedReason = prefixMatch ? prefixMatch[1]!.trim() : ''
+    const novelReason =
+      typedReason && !errorReasons.some((r) => r.toLowerCase() === typedReason.toLowerCase()) ? typedReason : ''
+    const isErrPrefix = q.startsWith('err')
+    const reasonMatches = errorReasons.filter((r) => isErrPrefix || r.toLowerCase().includes(q))
+    // Shown only for error-related queries — the empty state stays taxon-focused,
+    // and generic errors have the E hotkey.
+    const show = q !== '' && (isErrPrefix || reasonMatches.length > 0 || !!novelReason)
+    return { show, reasonMatches, novelReason }
+  }, [query, errorReasons])
 
   function submitSelection(label: string, taxon?: TaxonRecord) {
     const value = (label ?? '').trim()
@@ -271,14 +298,47 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
           <CommandList ref={listRef}>
             <CommandEmpty>No matches. Press Enter to use your text.</CommandEmpty>
 
-            {query.trim().toUpperCase() === 'ERROR' ? (
-              <CommandGroup heading='Actions'>
-                <CommandItem onSelect={() => submitSelection('ERROR')}>
+            {errorUi.show ? (
+              <CommandGroup heading='Errors'>
+                <CommandItem key='error-generic' onSelect={() => submitSelection('ERROR')}>
                   <div className='flex items-center justify-between w-full'>
-                    <span className='text-13 text-red-700'>ERROR</span>
-                    <span className='text-11 text-neutral-500'>Mark as error</span>
+                    <span className='text-13 text-red-700'>Error</span>
+                    <span className='text-11 text-neutral-500'>generic · hotkey E</span>
                   </div>
                 </CommandItem>
+                {errorUi.reasonMatches.map((reason) => (
+                  <CommandItem key={'error-' + reason} onSelect={() => submitSelection(errorLabelForReason(reason))}>
+                    <div className='flex items-center justify-between w-full'>
+                      <span className='text-13 text-red-700'>Error: {reason}</span>
+                      <span className='text-11 text-neutral-500'>{errorLabelForReason(reason)}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+                {errorUi.novelReason ? (
+                  <CommandItem
+                    key='error-new'
+                    onSelect={() => {
+                      addCustomErrorReason(errorUi.novelReason)
+                      submitSelection(errorLabelForReason(errorUi.novelReason))
+                    }}
+                  >
+                    <span className='text-13 text-red-700'>Add error type: “{errorUi.novelReason}”</span>
+                  </CommandItem>
+                ) : null}
+              </CommandGroup>
+            ) : null}
+
+            {standardTaxaMatches.length > 0 ? (
+              <CommandGroup heading='Standard taxa'>
+                {standardTaxaMatches.map((t) => (
+                  <SpeciesOptionRow
+                    key={'std:' + t.scientificName}
+                    label={getDisplayLabelForTaxon(t)}
+                    taxon={t}
+                    onSelect={() => handleSelectTaxon(t)}
+                    itemClassName='row gap-x-8 !py-8'
+                  />
+                ))}
               </CommandGroup>
             ) : null}
 

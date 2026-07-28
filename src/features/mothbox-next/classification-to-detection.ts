@@ -1,6 +1,12 @@
 import type { DetectionEntity } from '~/models/detection.types'
 import type { ClassificationRecord } from './records'
 
+/** Keep an error sub-category label ("ERROR_Frass") intact; otherwise "ERROR". */
+function preserveErrorLabel(label?: string | null): string {
+  const l = (label ?? '').trim()
+  return /^ERROR[_:]/i.test(l) ? l : 'ERROR'
+}
+
 export function detectionFromClassification(params: {
   row: ClassificationRecord
   leafGroupId: string
@@ -15,7 +21,7 @@ export function detectionFromClassification(params: {
     patchId,
     photoId,
     leafGroupId,
-    label: isError ? 'ERROR' : row.label ?? row.taxon?.scientificName ?? undefined,
+    label: isError ? preserveErrorLabel(row.label) : row.label ?? row.taxon?.scientificName ?? undefined,
     taxon: isError ? undefined : row.taxon ?? undefined,
     detectedBy: row.classifier_type === 'bot' ? 'auto' : 'user',
     identifiedAt: typeof row.classified_at === 'number' ? row.classified_at : undefined,
@@ -45,7 +51,7 @@ export function classificationFromDetection(params: {
       classifier_id: classifierId,
       classifier_type: classifierType,
       classification_type: 'error',
-      label: 'ERROR',
+      label: preserveErrorLabel(detection.label),
       taxon: null,
       morphospecies: null,
       is_error: true,

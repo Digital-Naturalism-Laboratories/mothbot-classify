@@ -22,7 +22,7 @@ import { computeFinalLabel } from '~/models/taxonomy/label'
 export type IdentificationInput =
   | { type: 'taxon'; taxon: TaxonRecord; label?: string }
   | { type: 'morphospecies'; text: string; taxon?: TaxonRecord }
-  | { type: 'error' }
+  | { type: 'error'; label?: string } // label carries a sub-category, e.g. "ERROR_Frass"
   | { type: 'accept' }
 
 export type IdentificationContext = {
@@ -50,7 +50,7 @@ export function identifyDetection(params: {
 }): IdentificationResult {
   const { detection, input, context } = params
 
-  if (input.type === 'error') return handleErrorIdentification({ detection, context })
+  if (input.type === 'error') return handleErrorIdentification({ detection, context, label: input.label })
   if (input.type === 'accept') return handleAcceptIdentification({ detection, context })
   if (input.type === 'morphospecies') {
     return handleMorphospeciesIdentification({
@@ -65,12 +65,15 @@ export function identifyDetection(params: {
   return { detection, changed: false, skipped: true, skipReason: 'Unknown input type' }
 }
 
-function handleErrorIdentification(params: { detection: DetectionEntity; context?: IdentificationContext }): IdentificationResult {
-  const { detection, context } = params
+function handleErrorIdentification(params: { detection: DetectionEntity; context?: IdentificationContext; label?: string }): IdentificationResult {
+  const { detection, context, label } = params
+  // A sub-category label like "ERROR_Frass" is kept as-is; anything else is a
+  // generic error.
+  const errorLabel = label && /^ERROR[_:]/i.test(label.trim()) ? label.trim() : 'ERROR'
 
   const next: DetectionEntity = {
     ...detection,
-    label: 'ERROR',
+    label: errorLabel,
     detectedBy: 'user',
     identifiedAt: Date.now(),
     classificationType: 'error',

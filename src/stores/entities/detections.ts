@@ -88,7 +88,9 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
   if (!Array.isArray(detectionIds) || detectionIds.length === 0) return
 
   const hasTaxon = hasTaxonFields(taxon)
-  const isError = !hasTaxon && trimmed.toUpperCase() === 'ERROR'
+  // Generic "ERROR" or a sub-category like "ERROR_Frass" / "ERROR: Blur".
+  const upperLabel = trimmed.toUpperCase()
+  const isError = !hasTaxon && (upperLabel === 'ERROR' || upperLabel.startsWith('ERROR_') || upperLabel.startsWith('ERROR:'))
 
   if (!hasTaxon && !trimmed && !isError) return
 
@@ -105,7 +107,7 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
 
     if (isError) {
       updated[id] = withHumanClassifier({
-        detection: updateDetectionAsError({ existing, ...context }),
+        detection: updateDetectionAsError({ existing, label: trimmed, ...context }),
         humanClassifierId,
       })
       continue

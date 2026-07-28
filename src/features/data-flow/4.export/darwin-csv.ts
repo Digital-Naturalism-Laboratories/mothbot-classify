@@ -301,7 +301,9 @@ export function buildDarwinShapeFromDetection(params: {
         morphospecies: detection?.morphospecies,
         label: detection?.label,
       })
-  const name = isError ? 'ERROR' : deriveTaxonNameFromDetection({ detection })
+  // Keep the error sub-category (e.g. "ERROR_Frass") in the exported name.
+  const errorName = /^ERROR[_:]/i.test((detection?.label ?? '').trim()) ? detection!.label!.trim() : 'ERROR'
+  const name = isError ? errorName : deriveTaxonNameFromDetection({ detection })
 
   const nightParts = parseNightIdParts({ leafGroupId })
   const datasetID = nightParts ? `${nightParts.project}_${nightParts.deployment}_${nightParts.night}` : leafGroupId.replaceAll('/', '_')
