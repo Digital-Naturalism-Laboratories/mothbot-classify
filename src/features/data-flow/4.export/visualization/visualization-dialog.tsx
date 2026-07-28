@@ -20,8 +20,8 @@ import type {
   VizBackground, VizConfig, VizLayout, VizScope, VizSortMode, VizTaxaRank,
 } from './viz-types'
 
-const PREVIEW_WIDTH = 760
-const PREVIEW_HEIGHT = 507
+const PREVIEW_WIDTH = 1000
+const PREVIEW_HEIGHT = 667
 const PREVIEW_RENDER_WIDTH = 1100 // pack at a reduced width for a responsive preview
 const PREVIEW_MAX_ITEMS = 1500
 
@@ -155,7 +155,9 @@ export function VisualizationDialog(props: Props) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className='flex flex-col gap-16 flex-1 overflow-y-auto'>
+        <div className='flex flex-row gap-20 flex-1 overflow-hidden'>
+          {/* Left: controls (scroll independently of the preview) */}
+          <div className='flex flex-col gap-16 w-[420px] shrink-0 overflow-y-auto pr-8'>
           {/* Scope */}
           <Section label='Visualize'>
             <SegmentedControl
@@ -295,13 +297,17 @@ export function VisualizationDialog(props: Props) {
             </div>
           </Section>
 
-          {/* Preview */}
-          <Section label={rendering ? 'Preview (rendering…)' : `Preview — ${status || 'ready'}`}>
-            <div className='relative w-full rounded overflow-hidden' style={{ aspectRatio: `${PREVIEW_WIDTH}/${PREVIEW_HEIGHT}` }}>
-              <canvas ref={canvasRef} width={PREVIEW_WIDTH} height={PREVIEW_HEIGHT} className='w-full h-full' />
-              {rendering && <div className='absolute inset-0 flex items-center justify-center bg-black/40 text-white text-13'>Rendering…</div>}
-            </div>
-          </Section>
+          </div>
+
+          {/* Right: live preview, pinned beside the controls */}
+          <div className='flex-1 min-w-0 overflow-y-auto'>
+            <Section label={rendering ? 'Preview (rendering…)' : `Preview — ${status || 'ready'}`}>
+              <div className='relative w-full rounded overflow-hidden' style={{ aspectRatio: `${PREVIEW_WIDTH}/${PREVIEW_HEIGHT}` }}>
+                <canvas ref={canvasRef} width={PREVIEW_WIDTH} height={PREVIEW_HEIGHT} className='w-full h-full' />
+                {rendering && <div className='absolute inset-0 flex items-center justify-center bg-black/40 text-white text-13'>Rendering…</div>}
+              </div>
+            </Section>
+          </div>
         </div>
 
         <DialogFooter className='pt-8'>
