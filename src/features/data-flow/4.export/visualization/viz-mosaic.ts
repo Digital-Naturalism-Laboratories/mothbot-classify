@@ -30,6 +30,9 @@ export type MosaicOptions = {
 export type MosaicResult = {
   canvas: OffscreenCanvas
   stats: PackStats & { filtered: number }
+  /** radial/shape: packed-disc radius (px in the mosaic canvas). 0 for bar. */
+  contentRadius: number
+  center: { x: number; y: number }
 }
 
 /** Build a tight, padding-dilated silhouette mask from one bitmap. */
@@ -205,5 +208,10 @@ export async function renderMosaic(items: MosaicItem[], opts: MosaicOptions): Pr
     ctx.drawImage(bitmaps[p.index]!, p.dx, p.dy, it.sw, it.sh)
   }
 
-  return { canvas, stats: { ...geom.stats, filtered: q.filtered } }
+  return {
+    canvas,
+    stats: { ...geom.stats, filtered: q.filtered },
+    contentRadius: geom.contentRadius,
+    center: geom.center,
+  }
 }

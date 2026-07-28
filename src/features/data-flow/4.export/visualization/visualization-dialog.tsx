@@ -87,18 +87,30 @@ export function VisualizationDialog(props: Props) {
           scale: config.scale * (PREVIEW_RENDER_WIDTH / Math.max(1, config.outputWidth)),
           limit: config.limit > 0 ? Math.min(config.limit, PREVIEW_MAX_ITEMS) : PREVIEW_MAX_ITEMS,
         }
-        const { detections, scopeLabel } = buildVizDetections(previewConfig)
+        const { detections, scopeLabel, countAll, sizeAll, sizeShown } = buildVizDetections(previewConfig)
         const { images } = await loadPatchImages(detections, {
           preferNobg: config.preferNobg, requireNobg: config.requireNobg,
         })
         if (cancelled) { for (const b of images.values()) b.close(); return }
-        const { canvas: mosaic, stats } = await renderMosaicFromDetections(detections, previewConfig, images, baseMask)
+        const { canvas: mosaic, stats, contentRadius, center } = await renderMosaicFromDetections(detections, previewConfig, images, baseMask)
         for (const b of images.values()) b.close()
         if (cancelled) return
-        drawMosaicToPreview(target, mosaic, resolveBackground(config))
+
+        // When the preview shows only a subset, estimate the full disc: area
+        // scales with total pixel-mass, so radius scales with its square root.
+        const capped = countAll > detections.length
+        const estRadius = capped && sizeShown > 0 ? contentRadius * Math.sqrt(sizeAll / sizeShown) : contentRadius
+        const overlay = config.layout === 'radial' && capped && estRadius > 0 ? { center, estRadius } : null
+        drawMosaicToPreview(target, mosaic, resolveBackground(config), overlay)
+
+        let extra = capped ? ` · showing top ${detections.length.toLocaleString()} of ${countAll.toLocaleString()}` : ''
+        if (overlay) {
+          const estD = Math.round(2 * estRadius * (config.outputWidth / mosaic.width))
+          const fits = estRadius <= mosaic.width / 2
+          extra += ` · est. full ⌀ ~${estD.toLocaleString()}px${fits ? '' : ' ⚠ exceeds width'}`
+        }
         setStatus(`${scopeLabel} · placed ${stats.placed}/${detections.length}` +
-          (stats.filtered ? ` · filtered ${stats.filtered}` : '') +
-          (config.limit > 0 && detections.length >= PREVIEW_MAX_ITEMS ? ' · preview capped' : ''))
+          (stats.filtered ? ` · filtered ${stats.filtered}` : '') + extra)
       } catch (e) {
         setStatus(`⚠️ ${(e as Error).message}`)
       } finally {

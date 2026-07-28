@@ -29,11 +29,16 @@ export async function renderMosaicFromDetections(
   })
 }
 
+/** Dashed circle showing the estimated full-export disc (radial only). Radius &
+ * center are in mosaic-canvas coordinates. */
+export type PreviewOverlay = { center: { x: number; y: number }; estRadius: number } | null
+
 /** Draw a natural-size mosaic into a fixed preview canvas (letterboxed). */
 export function drawMosaicToPreview(
   target: HTMLCanvasElement,
   mosaic: OffscreenCanvas,
   background: [number, number, number] | null,
+  overlay: PreviewOverlay = null,
 ): void {
   const ctx = target.getContext('2d')
   if (!ctx) return
@@ -48,7 +53,22 @@ export function drawMosaicToPreview(
   if (!mosaic.width || !mosaic.height) return
   const scale = Math.min(W / mosaic.width, H / mosaic.height)
   const dw = mosaic.width * scale, dh = mosaic.height * scale
-  ctx.drawImage(mosaic, (W - dw) / 2, (H - dh) / 2, dw, dh)
+  const offX = (W - dw) / 2, offY = (H - dh) / 2
+  ctx.drawImage(mosaic, offX, offY, dw, dh)
+
+  if (overlay && overlay.estRadius > 0) {
+    // Green if the projected full disc fits the export canvas, amber if it would
+    // spill past the width (i.e. scale down or widen the canvas).
+    const fits = overlay.estRadius <= mosaic.width / 2
+    ctx.save()
+    ctx.setLineDash([7, 6])
+    ctx.lineWidth = 2
+    ctx.strokeStyle = fits ? 'rgba(110,200,120,0.95)' : 'rgba(240,140,80,0.98)'
+    ctx.beginPath()
+    ctx.arc(offX + overlay.center.x * scale, offY + overlay.center.y * scale, overlay.estRadius * scale, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+  }
 }
 
 function drawChecker(ctx: CanvasRenderingContext2D, W: number, H: number): void {

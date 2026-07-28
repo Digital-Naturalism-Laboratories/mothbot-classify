@@ -52,6 +52,9 @@ export type PackGeomResult = {
   width: number
   height: number
   stats: PackStats
+  /** radial/shape: farthest silhouette extent from `center` (px). 0 for bar. */
+  contentRadius: number
+  center: { x: number; y: number }
 }
 
 // Radial/shape candidate-spiral knobs (mirror the Python tool).
@@ -137,11 +140,14 @@ function packBar(items: PreparedItem[], opts: PackGeomOptions): PackGeomResult {
   const cropTop = Math.max(0, highest)
   // Shift placements so the used region starts at y=0.
   for (const p of placements) p.dy -= cropTop
+  const finalH = Math.max(1, H - cropTop)
   return {
     placements,
     width: W,
-    height: Math.max(1, H - cropTop),
+    height: finalH,
     stats: { placed, noFit, skipped: 0, total: items.length },
+    contentRadius: 0, // not meaningful for a bar
+    center: { x: W / 2, y: finalH / 2 },
   }
 }
 
@@ -204,7 +210,22 @@ function packCanvas(items: PreparedItem[], opts: PackGeomOptions): PackGeomResul
     if (!done) noFit++
   }
 
-  return { placements, width: W, height: H, stats: { placed, noFit, skipped: 0, total: items.length } }
+  // Farthest silhouette corner from the centre → the packed disc radius.
+  let contentRadius = 0
+  for (const p of placements) {
+    const it = items[p.index]!
+    const top = p.dy + it.offR, left = p.dx + it.offC
+    for (const [yy, xx] of [[top, left], [top, left + it.mw], [top + it.mh, left], [top + it.mh, left + it.mw]] as const) {
+      const d = Math.hypot(yy - cy, xx - cx)
+      if (d > contentRadius) contentRadius = d
+    }
+  }
+
+  return {
+    placements, width: W, height: H,
+    stats: { placed, noFit, skipped: 0, total: items.length },
+    contentRadius, center: { x: cx, y: cy },
+  }
 }
 
 // ── occupancy + placement helpers ────────────────────────────────────────────

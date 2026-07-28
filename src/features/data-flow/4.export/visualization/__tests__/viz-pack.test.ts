@@ -56,6 +56,10 @@ describe('computePlacements — radial', () => {
     expect(res.width).toBe(400)
     expect(res.height).toBe(400) // radial is square
     expect(res.stats.placed).toBeGreaterThan(0)
+    expect(res.center).toEqual({ x: 200, y: 200 })
+    // Packed-disc radius is positive and within the canvas.
+    expect(res.contentRadius).toBeGreaterThan(0)
+    expect(res.contentRadius).toBeLessThanOrEqual(Math.hypot(400, 400))
     assertNoOverlap(items, res)
   })
 })

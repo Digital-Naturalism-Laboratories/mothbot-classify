@@ -12,6 +12,12 @@ export type VizDetectionSet = {
   /** Non-error detections in scope before representative/limit. */
   totalInScope: number
   scopeLabel: string
+  /** Candidate count after filters but before the display limit. */
+  countAll: number
+  /** Σ size (pixel-mass proxy) over the full pre-limit set and the shown set —
+   * used to estimate how much bigger the full export would be than the preview. */
+  sizeAll: number
+  sizeShown: number
 }
 
 /** Mothbox unclustered/noise: clusterId missing or negative. */
@@ -60,6 +66,11 @@ export function buildVizDetections(config: VizConfig): VizDetectionSet {
   if (config.excludeNoise) dets = dets.filter((d) => !isNoise(d))
   if (config.onePerCluster) dets = pickRepresentatives(dets)
 
+  // Full candidate set (after filters, before the display limit).
+  const countAll = dets.length
+  let sizeAll = 0
+  for (const d of dets) sizeAll += detSize(d)
+
   // Cap to the most prominent items *independent of the display sort*. Applying
   // the limit after a taxon/cluster sort would keep only the alphabetically- or
   // id-first groups and silently drop the rest (e.g. the large green geometrids);
@@ -70,7 +81,13 @@ export function buildVizDetections(config: VizConfig): VizDetectionSet {
   }
   dets = sortDetections(dets, config)
 
-  return { detections: dets, totalInScope, scopeLabel: scopeLabelFor(config, totalInScope) }
+  let sizeShown = 0
+  for (const d of dets) sizeShown += detSize(d)
+
+  return {
+    detections: dets, totalInScope, scopeLabel: scopeLabelFor(config, totalInScope),
+    countAll, sizeAll, sizeShown,
+  }
 }
 
 /** One detection per integer cluster (highest score); noise kept as singletons. */
