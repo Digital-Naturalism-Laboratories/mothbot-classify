@@ -52,6 +52,7 @@ export function NightView(props: { leafGroupId: string }) {
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
   const [sizeThreshold, setSizeThreshold] = useState(0)
   const [sortByClusters, setSortByClusters] = useState(false)
+  const [smallestFirst, setSmallestFirst] = useState(false)
   const [clustersCollapsed, setClustersCollapsed] = useState(false)
   const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
   const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
@@ -490,9 +491,11 @@ export function NightView(props: { leafGroupId: string }) {
         sizeThresholdMax={sizeThresholdMax}
         warnings={leafGroupWarnings}
         sortByClusters={sortByClusters}
+        smallestFirst={smallestFirst}
         clustersCollapsed={clustersCollapsed}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
+        onSmallestFirstChange={setSmallestFirst}
         onClustersCollapsedChange={(v) => { setClustersCollapsed(v); setClusterOverrides(new Set()) }}
         availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
         selectedDetectorId={selectedDetectorId}
@@ -518,6 +521,7 @@ export function NightView(props: { leafGroupId: string }) {
           selectedTaxon={selectedTaxon as any}
           selectedBucket={selectedBucket}
           sortByClusters={sortByClusters}
+          smallestFirst={smallestFirst}
           hasMachineIdentification={hasMachineIdentification}
           collapsedClusterSet={collapsedClusterSet.size > 0 ? collapsedClusterSet : undefined}
           onClusterCollapseToggle={onClusterCollapseToggle}

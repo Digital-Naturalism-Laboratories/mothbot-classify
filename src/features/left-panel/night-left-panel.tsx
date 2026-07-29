@@ -32,9 +32,11 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     sizeThreshold,
     sizeThresholdMax,
     sortByClusters,
+    smallestFirst,
     clustersCollapsed,
     onSizeThresholdChange,
     onSortByClustersChange,
+    onSmallestFirstChange,
     onClustersCollapsedChange,
     availableDetectorIds,
     selectedDetectorId,
@@ -104,6 +106,11 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
       >
         <PatchSizeControl compact />
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
+        <LabeledCheckboxControl
+          label='Smallest first'
+          checked={smallestFirst}
+          onChange={onSmallestFirstChange}
+        />
         <LabeledCheckboxControl
           label='Sort by clusters'
           checked={sortByClusters}

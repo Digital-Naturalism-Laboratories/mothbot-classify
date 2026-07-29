@@ -3,13 +3,14 @@ import { photosStore } from '~/stores/entities/photos'
 import { fsaaWriteBytes, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos } from '~/utils/paths'
+import { loadTerminalFolderPaths } from '~/features/data-flow/1.ingest/terminal-paths.storage'
 import { formatTodayYyyyMm_Dd, getProjectExportPath, sanitizeForFileName } from '../export-utils'
 import { buildVizDetections } from './viz-data'
 import { loadPatchImages } from './viz-images'
 import { renderMosaicFromDetections } from './viz-renderer'
 import type { VizConfig } from './viz-types'
 
-export type VizExportResult = { folderPath: string; filePath: string } | null
+export type VizExportResult = { folderPath: string; filePath: string; fullPath: string } | null
 
 export async function exportVisualization(
   config: VizConfig,
@@ -44,7 +45,12 @@ export async function exportVisualization(
   const fileName = buildVizFileName(config)
   await fsaaWriteBytes(root, [...pathParts, fileName], bytes)
 
-  return { folderPath, filePath: [...pathParts, fileName].join('/') }
+  const filePath = [...pathParts, fileName].join('/')
+  // Absolute path when the datasets root's disk path is known (a browser can't
+  // read it from the folder handle, but it's captured for terminal commands).
+  const diskRoot = loadTerminalFolderPaths().datasetsRootPath.trim().replace(/[/\\]+$/, '')
+  const fullPath = diskRoot ? `${diskRoot}/${filePath}` : filePath
+  return { folderPath, filePath, fullPath }
 }
 
 function resolveExportFolderPath(config: VizConfig): string {

@@ -62,6 +62,7 @@ export type PatchGridProps = {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   sortByClusters?: boolean
+  smallestFirst?: boolean
   hasMachineIdentification?: boolean
   collapsedClusterSet?: Set<number>
   onClusterCollapseToggle?: (topClusterId: number) => void
@@ -78,6 +79,7 @@ export function PatchGrid(props: PatchGridProps) {
     selectedTaxon,
     selectedBucket,
     sortByClusters = false,
+    smallestFirst = false,
     hasMachineIdentification = true,
     collapsedClusterSet,
     onClusterCollapseToggle,
@@ -95,7 +97,7 @@ export function PatchGrid(props: PatchGridProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   const detections = useStore(detectionsStore)
-  const orderedIds = useMemo(() => orderPatchIds({ patches, detections }), [patches, detections])
+  const orderedIds = useMemo(() => orderPatchIds({ patches, detections, smallestFirst }), [patches, detections, smallestFirst])
 
   const { displayIds, patchClusterMeta } = useMemo(
     () => computeDisplayIds({ orderedIds, detections, leafGroupId, collapsedClusterSet }),
@@ -190,10 +192,10 @@ export function PatchGrid(props: PatchGridProps) {
   // Preserve scroll position on minor list changes (e.g., identifying items)
   // Only reset scroll when the viewing context changes (night, bucket, or selected taxon)
   const lastContextRef = useRef<string>(
-    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`,
+    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}|${smallestFirst}`,
   )
   useEffect(() => {
-    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`
+    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}|${smallestFirst}`
     const contextChanged = currentContext !== lastContextRef.current
     lastContextRef.current = currentContext
 
@@ -209,7 +211,7 @@ export function PatchGrid(props: PatchGridProps) {
     setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
+  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters, smallestFirst])
 
   useEffect(() => {
     const el = containerRef.current
@@ -733,9 +735,11 @@ function isMorphospeciesHeader(params: { name: string; ids: string[]; rank: stri
   return morphospecies === name
 }
 
-function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity> }) {
-  const { patches, detections } = params
+function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity>; smallestFirst?: boolean }) {
+  const { patches, detections, smallestFirst = false } = params
   if (!Array.isArray(patches) || patches.length === 0) return [] as string[]
+  // Size sort direction: largest-first by default, smallest-first when toggled.
+  const bySize = (a: number, b: number) => (smallestFirst ? a - b : b - a)
   const withSortKey = patches.map((p) => {
     const det = detections?.[p.id]
     const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any)?.clusterId : undefined
@@ -756,14 +760,14 @@ function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<stri
     if (aIsValid && bClusterId === undefined) return -1
     if (aIsUnclustered && bIsValid) return 1
     if (aIsUnclustered && bIsUnclustered) {
-      if (b.width !== a.width) return b.width - a.width
+      if (b.width !== a.width) return bySize(a.width, b.width)
       return (a?.name || '').localeCompare(b?.name || '')
     }
     if (aIsUnclustered && bClusterId === undefined) return -1
     if (aClusterId === undefined && bIsValid) return 1
     if (aClusterId === undefined && bIsUnclustered) return 1
     if (aClusterId === undefined && bClusterId === undefined) {
-      if (b.width !== a.width) return b.width - a.width
+      if (b.width !== a.width) return bySize(a.width, b.width)
       return (a?.name || '').localeCompare(b?.name || '')
     }
     return 0

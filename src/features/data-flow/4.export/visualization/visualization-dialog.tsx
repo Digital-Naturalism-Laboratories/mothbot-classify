@@ -148,18 +148,19 @@ export function VisualizationDialog(props: Props) {
     try {
       const result = await exportVisualization(config, baseMask)
       if (result) {
+        // Stay in the dialog so you can tweak and export more variants.
         toast.success('Mosaic exported', {
-          description: result.filePath,
-          action: { label: 'Copy path', onClick: () => void navigator.clipboard.writeText(result.filePath).catch(() => null) },
+          description: result.fullPath,
+          duration: 8000,
+          action: { label: 'Copy path', onClick: () => void navigator.clipboard.writeText(result.fullPath).catch(() => null) },
         })
-        onClose()
       } else {
         toast.error('Nothing to export — check your scope/selection')
       }
     } finally {
       setExporting(false)
     }
-  }, [config, baseMask, onClose])
+  }, [config, baseMask])
 
   const nobgMode: NobgMode = config.requireNobg ? 'only' : config.preferNobg ? 'prefer' : 'jpg'
 
@@ -194,6 +195,13 @@ export function VisualizationDialog(props: Props) {
           {/* Night checklist (night scope) */}
           {config.scope === 'night' && allLeafGroupIds.length > 1 && (
             <Section label='Nights'>
+              <div className='flex items-center gap-10 mb-6'>
+                <span className='text-11 text-ink-secondary tabular-nums'>{config.selectedLeafGroupIds.length}/{allLeafGroupIds.length}</span>
+                <button type='button' className='text-11 text-blue-600 hover:underline'
+                  onClick={() => update({ selectedLeafGroupIds: [...allLeafGroupIds] })}>Select all</button>
+                <button type='button' className='text-11 text-blue-600 hover:underline'
+                  onClick={() => update({ selectedLeafGroupIds: [] })}>Deselect all</button>
+              </div>
               <div className='space-y-4 max-h-[120px] overflow-y-auto'>
                 {allLeafGroupIds.map((id) => (
                   <label key={id} className='flex items-center gap-8 cursor-pointer text-13 select-none'>
