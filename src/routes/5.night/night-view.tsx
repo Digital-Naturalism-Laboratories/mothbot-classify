@@ -6,6 +6,7 @@ import { expandMany, makeKey } from '~/features/left-panel/collapse.store'
 import { ensureSpeciesListSelection } from '~/features/data-flow/2.identify/species-picker.state'
 import { buildLeafGroupLinkParams, isSingleLeafHierarchy } from '~/features/mothbox-next/hierarchy-routes'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { isNoMachineIdClassifier } from '~/features/mothbox-next/bot-shape-to-classification'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import type { PatchEntity } from '~/stores/entities/5.patches'
@@ -88,19 +89,20 @@ export function NightView(props: { leafGroupId: string }) {
   useEffect(() => {
     const files = activePackage?.loaded?.classificationFiles
     if (!files) { setSelectedBotAlgorithm(undefined); return }
-    let fallback: string | undefined
+    let marked: string | undefined
+    let realFallback: string | undefined
+    let anyFallback: string | undefined
     for (const file of files) {
       for (const row of file.rows) {
         if (row.classifier_type === 'bot' && row.classifier_id && !row.classifier_id.endsWith('.pt')) {
-          if (row.classified_at === 1) {
-            setSelectedBotAlgorithm(row.classifier_id)
-            return
-          }
-          fallback ??= row.classifier_id
+          if (row.classified_at === 1) marked ??= row.classifier_id
+          anyFallback ??= row.classifier_id
+          // Prefer a real algorithm over the "No Machine ID" (un-identified) bucket.
+          if (!isNoMachineIdClassifier(row.classifier_id)) realFallback ??= row.classifier_id
         }
       }
     }
-    setSelectedBotAlgorithm(fallback)
+    setSelectedBotAlgorithm(marked ?? realFallback ?? anyFallback)
   }, [activePackage])
 
   // Detector versions — derived from unique detectorId values across all loaded patches.

@@ -4,7 +4,15 @@ import { Progress } from '~/components/ui/progress'
 import { Button } from '~/components/ui/button'
 import { useStore } from '@nanostores/react'
 import { useState, type ReactNode } from 'react'
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu'
 import { detectionsStore } from '~/stores/entities/detections'
 import { selectedPatchIdsStore } from '~/stores/ui'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
@@ -205,25 +213,28 @@ type DetectorSelectorSectionProps = {
 function DetectorSelectorSection(props: DetectorSelectorSectionProps) {
   const { detectorIds, selectedDetectorId, onDetectorChange, className } = props
   return (
-    <div className={cn('mb-16', className)}>
-      <PanelHeading className='mb-6'>Detection run</PanelHeading>
-      <div className='space-y-2'>
-        {detectorIds.map((id) => (
-          <label key={id} className='flex items-center gap-8 cursor-pointer text-13 select-none'>
-            <input
-              type='radio'
-              name='detector-version'
-              value={id}
-              checked={selectedDetectorId === id}
-              onChange={() => onDetectorChange?.(id)}
-              className='accent-blue-600 cursor-pointer'
-            />
-            <span className={cn('flex-1 truncate', selectedDetectorId === id ? 'text-ink-primary font-medium' : 'text-ink-secondary')}>
-              {id}
-            </span>
-          </label>
-        ))}
+    <div className={cn('mb-16 flex items-center justify-between gap-8', className)}>
+      <div className='flex min-w-0 items-baseline gap-6'>
+        <PanelHeading className='shrink-0'>Detection run</PanelHeading>
+        <span className='truncate text-13 font-medium text-ink-primary'>{selectedDetectorId ?? '—'}</span>
       </div>
+      {detectorIds.length > 1 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size='icon-sm' variant='ghostMuted' aria-label='Choose detection run' icon={EllipsisIcon} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side='right' align='start' sideOffset={4}>
+            <DropdownMenuLabel>Detection run</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={selectedDetectorId ?? ''} onValueChange={(v) => onDetectorChange?.(v)}>
+              {detectorIds.map((id) => (
+                <DropdownMenuRadioItem key={id} value={id}>
+                  {id}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   )
 }

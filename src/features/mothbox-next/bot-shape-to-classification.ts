@@ -3,6 +3,31 @@ import type { LegacyDetectionShape } from './legacy-detection-file'
 import { buildTaxonFromShape, extractTaxonomyFromShape } from '~/models/taxonomy/extract'
 import { extractMorphospeciesFromShape } from '~/models/taxonomy/morphospecies'
 
+/**
+ * Classifier id used for a bot detection that carries no species identification
+ * (no `identifier_bot`). It is NOT a real algorithm — it's the "this detection
+ * was never machine-identified" bucket, surfaced in the UI as "No Machine ID".
+ */
+export const NO_MACHINE_ID_CLASSIFIER = 'No Machine ID'
+
+/**
+ * Legacy classifier ids that meant the same "no machine identification" thing in
+ * older baked records (written before we labelled it). Datasets with on-disk
+ * `02_records` still carry these, so we recognise them everywhere the id is
+ * shown/defaulted rather than rewriting records on load.
+ */
+const LEGACY_NO_MACHINE_ID_CLASSIFIERS = new Set(['mothbot'])
+
+/** True when a bot classifier id represents "not machine-identified". */
+export function isNoMachineIdClassifier(id: string | null | undefined): boolean {
+  return !!id && (id === NO_MACHINE_ID_CLASSIFIER || LEGACY_NO_MACHINE_ID_CLASSIFIERS.has(id))
+}
+
+/** Display label for a bot ID-algorithm id (maps the no-ID bucket to a clear name). */
+export function botAlgorithmLabel(id: string): string {
+  return isNoMachineIdClassifier(id) ? NO_MACHINE_ID_CLASSIFIER : id
+}
+
 export function classificationFromBotShape(params: {
   shape: LegacyDetectionShape
   patchId: string

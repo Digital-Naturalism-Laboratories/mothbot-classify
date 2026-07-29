@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
+import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classification'
 import { clearPatchSelection } from '~/stores/ui'
 import { PanelHeading } from '~/styles'
 import { collapsedKeysStore, collapseMany, expandMany, makeKey, toggleKey } from './collapse.store'
@@ -220,7 +221,7 @@ function SectionMoreMenu(props: {
             {availableAlgorithms!.length === 1 ? (
               <>
                 <DropdownMenuLabel>ID algorithm</DropdownMenuLabel>
-                <div className='px-8 py-4 text-12 text-neutral-500 select-none'>{availableAlgorithms![0]}</div>
+                <div className='px-8 py-4 text-12 text-neutral-500 select-none'>{botAlgorithmLabel(availableAlgorithms![0])}</div>
               </>
             ) : (
               <>
@@ -228,7 +229,7 @@ function SectionMoreMenu(props: {
                 <DropdownMenuRadioGroup value={selectedAlgorithm ?? ''} onValueChange={(v) => onAlgorithmChange?.(v)}>
                   {availableAlgorithms!.map((alg) => (
                     <DropdownMenuRadioItem key={alg} value={alg}>
-                      {alg}
+                      {botAlgorithmLabel(alg)}
                     </DropdownMenuRadioItem>
                   ))}
                 </DropdownMenuRadioGroup>

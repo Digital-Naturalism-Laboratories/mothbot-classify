@@ -1,5 +1,5 @@
 import type { PatchRecord, PatchSourceRecord, ClassificationRecord } from '../../records'
-import { classificationFromBotShape, classificationFromIdentifiedShape } from '../../bot-shape-to-classification'
+import { classificationFromBotShape, classificationFromIdentifiedShape, NO_MACHINE_ID_CLASSIFIER } from '../../bot-shape-to-classification'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
 import { extractPatchFilename } from '../../patch-path'
 import { readLegacyDetectionShapes, type LegacyDetectionShape } from '../../legacy-detection-file'
@@ -199,7 +199,7 @@ export async function buildDinalabMothboxV1Records(params: {
       })
 
       const identifierBot = typeof shape.identifier_bot === 'string' ? shape.identifier_bot.trim() : ''
-      const classifierId = identifierBot || fileIdentifierBot || 'mothbot'
+      const classifierId = identifierBot || fileIdentifierBot || NO_MACHINE_ID_CLASSIFIER
       botRows.push(
         classificationFromBotShape({
           shape,
