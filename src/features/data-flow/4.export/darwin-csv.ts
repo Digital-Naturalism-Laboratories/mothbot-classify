@@ -14,6 +14,7 @@ import { fsaaWriteText, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos, getPhotoBaseFromPhotoId } from '~/utils/paths'
 import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getProjectExportPath } from './export-utils'
+import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classification'
 
 const DARWIN_COLUMNS = [
   // Taxonomy columns
@@ -314,7 +315,9 @@ export function buildDarwinShapeFromDetection(params: {
   // Deployment is datasetID without the trailing night date segment
   const deployment = extractDeploymentFromDatasetID({ datasetID })
   const mothbox = extractMothboxFromNightDiskPath({ nightDiskPath })
-  const detectionBy = detection?.botClassifierId || extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
+  const detectionBy = detection?.botClassifierId
+    ? botAlgorithmLabel(detection.botClassifierId)
+    : extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
   const detection_confidence = detection?.score != null ? String(detection.score) : ''
   const userInitials = userSessionStore.get()?.initials || ''
   const identifiedBy = detection?.detectedBy === 'user' ? userInitials : ''
