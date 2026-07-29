@@ -57,12 +57,16 @@ export function VisualizationDialog(props: Props) {
   const [rendering, setRendering] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [status, setStatus] = useState('')
+  const [lastExportPath, setLastExportPath] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // Reset when reopened.
   useEffect(() => {
     if (!open) return
     setConfig(defaultVizConfig(initialNights(), selectionCount > 0))
+    setLastExportPath(null)
+    setCopied(false)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const availableTaxa = useAvailableTaxaKeys(config)
@@ -148,12 +152,12 @@ export function VisualizationDialog(props: Props) {
     try {
       const result = await exportVisualization(config, baseMask)
       if (result) {
-        // Stay in the dialog so you can tweak and export more variants.
-        toast.success('Mosaic exported', {
-          description: result.fullPath,
-          duration: 8000,
-          action: { label: 'Copy path', onClick: () => void navigator.clipboard.writeText(result.fullPath).catch(() => null) },
-        })
+        // Stay in the dialog so you can tweak and export more variants. The path
+        // is shown in-dialog with a Copy button, because a modal dialog blocks
+        // interaction with the toast's action button outside it.
+        setLastExportPath(result.fullPath)
+        setCopied(false)
+        toast.success('Mosaic exported')
       } else {
         toast.error('Nothing to export — check your scope/selection')
       }
@@ -161,6 +165,13 @@ export function VisualizationDialog(props: Props) {
       setExporting(false)
     }
   }, [config, baseMask])
+
+  const copyExportPath = useCallback(() => {
+    if (!lastExportPath) return
+    navigator.clipboard.writeText(lastExportPath)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+      .catch(() => toast.error('Could not copy path'))
+  }, [lastExportPath])
 
   const nobgMode: NobgMode = config.requireNobg ? 'only' : config.preferNobg ? 'prefer' : 'jpg'
 
@@ -335,11 +346,23 @@ export function VisualizationDialog(props: Props) {
           </div>
         </div>
 
-        <DialogFooter className='pt-8'>
-          <Button variant='outline' onClick={onClose} disabled={exporting}>Cancel</Button>
-          <Button onClick={handleExport} disabled={exporting || rendering}>
-            {exporting ? 'Exporting…' : 'Export PNG'}
-          </Button>
+        <DialogFooter className='pt-8 sm:justify-between items-center gap-8'>
+          {lastExportPath ? (
+            <div className='flex items-center gap-8 min-w-0'>
+              <span className='text-11 text-ink-secondary truncate max-w-[560px]' title={lastExportPath}>
+                Saved: {lastExportPath}
+              </span>
+              <Button variant='outline' size='sm' className='shrink-0' onClick={copyExportPath}>
+                {copied ? 'Copied ✓' : 'Copy path'}
+              </Button>
+            </div>
+          ) : <span />}
+          <div className='flex items-center gap-8 shrink-0'>
+            <Button variant='outline' onClick={onClose} disabled={exporting}>Cancel</Button>
+            <Button onClick={handleExport} disabled={exporting || rendering}>
+              {exporting ? 'Exporting…' : 'Export PNG'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

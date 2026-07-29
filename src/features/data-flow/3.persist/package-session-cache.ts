@@ -32,7 +32,9 @@ export type IndexedFileMeta = {
   size: number
 }
 
-export const PACKAGE_SESSION_CACHE_VERSION = 5
+// v6: ingest now overlays x-anylabeling human detections as a 'HumanDetection'
+// detector — invalidate older caches so they re-ingest and pick them up.
+export const PACKAGE_SESSION_CACHE_VERSION = 6
 
 export type PackageSessionCacheEntry = {
   cacheVersion: number

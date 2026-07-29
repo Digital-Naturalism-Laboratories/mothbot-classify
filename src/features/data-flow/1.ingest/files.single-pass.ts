@@ -5,6 +5,7 @@ import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/pack
 import { ingestFilesToStores } from '~/features/data-flow/1.ingest/ingest'
 import { detectIngestModeFromFiles } from './ingest-mode'
 import { clearMothboxNextPackage } from '~/features/mothbox-next/active-package'
+import { overlayHumanDetections } from './overlay-human-detections'
 import { formatFilesystemError } from '~/utils/fs-error'
 
 export async function singlePassIngest(params: {
@@ -64,6 +65,13 @@ export async function singlePassIngest(params: {
         clearMothboxNextPackage()
         await ingestFilesToStores({ files: normalizedFiles as any, parseDetectionsForNightId: null })
       },
+    })
+
+    // Surface x-anylabeling human detections as a parallel 'HumanDetection'
+    // detector (they aren't in the package records). No-op when there are none.
+    await measureStep({
+      label: 'overlaid human detections',
+      fn: () => overlayHumanDetections(),
     })
 
     const totalMs = Math.round(performance.now() - tStart)

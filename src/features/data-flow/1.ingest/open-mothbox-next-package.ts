@@ -6,6 +6,7 @@ import { persistPickedDirectory } from '~/features/data-flow/3.persist/files.per
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import { collectIndexedFromDirectoryHandle } from './files.fs'
 import { singlePassIngest } from './files.single-pass'
+import { overlayHumanDetections } from './overlay-human-detections'
 import { formatFilesystemError } from '~/utils/fs-error'
 import { migrateLegacyMorphoLinksInPackage } from '~/features/mothbox-next/morpho-links-package'
 import { migratePackageSourceToArchiveIfNeeded } from '~/features/mothbox-next/migrate-package-source-to-archive'
@@ -95,6 +96,11 @@ export async function openMothboxNextPackageFromHandle(
     if (restoredFromCache) {
       pickerErrorStore.set(null)
       setActiveDatasetFolderName(folderName)
+
+      // Human detections aren't in the records, so the cache restore rebuilt only
+      // the bot patches. Re-derive the x-anylabeling HumanDetection overlay from
+      // those (their parentDir navigators point back into the night folders).
+      await overlayHumanDetections()
 
       const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle: handle })
       if (morphoLinks.importedCount > 0) {
