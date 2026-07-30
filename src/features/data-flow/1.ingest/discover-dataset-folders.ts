@@ -129,5 +129,27 @@ export async function discoverDatasetFoldersUnderRoot(
     if (item.pending) pendingMigration.push(item.pending)
   }
 
+  // Fallback: if the root contains only a `_processed/` folder (no source siblings),
+  // enumerate `_processed/` directly and register any subfolder with a dataset.json.
+  // This lets collaborators open a shared processed-only folder without source images.
+  if (processedRoot && typeof processedRoot.values === 'function') {
+    const alreadyRegistered = new Set(packages.map((p) => p.folderName))
+    for await (const child of processedRoot.values()) {
+      const candidate = child as DirectoryHandleWithIter
+      if (candidate?.kind !== 'directory') continue
+      const folderName = candidate.name?.trim()
+      if (!folderName || alreadyRegistered.has(folderName)) continue
+      const manifestInfo = await readDatasetManifestSummary(candidate)
+      if (manifestInfo.hasManifest) {
+        packages.push({
+          folderName,
+          datasetId: manifestInfo.datasetId,
+          hasManifest: true,
+          packagePath: `_processed/${folderName}`,
+        })
+      }
+    }
+  }
+
   return { packages, pendingMigration }
 }
