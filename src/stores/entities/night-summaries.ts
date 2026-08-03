@@ -20,8 +20,8 @@ export type MorphoTaxonomySummary = {
   morphospecies?: string
 }
 
-export type NightSummaryEntity = {
-  nightId: string
+export type LeafGroupSummaryEntity = {
+  leafGroupId: string
   totalDetections: number
   totalIdentified: number
   updatedAt?: number
@@ -39,14 +39,14 @@ export type NightSummaryEntity = {
   speciesTaxonomyByName?: Record<string, SpeciesTaxonomySummary>
 }
 
-export const nightSummariesStore = atom<Record<string, NightSummaryEntity>>({})
+export const leafGroupSummariesStore = atom<Record<string, LeafGroupSummaryEntity>>({})
 
 /**
  * Builds a night summary from detections for a specific night.
  * Single source of truth for night summary calculation.
  */
-export function buildNightSummary(params: { nightId: string; detections: DetectionEntity[] }): NightSummaryEntity {
-  const { nightId, detections } = params
+export function buildLeafGroupSummary(params: { leafGroupId: string; detections: DetectionEntity[] }): LeafGroupSummaryEntity {
+  const { leafGroupId, detections } = params
 
   const totalDetections = detections.length
   const totalIdentified = detections.filter((d) => d?.detectedBy === 'user').length
@@ -85,7 +85,7 @@ export function buildNightSummary(params: { nightId: string; detections: Detecti
   }
 
   return {
-    nightId,
+    leafGroupId,
     totalDetections,
     totalIdentified,
     updatedAt: Date.now(),

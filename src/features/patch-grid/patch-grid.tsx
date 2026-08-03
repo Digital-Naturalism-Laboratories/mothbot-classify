@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkey } from '~/utils/use-hotkey'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '~/utils/cn'
@@ -8,12 +8,13 @@ import type { DetectionEntity } from '~/stores/entities/detections'
 import { detectionsStore } from '~/stores/entities/detections'
 import { patchColumnsStore } from '~/components/atomic/patch-size-control'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
+import { Number as NumberBadge } from '~/components/atomic/number'
 import { TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
 import { PatchItem } from './patch-item'
-import { selectedPatchIdsStore, selectionNightIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
+import { selectedPatchIdsStore, selectionLeafGroupIdStore, setSelection, togglePatchSelection } from '~/stores/ui'
 import {
   addRowBlocks,
-  computeDetectionArea,
+  computeDetectionWidth,
   getRankValue,
   isMorphospeciesDetection,
   separateRegularAndMorphoItems,
@@ -22,6 +23,7 @@ import {
 import { useContainerWidth } from '~/utils/use-container-width'
 import { colorVariantsMap } from '~/utils/colors'
 import { mapRankToVariant } from '~/utils/ranks'
+import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
 
 const DEBUG = false
 
@@ -52,7 +54,7 @@ type GridBlock = GridBlockHeader | GridBlockRow
 
 export type PatchGridProps = {
   patches: PatchEntity[]
-  nightId: string
+  leafGroupId: string
   className?: string
   onOpenPatchDetail: (id: string) => void
   loading?: boolean
@@ -60,15 +62,33 @@ export type PatchGridProps = {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   sortByClusters?: boolean
+  smallestFirst?: boolean
+  hasMachineIdentification?: boolean
+  collapsedClusterSet?: Set<number>
+  onClusterCollapseToggle?: (topClusterId: number) => void
 }
 
 export function PatchGrid(props: PatchGridProps) {
-  const { patches, nightId, className, onOpenPatchDetail, loading, onImageProgress, selectedTaxon, selectedBucket, sortByClusters = false } = props
+  const {
+    patches,
+    leafGroupId,
+    className,
+    onOpenPatchDetail,
+    loading,
+    onImageProgress,
+    selectedTaxon,
+    selectedBucket,
+    sortByClusters = false,
+    smallestFirst = false,
+    hasMachineIdentification = true,
+    collapsedClusterSet,
+    onClusterCollapseToggle,
+  } = props
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const desiredColumns = useStore(patchColumnsStore)
   const selected = useStore(selectedPatchIdsStore)
-  useStore(selectionNightIdStore)
+  useStore(selectionLeafGroupIdStore)
 
   const [isDragging, setIsDragging] = useState(false)
   const [dragToggled, setDragToggled] = useState<Set<string>>(new Set())
@@ -77,7 +97,12 @@ export function PatchGrid(props: PatchGridProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   const detections = useStore(detectionsStore)
-  const orderedIds = useMemo(() => orderPatchIds({ patches, detections }), [patches, detections])
+  const orderedIds = useMemo(() => orderPatchIds({ patches, detections, smallestFirst }), [patches, detections, smallestFirst])
+
+  const { displayIds, patchClusterMeta } = useMemo(
+    () => computeDisplayIds({ orderedIds, detections, leafGroupId, collapsedClusterSet }),
+    [orderedIds, detections, leafGroupId, collapsedClusterSet],
+  )
 
   const containerWidth = useContainerWidth(containerRef)
 
@@ -107,8 +132,8 @@ export function PatchGrid(props: PatchGridProps) {
   }, [itemWidth, gapPx])
 
   const blocks = useMemo(() => {
-    return buildGridBlocks({ orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters })
-  }, [orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters])
+    return buildGridBlocks({ orderedIds: displayIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification })
+  }, [displayIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification])
 
   const visualOrderIds = useMemo(() => {
     return flattenBlocksToVisualOrder({ blocks })
@@ -118,15 +143,36 @@ export function PatchGrid(props: PatchGridProps) {
     return buildVisualIndexMap({ visualOrderIds })
   }, [visualOrderIds])
 
+  const blockStartOffsets = useMemo(() => {
+    return computeBlockStartOffsets({ blocks, rowHeight, gapPx })
+  }, [blocks, rowHeight, gapPx])
+
+  // Track only which sticky-header block is active, and update it only when it
+  // actually changes (crossing a taxa boundary) rather than on every scroll
+  // frame — the old per-frame setState re-rendered the whole grid and caused the
+  // scroll jank when several taxa were on screen at once.
+  const [activeHeaderBlockIndex, setActiveHeaderBlockIndex] = useState<number>(-1)
+
+  const updateActiveHeader = useCallback((top: number) => {
+    const idx = findActiveHeaderBlockIndex({ blocks, blockStartOffsets, scrollTop: top })
+    setActiveHeaderBlockIndex((prev) => (prev === idx ? prev : idx))
+  }, [blocks, blockStartOffsets])
+
+  // Recompute from the live scroll position when the layout (blocks/offsets) changes.
+  useEffect(() => {
+    updateActiveHeader(containerRef.current?.scrollTop ?? 0)
+  }, [updateActiveHeader])
+
+  const activeHeaderBlock =
+    activeHeaderBlockIndex >= 0 && blocks[activeHeaderBlockIndex]?.kind === 'header'
+      ? blocks[activeHeaderBlockIndex]
+      : null
+
   const rowVirtualizer = useVirtualizer({
     count: blocks.length,
     getScrollElement: () => containerRef.current,
     estimateSize: (i) => {
-      const base = blocks[i]?.kind === 'row' ? rowHeight : HEADER_BASE_HEIGHT
-      const nextIsHeader = blocks[i + 1]?.kind === 'header'
-      const extra = nextIsHeader ? HEADER_TOP_MARGIN : 0
-      const size = base + extra
-      return size
+      return estimateBlockSize({ block: blocks[i], nextBlock: blocks[i + 1], rowHeight, gapPx })
     },
     overscan: 5,
     measureElement: (el) => {
@@ -139,18 +185,17 @@ export function PatchGrid(props: PatchGridProps) {
       const kind = node?.getAttribute('data-kind')
       const rowGapExtra = kind === 'row' ? gapPx : 0
       const extra = (nextIsHeader ? HEADER_TOP_MARGIN : 0) + rowGapExtra
-      const h = base + extra
-      return h
+      return base + extra
     },
   })
 
   // Preserve scroll position on minor list changes (e.g., identifying items)
   // Only reset scroll when the viewing context changes (night, bucket, or selected taxon)
   const lastContextRef = useRef<string>(
-    `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`,
+    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}|${smallestFirst}`,
   )
   useEffect(() => {
-    const currentContext = `${nightId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}`
+    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}|${smallestFirst}`
     const contextChanged = currentContext !== lastContextRef.current
     lastContextRef.current = currentContext
 
@@ -163,13 +208,15 @@ export function PatchGrid(props: PatchGridProps) {
 
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
+    setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [orderedIds.length, rowVirtualizer, columns, rowHeight, nightId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters])
+  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters, smallestFirst])
 
   useEffect(() => {
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
+    setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
   }, [desiredColumns, rowVirtualizer, columns, rowHeight])
@@ -179,13 +226,15 @@ export function PatchGrid(props: PatchGridProps) {
       rowVirtualizer.measure()
     })
     return () => cancelAnimationFrame(id)
-  }, [rowHeight, columns, containerWidth, orderedIds.length, blocks.length, rowVirtualizer])
+  }, [rowHeight, columns, containerWidth, displayIds.length, blocks.length, rowVirtualizer])
 
   const [loadedCount, setLoadedCount] = useState<number>(0)
   const totalCount = patches?.length || 0
+  // Stable callback so memoized PatchItems don't re-render on every grid update.
+  const bumpLoaded = useCallback(() => setLoadedCount((c) => c + 1), [])
   useEffect(() => {
     setLoadedCount(0)
-  }, [nightId, patches])
+  }, [leafGroupId, patches])
   useEffect(() => {
     onImageProgress?.(loadedCount, totalCount)
   }, [loadedCount, totalCount, onImageProgress])
@@ -209,22 +258,61 @@ export function PatchGrid(props: PatchGridProps) {
 
   function focusItem(index: number) {
     requestAnimationFrame(() => {
-      const el = containerRef.current?.querySelector(`[data-index="${index}"]`) as HTMLElement | null
+      const el = containerRef.current?.querySelector(`[data-id][data-index="${index}"]`) as HTMLElement | null
       el?.focus({ preventScroll: true })
     })
   }
 
   function handleItemMouseDown(e: React.MouseEvent, index: number, patchId: string) {
     e.preventDefault()
+
     if (e.shiftKey) {
+      // Range shift-select: expand any collapsed cluster representatives in the range to all their members
       const rangeIds = computeShiftSelectionRange({ anchorIndex, currentIndex: index, visualOrderIds })
-      const current = new Set(selected ?? new Set())
-      for (const id of rangeIds) current.add(id)
-      setSelection({ nightId, patchIds: Array.from(current) })
+      const allDetections = detectionsStore.get() || {}
+      const base = new Set(selected ?? new Set<string>())
+      for (const rangeId of rangeIds) {
+        const rangeMeta = patchClusterMeta?.get(rangeId)
+        if (rangeMeta?.isCollapsed) {
+          const det = allDetections[rangeId]
+          const topClusterId = typeof det?.clusterId === 'number' ? Math.trunc(det.clusterId) : undefined
+          if (topClusterId !== undefined) {
+            for (const d of Object.values(allDetections)) {
+              if (d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc(d.clusterId) === topClusterId && d.id) {
+                base.add(d.id)
+              }
+            }
+            continue
+          }
+        }
+        base.add(rangeId)
+      }
+      setSelection({ leafGroupId, patchIds: Array.from(base) })
       setAnchorIndex(index)
       setFocusIndex(index)
       focusItem(index)
       return
+    }
+
+    // Non-shift click on a collapsed cluster representative: select ALL members of that cluster
+    const meta = patchClusterMeta?.get(patchId)
+    if (meta?.isCollapsed) {
+      const allDetections = detectionsStore.get() || {}
+      const det = allDetections[patchId]
+      const topClusterId = typeof det?.clusterId === 'number' ? Math.trunc(det.clusterId) : undefined
+      if (topClusterId !== undefined) {
+        const clusterIds = Object.values(allDetections)
+          .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc(d.clusterId) === topClusterId)
+          .map((d) => d?.id)
+          .filter((id): id is string => typeof id === 'string')
+        const base = e.metaKey || e.ctrlKey ? new Set(selected ?? new Set<string>()) : new Set<string>()
+        for (const id of clusterIds) base.add(id)
+        setSelection({ leafGroupId, patchIds: Array.from(base) })
+        setAnchorIndex(index)
+        setFocusIndex(index)
+        focusItem(index)
+        return
+      }
     }
 
     togglePatchSelection({ patchId })
@@ -247,6 +335,7 @@ export function PatchGrid(props: PatchGridProps) {
   }
 
   function onMouseDownContainer(e: React.MouseEvent) {
+    if (e.button === 2) return  // right-click: let context menu open without toggling selection
     const index = getVisualIndexFromEvent(e)
     if (index == null) return
     const id = visualOrderIds[index]
@@ -293,14 +382,26 @@ export function PatchGrid(props: PatchGridProps) {
   if (loading) return <CenteredLoader>🌀 Loading patches</CenteredLoader>
 
   return (
-    <GridContainer
-      ref={containerRef}
-      className={className}
-      onKeyDown={onKeyDown}
-      onMouseDown={onMouseDownContainer}
-      onMouseMove={onMouseMoveContainer}
-      onMouseLeave={onMouseLeaveContainer}
-    >
+    <div className={cn('flex h-full min-h-0 flex-col', className)}>
+      {activeHeaderBlock ? (
+        <div className='shrink-0 px-8 pt-8 bg-neutral-50'>
+          <GroupHeader
+            title={activeHeaderBlock.title}
+            rank={activeHeaderBlock.rank}
+            count={activeHeaderBlock.count}
+            className='px-8 py-6'
+          />
+        </div>
+      ) : null}
+      <GridContainer
+        ref={containerRef}
+        className='min-h-0 flex-1 scroll-mask-top-32'
+        onKeyDown={onKeyDown}
+        onMouseDown={onMouseDownContainer}
+        onMouseMove={onMouseMoveContainer}
+        onMouseLeave={onMouseLeaveContainer}
+        onScroll={(e) => updateActiveHeader(e.currentTarget.scrollTop)}
+      >
       <div style={{ height: rowVirtualizer.getTotalSize() + 88, width: '100%', position: 'relative' }}>
         {!orderedIds.length ? <div className='p-8 text-sm text-neutral-500'>No patches found</div> : null}
 
@@ -310,12 +411,15 @@ export function PatchGrid(props: PatchGridProps) {
             <div
               key={stripe.key}
               ref={rowVirtualizer.measureElement}
+              data-index={stripe.index}
               data-block-index={stripe.index}
               data-kind={block?.kind}
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${stripe.start}px)` }}
             >
               {block?.kind === 'header' ? (
-                <GroupHeader title={block.title} rank={block.rank} count={block.count} className='px-8 py-6' />
+                activeHeaderBlockIndex === stripe.index ? null : (
+                  <GroupHeader title={block.title} rank={block.rank} count={block.count} className='px-8 py-6' />
+                )
               ) : block?.kind === 'row' ? (
                 <RowGrid
                   itemIds={block.itemIds}
@@ -324,8 +428,10 @@ export function PatchGrid(props: PatchGridProps) {
                   itemWidth={itemWidth}
                   itemIndexById={visualIndexById}
                   onOpenPatchDetail={onOpenPatchDetail}
-                  onImageLoad={() => setLoadedCount((c) => c + 1)}
-                  onImageError={() => setLoadedCount((c) => c + 1)}
+                  onImageLoad={bumpLoaded}
+                  onImageError={bumpLoaded}
+                  patchClusterMeta={patchClusterMeta}
+                  onClusterCollapseToggle={onClusterCollapseToggle}
                 />
               ) : null}
             </div>
@@ -333,7 +439,8 @@ export function PatchGrid(props: PatchGridProps) {
         })}
         <div style={{ position: 'absolute', top: rowVirtualizer.getTotalSize(), left: 0, width: '100%', height: '88px' }} />
       </div>
-    </GridContainer>
+      </GridContainer>
+    </div>
   )
 }
 
@@ -344,10 +451,11 @@ type GridContainerProps = {
   onMouseMove: (e: React.MouseEvent) => void
   onKeyDown: (e: React.KeyboardEvent) => void
   onMouseLeave: (e: React.MouseEvent) => void
+  onScroll: (e: React.UIEvent<HTMLDivElement>) => void
 }
 
 const GridContainer = React.forwardRef<HTMLDivElement, GridContainerProps>(function GridContainer(props, ref) {
-  const { className, children, onMouseDown, onMouseMove, onKeyDown, onMouseLeave } = props
+  const { className, children, onMouseDown, onMouseMove, onKeyDown, onMouseLeave, onScroll } = props
   return (
     <div
       ref={ref}
@@ -356,7 +464,8 @@ const GridContainer = React.forwardRef<HTMLDivElement, GridContainerProps>(funct
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
-      className={cn('relative overflow-y-auto p-8 outline-none', className)}
+      onScroll={onScroll}
+      className={cn('relative overflow-y-auto px-8 pb-8 pt-0 outline-none', className)}
     >
       {children}
     </div>
@@ -370,14 +479,15 @@ function buildGridBlocks(params: {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   sortByClusters?: boolean
+  hasMachineIdentification?: boolean
 }) {
-  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters = false } = params
+  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters = false, hasMachineIdentification = true } = params
   const UNASSIGNED_LABEL = 'Unassigned'
   const out: GridBlock[] = []
   if (!orderedIds.length) return out
 
   if (sortByClusters) {
-    const header = getFlatHeaderForClusterSort({ selectedTaxon, selectedBucket, count: orderedIds.length })
+    const header = getFlatHeaderForClusterSort({ selectedTaxon, selectedBucket, count: orderedIds.length, hasMachineIdentification })
     out.push(header)
     addRowBlocks({ itemIds: orderedIds, columns, keyPrefix: `row:cluster:${header.title}`, out })
     return out
@@ -486,8 +596,9 @@ function getFlatHeaderForClusterSort(params: {
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   count: number
+  hasMachineIdentification?: boolean
 }): GridBlockHeader {
-  const { selectedTaxon, selectedBucket, count } = params
+  const { selectedTaxon, selectedBucket, count, hasMachineIdentification = true } = params
 
   if (selectedBucket === 'user' && selectedTaxon?.name === 'ERROR') {
     return { kind: 'header', key: 'hdr:cluster:errors', title: 'Errors', rank: 'species', count }
@@ -504,7 +615,9 @@ function getFlatHeaderForClusterSort(params: {
   }
 
   if (selectedBucket === 'auto') {
-    return { kind: 'header', key: 'hdr:cluster:all-unapproved', title: 'All unapproved', count }
+    const title = hasMachineIdentification ? UNAPPROVED_AGGREGATE_LABEL : UNASSIGNED_AGGREGATE_LABEL
+    const key = hasMachineIdentification ? 'hdr:cluster:all-unapproved' : 'hdr:cluster:all-unassigned'
+    return { kind: 'header', key, title, count }
   }
 
   if (selectedBucket === 'user') {
@@ -622,14 +735,17 @@ function isMorphospeciesHeader(params: { name: string; ids: string[]; rank: stri
   return morphospecies === name
 }
 
-function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity> }) {
-  const { patches, detections } = params
+function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity>; smallestFirst?: boolean }) {
+  const { patches, detections, smallestFirst = false } = params
   if (!Array.isArray(patches) || patches.length === 0) return [] as string[]
+  // Size sort direction: largest-first by default, smallest-first when toggled.
+  const bySize = (a: number, b: number) => (smallestFirst ? a - b : b - a)
   const withSortKey = patches.map((p) => {
     const det = detections?.[p.id]
     const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any)?.clusterId : undefined
-    const area = computeDetectionArea({ detection: det })
-    return { id: p.id, name: p.name, clusterId, area }
+    // Width (not area) so unclustered patches of a similar shape sit together.
+    const width = computeDetectionWidth({ detection: det })
+    return { id: p.id, name: p.name, clusterId, width }
   })
   withSortKey.sort((a, b) => {
     const aClusterId = a.clusterId
@@ -644,20 +760,59 @@ function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<stri
     if (aIsValid && bClusterId === undefined) return -1
     if (aIsUnclustered && bIsValid) return 1
     if (aIsUnclustered && bIsUnclustered) {
-      if (b.area !== a.area) return b.area - a.area
+      if (b.width !== a.width) return bySize(a.width, b.width)
       return (a?.name || '').localeCompare(b?.name || '')
     }
     if (aIsUnclustered && bClusterId === undefined) return -1
     if (aClusterId === undefined && bIsValid) return 1
     if (aClusterId === undefined && bIsUnclustered) return 1
     if (aClusterId === undefined && bClusterId === undefined) {
-      if (b.area !== a.area) return b.area - a.area
+      if (b.width !== a.width) return bySize(a.width, b.width)
       return (a?.name || '').localeCompare(b?.name || '')
     }
     return 0
   })
   const ids = withSortKey.map((x) => x.id)
   return ids
+}
+
+function estimateBlockSize(params: {
+  block: GridBlock | undefined
+  nextBlock: GridBlock | undefined
+  rowHeight: number
+  gapPx: number
+}) {
+  const { block, nextBlock, rowHeight, gapPx } = params
+  const base = block?.kind === 'row' ? rowHeight : HEADER_BASE_HEIGHT
+  const nextIsHeader = nextBlock?.kind === 'header'
+  const extra = nextIsHeader ? HEADER_TOP_MARGIN : 0
+  const rowGapExtra = block?.kind === 'row' ? gapPx : 0
+  return base + extra + rowGapExtra
+}
+
+function computeBlockStartOffsets(params: { blocks: GridBlock[]; rowHeight: number; gapPx: number }) {
+  const { blocks, rowHeight, gapPx } = params
+  const starts: number[] = []
+  let y = 0
+  for (let i = 0; i < blocks.length; i++) {
+    starts.push(y)
+    y += estimateBlockSize({ block: blocks[i], nextBlock: blocks[i + 1], rowHeight, gapPx })
+  }
+  return starts
+}
+
+function findActiveHeaderBlockIndex(params: {
+  blocks: GridBlock[]
+  blockStartOffsets: number[]
+  scrollTop: number
+}) {
+  const { blocks, blockStartOffsets, scrollTop } = params
+  let active = -1
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i]?.kind !== 'header') continue
+    if ((blockStartOffsets[i] ?? 0) <= scrollTop) active = i
+  }
+  return active
 }
 
 function computeItemWidth(params: { containerWidth: number; columns: number; gap: number }) {
@@ -681,15 +836,17 @@ function GroupHeader(props: {
   const colorClass = colorVariantsMap[colorVariant as keyof typeof colorVariantsMap]
 
   return (
-    <div className={cn('flex items-center ring-1 ring-inset rounded-sm justify-between', colorClass, className)}>
+    <div className={cn('flex items-center ring-1 ring-inset rounded-sm items-center  gap-6', colorClass, className)}>
       <div className='flex items-center gap-6'>
         <TaxonRankLetterBadge rank={rank} size='xsm' />
-        <span className='text-13 font-semibold text-ink-primary'>{title}</span>
+        <span className='text-13 relative -top-1 font-semibold text-ink-primary'>{title}</span>
       </div>
-      <span className='text-12 text-neutral-600'>{count}</span>
+      <NumberBadge value={count} mono format className='text-[10px] text-black/60' />
     </div>
   )
 }
+
+type PatchClusterMeta = { size: number; isCollapsed: boolean }
 
 type RowGridProps = {
   itemIds: string[]
@@ -700,10 +857,12 @@ type RowGridProps = {
   onOpenPatchDetail: (id: string) => void
   onImageLoad: (id: string) => void
   onImageError: (id: string) => void
+  patchClusterMeta?: Map<string, PatchClusterMeta> | null
+  onClusterCollapseToggle?: (topClusterId: number) => void
 }
 
 function RowGrid(props: RowGridProps) {
-  const { itemIds, columns, gapPx, itemWidth, itemIndexById, onOpenPatchDetail, onImageLoad, onImageError } = props
+  const { itemIds, columns, gapPx, itemWidth, itemIndexById, onOpenPatchDetail, onImageLoad, onImageError, patchClusterMeta, onClusterCollapseToggle } = props
 
   const compact = (itemWidth || 0) < FOOTER_HIDE_THRESHOLD
 
@@ -720,6 +879,7 @@ function RowGrid(props: RowGridProps) {
       {itemIds.map((id) => {
         const index = itemIndexById.get(id)
         if (typeof index !== 'number') return null
+        const meta = patchClusterMeta?.get(id)
         return (
           <PatchItem
             id={id}
@@ -729,6 +889,9 @@ function RowGrid(props: RowGridProps) {
             onOpenDetail={onOpenPatchDetail}
             onImageLoad={onImageLoad}
             onImageError={onImageError}
+            collapsedClusterSize={meta?.isCollapsed ? meta.size : undefined}
+            isClusterCollapsed={meta?.isCollapsed}
+            onToggleClusterCollapse={onClusterCollapseToggle}
           />
         )
       })}
@@ -767,8 +930,62 @@ function computeShiftSelectionRange(params: { anchorIndex: number | null; curren
 
 function getVisualIndexFromEvent(e: React.MouseEvent) {
   const target = e.target as HTMLElement
-  const indexAttr = target?.closest('[data-index]')?.getAttribute('data-index')
+  const indexAttr = target?.closest('[data-id][data-index]')?.getAttribute('data-index')
   if (indexAttr == null) return null
   const index = Number(indexAttr)
   return Number.isNaN(index) ? null : index
+}
+
+function computeDisplayIds(params: {
+  orderedIds: string[]
+  detections: Record<string, DetectionEntity>
+  leafGroupId: string
+  collapsedClusterSet?: Set<number>
+}): { displayIds: string[]; patchClusterMeta: Map<string, PatchClusterMeta> | null } {
+  const { orderedIds, detections, leafGroupId, collapsedClusterSet } = params
+
+  const hasCollapsed = (collapsedClusterSet?.size ?? 0) > 0
+
+  if (!hasCollapsed) {
+    return { displayIds: orderedIds, patchClusterMeta: null }
+  }
+
+  // Count patches per top-level cluster across ALL detections for this leaf group (not just filtered view)
+  const clusterSizes = new Map<number, number>()
+  for (const det of Object.values(detections)) {
+    if ((det as any)?.leafGroupId !== leafGroupId) continue
+    const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any).clusterId as number : undefined
+    if (clusterId != null && clusterId >= 0) {
+      const topId = Math.trunc(clusterId)
+      clusterSizes.set(topId, (clusterSizes.get(topId) ?? 0) + 1)
+    }
+  }
+
+  const meta = new Map<string, PatchClusterMeta>()
+  const seenCollapsed = new Set<number>()
+  const filtered: string[] = []
+
+  for (const id of orderedIds) {
+    const det = detections?.[id]
+    const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any).clusterId as number : undefined
+    const topId = clusterId != null && clusterId >= 0 ? Math.trunc(clusterId) : undefined
+
+    const isCollapsed = topId !== undefined && (collapsedClusterSet?.has(topId) ?? false)
+
+    if (topId !== undefined) {
+      const size = clusterSizes.get(topId) ?? 1
+      meta.set(id, { size, isCollapsed })
+    }
+
+    if (isCollapsed && topId !== undefined) {
+      if (!seenCollapsed.has(topId)) {
+        seenCollapsed.add(topId)
+        filtered.push(id)
+      }
+    } else {
+      filtered.push(id)
+    }
+  }
+
+  return { displayIds: filtered, patchClusterMeta: meta }
 }

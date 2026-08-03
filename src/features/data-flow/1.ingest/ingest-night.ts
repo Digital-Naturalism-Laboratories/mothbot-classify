@@ -21,7 +21,7 @@ export async function parseNightBotDetections(params: {
   const processedPatchIds = new Set<string>()
 
   for (const photo of Object.values(photos)) {
-    if (parseDetectionsForNightId && photo.nightId !== parseDetectionsForNightId) continue
+    if (parseDetectionsForNightId && photo.leafGroupId !== parseDetectionsForNightId) continue
     const jsonFile = (photo as any)?.botDetectionFile as IndexedFile | undefined
     if (!jsonFile) continue
 
@@ -56,7 +56,7 @@ export async function parseNightBotDetections(params: {
       patches[patchId] = {
         id: patchId,
         name: existingPatch?.name ?? patchId,
-        nightId: photo.nightId,
+        leafGroupId: photo.leafGroupId,
         photoId: photo.id,
         imageFile: imageFile as any,
       } as any
@@ -66,13 +66,13 @@ export async function parseNightBotDetections(params: {
         id: detectionId,
         patchId,
         photoId: photo.id,
-        nightId: photo.nightId,
+        leafGroupId: photo.leafGroupId,
       }
       detections[detectionId] = buildDetectionFromBotShape({ shape, existingDetection })
 
       if (targetNightId && !processedPatchIds.has(patchId) && !!patches?.[patchId]?.imageFile) {
         processedPatchIds.add(patchId)
-        incrementNightIngestProcessed({ nightId: targetNightId, by: 1 })
+        incrementNightIngestProcessed({ leafGroupId: targetNightId, by: 1 })
       }
     }
   }
@@ -89,7 +89,7 @@ export async function overlayNightUserDetections(params: {
   let shapesLoaded = 0
 
   for (const photo of Object.values(photos)) {
-    if (parseDetectionsForNightId && photo.nightId !== parseDetectionsForNightId) continue
+    if (parseDetectionsForNightId && photo.leafGroupId !== parseDetectionsForNightId) continue
     const userJson = (photo as any)?.userDetectionFile as IndexedFile | undefined
     if (!userJson) continue
 
@@ -121,7 +121,7 @@ export async function overlayNightUserDetections(params: {
   }
 
   if (userJsonCount > 0) {
-    console.log('💾 ingest: overlayed user detections', { userJsonCount, shapesLoaded, nightId: parseDetectionsForNightId })
+    console.log('💾 ingest: overlayed user detections', { userJsonCount, shapesLoaded, leafGroupId: parseDetectionsForNightId })
   }
 }
 

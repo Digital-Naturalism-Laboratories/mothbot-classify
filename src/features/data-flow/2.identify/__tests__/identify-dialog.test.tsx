@@ -7,6 +7,7 @@ import { speciesListsLoadingStore } from '~/features/data-flow/2.identify/specie
 import type { DetectionEntity } from '~/models/detection.types'
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import { detectionsStore } from '~/stores/entities/detections'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn()
@@ -16,7 +17,7 @@ function createBaseDetection(): DetectionEntity {
     id: 'test-detection',
     patchId: 'test-patch',
     photoId: 'test-photo',
-    nightId: 'test-night',
+    leafGroupId: 'test-night',
     detectedBy: 'auto',
   }
 }
@@ -24,6 +25,7 @@ function createBaseDetection(): DetectionEntity {
 afterEach(() => {
   cleanup()
   detectionsStore.set({})
+  leafGroupsStore.set({})
   projectSpeciesSelectionStore.set({})
   speciesListsLoadingStore.set(false)
 })
@@ -249,6 +251,45 @@ describe('IdentifyDialog - identification logic', () => {
   })
 })
 
+describe('IdentifyDialog - recent options', () => {
+  it('shows recent identifications for mothbox-next camera_day_id nights', async () => {
+    const packageNightId = 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23__2025-06-22'
+    const projectId = 'dinacon2025_lightweight_substrate'
+
+    leafGroupsStore.set({
+      [packageNightId]: {
+        id: packageNightId,
+        name: '2025-06-22',
+        datasetId: projectId,
+        siteId: 'Les_BeachPalm',
+        deploymentId: 'Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23',
+      },
+    })
+
+    detectionsStore.set({
+      'patch-1': {
+        ...createBaseDetection(),
+        id: 'patch-1',
+        patchId: 'patch-1',
+        leafGroupId: packageNightId,
+        detectedBy: 'user',
+        identifiedAt: 999,
+        label: 'Lepidoptera',
+        taxon: {
+          scientificName: 'Lepidoptera',
+          order: 'Lepidoptera',
+          taxonRank: 'order',
+        },
+      },
+    })
+
+    render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={() => {}} datasetId={projectId} detectionIds={['target']} />)
+
+    expect(await screen.findByText('Recent')).toBeInTheDocument()
+    expect(screen.getAllByText('Lepidoptera').length).toBeGreaterThan(0)
+  })
+})
+
 describe('IdentifyDialog - morphospecies suggestions', () => {
   it('submits inherited taxon when selecting an existing morphospecies', async () => {
     const user = userEvent.setup()
@@ -259,7 +300,7 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
         ...createBaseDetection(),
         id: 'known-morpho',
         patchId: 'known-morpho',
-        nightId: 'project-1/site-1/deployment-1/night-1',
+        leafGroupId: 'project-1/site-1/deployment-1/night-1',
         label: 'epimecis1',
         morphospecies: 'epimecis1',
         detectedBy: 'user',
@@ -274,7 +315,7 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
       },
     })
 
-    render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={onSubmit} projectId='project-1' detectionIds={['target']} />)
+    render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={onSubmit} datasetId='project-1' detectionIds={['target']} />)
 
     const options = await screen.findAllByText('epimecis1')
     await user.click(options[0])
@@ -299,7 +340,7 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
         ...createBaseDetection(),
         id: 'project-1-morpho',
         patchId: 'project-1-morpho',
-        nightId: 'project-1/site-1/deployment-1/night-1',
+        leafGroupId: 'project-1/site-1/deployment-1/night-1',
         label: 'epimecis1',
         morphospecies: 'epimecis1',
         detectedBy: 'user',
@@ -316,7 +357,7 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
         ...createBaseDetection(),
         id: 'project-2-morpho',
         patchId: 'project-2-morpho',
-        nightId: 'project-2/site-1/deployment-1/night-1',
+        leafGroupId: 'project-2/site-1/deployment-1/night-1',
         label: 'epimecis1',
         morphospecies: 'epimecis1',
         detectedBy: 'user',
@@ -331,7 +372,7 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
       },
     })
 
-    render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={onSubmit} projectId='project-2' detectionIds={['target']} />)
+    render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={onSubmit} datasetId='project-2' detectionIds={['target']} />)
 
     const options = await screen.findAllByText('epimecis1')
     await user.click(options[0])

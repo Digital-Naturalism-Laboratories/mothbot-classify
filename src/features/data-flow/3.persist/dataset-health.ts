@@ -1,23 +1,11 @@
 import { indexedFilesStore, type IndexedFile } from '~/features/data-flow/1.ingest/files.state'
 import { normalizeLegacyNightId, parsePathParts } from '~/features/data-flow/1.ingest/ingest-paths'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
+import { auditMothboxNextPackageHealth, type PackageHealthReport } from '~/features/mothbox-next/package-health'
 import { ensureReadWritePermission, persistenceConstants } from './files.persistence'
 import { idbGet } from '~/utils/index-db'
-
-type FileSystemDirectoryHandleLike = {
-  values: () => AsyncIterable<unknown>
-  queryPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  requestPermission?: (options: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'> | 'granted' | 'denied' | 'prompt'
-  getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
-  getFileHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandleLike>
-}
-
-type FileSystemFileHandleLike = {
-  getFile?: () => Promise<File>
-  createWritable?: () => Promise<{
-    write: (data: string) => Promise<void>
-    close: () => Promise<void>
-  }>
-}
+import type { FileSystemDirectoryHandleLike, FileSystemFileHandleLike } from '~/utils/fs-directory-handle'
 
 type SummaryIssueType = 'invalid-json' | 'missing-night-id' | 'legacy-night-id' | 'mismatched-night-id'
 
@@ -57,7 +45,39 @@ export type NightSummaryHealReport = {
   failedWrites: number
 }
 
-export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }): Promise<DatasetHealthAuditReport> {
+export type DatasetHealthAuditResult =
+  | { mode: 'legacy'; report: DatasetHealthAuditReport }
+  | { mode: 'mothbox-next'; report: PackageHealthReport }
+
+export async function runMothboxNextPackageHealthAudit(): Promise<PackageHealthReport> {
+  const active = mothboxNextPackageStore.get()
+  const loaded = active?.loaded
+  if (!loaded) {
+    return {
+      patchCount: 0,
+      resolvedCount: 0,
+      missingAssets: [],
+      orphanClassifications: [],
+      unresolvedPatches: [],
+    }
+  }
+
+  const entries = indexedFilesStore.get() ?? []
+  return auditMothboxNextPackageHealth({
+    loaded,
+    fileExists: async (absolutePath) => {
+      const rel = absolutePath.replace(/^\/+/, '')
+      return entries.some((e) => e.path.replaceAll('\\', '/').replace(/^\/+/, '') === rel)
+    },
+  })
+}
+
+export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }): Promise<DatasetHealthAuditResult> {
+  if (isMothboxNextIngestMode()) {
+    const report = await runMothboxNextPackageHealthAudit()
+    return { mode: 'mothbox-next', report }
+  }
+
   const entries = params?.entries ?? indexedFilesStore.get() ?? []
   const report: DatasetHealthAuditReport = {
     scannedFiles: entries.length,
@@ -70,8 +90,8 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
     collisions: [],
   }
 
-  const firstPhotoById = new Map<string, { nightId: string; path: string }>()
-  const firstPatchById = new Map<string, { nightId: string; path: string }>()
+  const firstPhotoById = new Map<string, { leafGroupId: string; path: string }>()
+  const firstPatchById = new Map<string, { leafGroupId: string; path: string }>()
   const photoCollisionKeys = new Set<string>()
   const patchCollisionKeys = new Set<string>()
 
@@ -90,14 +110,14 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
 
     const parsed = parsePathParts({ path: entry.path })
     if (!parsed) continue
-    const nightId = `${parsed.project}/${parsed.deployment}/${parsed.night}`
+    const leafGroupId = `${parsed.project}/${parsed.deployment}/${parsed.night}`
 
     if (parsed.isPhotoJpg) {
       const photoId = `${parsed.baseName}.jpg`
       registerCollision({
         kind: 'photo',
         id: photoId,
-        nightId,
+        leafGroupId,
         path: entry.path,
         firstById: firstPhotoById,
         collisionKeys: photoCollisionKeys,
@@ -110,7 +130,7 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
       registerCollision({
         kind: 'patch',
         id: parsed.fileName,
-        nightId,
+        leafGroupId,
         path: entry.path,
         firstById: firstPatchById,
         collisionKeys: patchCollisionKeys,
@@ -122,10 +142,14 @@ export async function runDatasetHealthAudit(params?: { entries?: IndexedFile[] }
   report.photoCollisionCount = photoCollisionKeys.size
   report.patchCollisionCount = patchCollisionKeys.size
 
-  return report
+  return { mode: 'legacy', report }
 }
 
 export async function healNightSummaryNightIds(params?: { entries?: IndexedFile[] }): Promise<NightSummaryHealReport> {
+  if (isMothboxNextIngestMode()) {
+    return emptyNightSummaryHealReport()
+  }
+
   const entries = params?.entries ?? indexedFilesStore.get() ?? []
   const summaryEntries = entries.filter((entry) => (entry?.name ?? '').toLowerCase() === 'night_summary.json')
   const root = (await idbGet(
@@ -181,14 +205,14 @@ export async function healNightSummaryNightIds(params?: { entries?: IndexedFile[
       continue
     }
 
-    const currentNightId = typeof json?.nightId === 'string' ? json.nightId : undefined
+    const currentNightId = typeof json?.leafGroupId === 'string' ? json.leafGroupId : undefined
     if (currentNightId === expectedNightId) {
       alreadyCanonical++
       continue
     }
 
     candidates++
-    const next = { ...json, nightId: expectedNightId }
+    const next = { ...json, leafGroupId: expectedNightId }
     const ok = await writeJsonToIndexedPath({ root, entry, json: next })
     if (ok) healed++
     else failedWrites++
@@ -200,28 +224,28 @@ export async function healNightSummaryNightIds(params?: { entries?: IndexedFile[
 function registerCollision(params: {
   kind: 'photo' | 'patch'
   id: string
-  nightId: string
+  leafGroupId: string
   path: string
-  firstById: Map<string, { nightId: string; path: string }>
+  firstById: Map<string, { leafGroupId: string; path: string }>
   collisionKeys: Set<string>
   collisions: CollisionIssue[]
 }) {
-  const { kind, id, nightId, path, firstById, collisionKeys, collisions } = params
+  const { kind, id, leafGroupId, path, firstById, collisionKeys, collisions } = params
   const first = firstById.get(id)
   if (!first) {
-    firstById.set(id, { nightId, path })
+    firstById.set(id, { leafGroupId, path })
     return
   }
 
-  if (first.nightId === nightId) return
+  if (first.leafGroupId === leafGroupId) return
   if (collisionKeys.has(id)) return
 
   collisionKeys.add(id)
   collisions.push({
     kind,
     id,
-    firstNightId: first.nightId,
-    secondNightId: nightId,
+    firstNightId: first.leafGroupId,
+    secondNightId: leafGroupId,
     firstPath: first.path,
     secondPath: path,
   })
@@ -244,7 +268,7 @@ async function auditNightSummaryFile(params: { entry: IndexedFile; report: Datas
     return
   }
 
-  const currentNightId = typeof json?.nightId === 'string' ? json.nightId : undefined
+  const currentNightId = typeof json?.leafGroupId === 'string' ? json.leafGroupId : undefined
   if (!currentNightId) {
     report.summaryIssues.push({ path: entry.path, type: 'missing-night-id', expectedNightId })
     return
@@ -349,11 +373,28 @@ async function writeJsonToIndexedPath(params: {
   return true
 }
 
-export function formatDatasetHealthAuditSummary(report: DatasetHealthAuditReport) {
+export function formatDatasetHealthAuditSummary(result: DatasetHealthAuditResult) {
+  if (result.mode === 'mothbox-next') {
+    const report = result.report
+    return `package: ${report.patchCount} patches, ${report.resolvedCount} resolved; missing assets: ${report.missingAssets.length}, orphan classifications: ${report.orphanClassifications.length}, unresolved patches: ${report.unresolvedPatches.length}`
+  }
+
+  const report = result.report
   const summaryIssueCount = report.summaryIssues.length
   return `scanned ${report.scannedFiles} files; summary issues: ${summaryIssueCount}, invalid identified JSON: ${report.invalidIdentifiedJsonCount}, photo collisions: ${report.photoCollisionCount}, patch collisions: ${report.patchCollisionCount}`
 }
 
 export function formatNightSummaryHealSummary(report: NightSummaryHealReport) {
   return `scanned ${report.scanned}, candidates ${report.candidates}, healed ${report.healed}, already canonical ${report.alreadyCanonical}, invalid JSON ${report.skippedInvalidJson}, failed writes ${report.failedWrites}`
+}
+
+function emptyNightSummaryHealReport(): NightSummaryHealReport {
+  return {
+    scanned: 0,
+    candidates: 0,
+    healed: 0,
+    alreadyCanonical: 0,
+    skippedInvalidJson: 0,
+    failedWrites: 0,
+  }
 }

@@ -1,32 +1,46 @@
 import { useStore } from '@nanostores/react'
-import { useParams } from '@tanstack/react-router'
+import { useParams, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-//
-import { nightsStore } from '~/stores/entities/4.nights'
-//
-import { nightIngestProgressStore } from '~/stores/ui'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
+import { leafGroupIngestProgressStore } from '~/stores/ui'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { useAppLoading } from '~/features/data-flow/1.ingest/files-queries'
 import { NightView } from './night-view'
-import { useNightIngest } from './use-night-ingest'
+import { useLeafGroupIngest } from './use-night-ingest'
+import { resolveLeafGroupIdFromRoute } from '~/features/mothbox-next/hierarchy-routes'
+import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 
 export function Night() {
-  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
-  const nights = useStore(nightsStore)
-  const { isLoading: isLoadingFolders } = useAppLoading()
+  const { pathname } = useRouterState({ select: (s) => s.location })
+  const leafParams = useParams({ strict: false }) as {
+    leafGroupId?: string
+    projectId?: string
+    deploymentId?: string
+  }
+  const nights = useStore(leafGroupsStore)
+  const resolvedHierarchy = useStore(activeHierarchyStore)
+  const { isBlockingLoading } = useAppLoading()
 
-  const ingestProgress = useStore(nightIngestProgressStore)
-  const [isNightIngesting, setIsNightIngesting] = useState(false)
+  const ingestProgress = useStore(leafGroupIngestProgressStore)
+  const [isLeafGroupIngesting, setIsNightIngesting] = useState(false)
 
-  const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
-  const night = nights[nightId]
+  const leafGroupId =
+    leafParams.leafGroupId ??
+    resolveLeafGroupIdFromRoute({
+      pathname,
+      nights,
+      leafGroupIds: resolvedHierarchy?.leafGroupIds,
+    }) ??
+    ''
 
-  const ingestState = useNightIngest({ nightId })
+  const night = nights[leafGroupId]
+
+  const ingestState = useLeafGroupIngest({ leafGroupId })
   useEffect(() => {
-    setIsNightIngesting(ingestState.isNightIngesting)
-  }, [ingestState.isNightIngesting])
+    setIsNightIngesting(ingestState.isLeafGroupIngesting)
+  }, [ingestState.isLeafGroupIngesting])
 
-  const isNightLoading = isLoadingFolders || isNightIngesting
+  const isNightLoading = isBlockingLoading || isLeafGroupIngesting
 
   if (isNightLoading) {
     const processed = ingestProgress?.processed ?? 0
@@ -40,5 +54,5 @@ export function Night() {
 
   if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
 
-  return <NightView nightId={nightId} />
+  return <NightView leafGroupId={leafGroupId} />
 }

@@ -10,13 +10,13 @@
 export { projectsStore, type ProjectEntity } from './entities/1.projects'
 export { sitesStore, type SiteEntity } from './entities/2.sites'
 export { deploymentsStore, type DeploymentEntity } from './entities/3.deployments'
-export { nightsStore, type NightEntity } from './entities/4.nights'
-export { patchesStore, type PatchEntity, clearFileObjectsForNight as clearPatchesForNight } from './entities/5.patches'
-export { photosStore, type PhotoEntity, type IndexedFile, clearFileObjectsForNight as clearPhotosForNight } from './entities/photos'
+export { leafGroupsStore, type LeafGroupEntity } from './entities/leaf-groups'
+export { patchesStore, type PatchEntity, clearFileObjectsForLeafGroup as clearPatchesForLeafGroup } from './entities/5.patches'
+export { photosStore, type PhotoEntity, type IndexedFile, clearFileObjectsForLeafGroup as clearPhotosForLeafGroup } from './entities/photos'
 export { detectionsStore, detectionStoreById, type DetectionEntity } from './entities/detections'
 
 // Re-export ingest functions from the canonical location
-export { ingestFilesToStores, ingestDetectionsForNight } from '~/features/data-flow/1.ingest/ingest'
+export { ingestFilesToStores, ingestDetectionsForLeafGroup as ingestDetectionsForNight } from '~/features/data-flow/1.ingest/ingest'
 
 // Re-export identification functions from detections store
 export { labelDetections, acceptDetections, resetDetections } from './entities/detections'
@@ -24,55 +24,63 @@ export { labelDetections, acceptDetections, resetDetections } from './entities/d
 import { projectsStore } from './entities/1.projects'
 import { sitesStore } from './entities/2.sites'
 import { deploymentsStore } from './entities/3.deployments'
-import { nightsStore } from './entities/4.nights'
-import { patchesStore, clearFileObjectsForNight as clearPatchesForNight } from './entities/5.patches'
-import { photosStore, clearFileObjectsForNight as clearPhotosForNight } from './entities/photos'
+import { leafGroupsStore } from './entities/leaf-groups'
+import { patchesStore, clearFileObjectsForLeafGroup as clearPatchesForLeafGroup } from './entities/5.patches'
+import { photosStore, clearFileObjectsForLeafGroup as clearPhotosForLeafGroup } from './entities/photos'
 import { detectionsStore } from './entities/detections'
+import { leafGroupSummariesStore } from './entities/night-summaries'
+import { morphoLinksStore } from '~/features/data-flow/3.persist/links'
+import { clearMothboxNextPackage } from '~/features/mothbox-next/active-package'
+import { clearActiveHierarchy } from '~/features/mothbox-next/active-hierarchy'
 
 /**
  * Resets all entity stores to empty state.
  */
 export function resetAllEntityStores() {
+  clearMothboxNextPackage()
+  clearActiveHierarchy()
   projectsStore.set({})
   sitesStore.set({})
   deploymentsStore.set({})
-  nightsStore.set({})
+  leafGroupsStore.set({})
   photosStore.set({})
   patchesStore.set({})
   detectionsStore.set({})
+  leafGroupSummariesStore.set({})
+  morphoLinksStore.set({})
 }
 
 /**
  * Clears File objects from photos and patches for nights not in the active set.
  * This helps with memory management when navigating away from nights.
  */
-export function clearFileObjectsForInactiveNights(params: { activeNightIds: Set<string> }) {
-  const { activeNightIds } = params
+export function clearFileObjectsForInactiveLeafGroups(params: { activeLeafGroupIds: Set<string> }) {
+  const { activeLeafGroupIds } = params
   const photos = photosStore.get() || {}
   const patches = patchesStore.get() || {}
-  const nightsToCleanup = new Set<string>()
+  const leafGroupsToCleanup = new Set<string>()
 
   for (const photo of Object.values(photos)) {
-    if (photo.nightId && !activeNightIds.has(photo.nightId)) {
-      nightsToCleanup.add(photo.nightId)
+    if (photo.leafGroupId && !activeLeafGroupIds.has(photo.leafGroupId)) {
+      leafGroupsToCleanup.add(photo.leafGroupId)
     }
   }
 
   for (const patch of Object.values(patches)) {
-    if (patch.nightId && !activeNightIds.has(patch.nightId)) {
-      nightsToCleanup.add(patch.nightId)
+    if (patch.leafGroupId && !activeLeafGroupIds.has(patch.leafGroupId)) {
+      leafGroupsToCleanup.add(patch.leafGroupId)
     }
   }
 
-  for (const nightId of nightsToCleanup) {
-    clearPhotosForNight({ nightId })
-    clearPatchesForNight({ nightId })
+  for (const leafGroupId of leafGroupsToCleanup) {
+    clearPhotosForLeafGroup({ leafGroupId })
+    clearPatchesForLeafGroup({ leafGroupId })
   }
 
-  if (nightsToCleanup.size > 0) {
+  if (leafGroupsToCleanup.size > 0) {
     console.log('🗑️ cleanup: cleared File objects for inactive nights', {
-      nightsCleared: Array.from(nightsToCleanup),
-      activeNights: Array.from(activeNightIds),
+      nightsCleared: Array.from(leafGroupsToCleanup),
+      activeNights: Array.from(activeLeafGroupIds),
     })
   }
 }

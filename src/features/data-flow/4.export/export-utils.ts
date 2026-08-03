@@ -1,8 +1,8 @@
 import { deriveSiteFromDeploymentFolder } from '../1.ingest/ingest-paths'
 
-export function getProjectExportPath(params: { nightId: string }): string {
-  const { nightId } = params
-  const parts = nightId.split('/').filter(Boolean)
+export function getProjectExportPath(params: { leafGroupId: string }): string {
+  const { leafGroupId } = params
+  const parts = leafGroupId.split('/').filter(Boolean)
   const project = parts[0] || ''
   if (!project) return 'exports'
   return `${project}/exports`
@@ -17,9 +17,9 @@ export function sanitizeForFileName(input: string): string {
   return cleaned
 }
 
-export function buildExportFileNameParts(params: { nightId: string }) {
-  const { nightId } = params
-  const parts = (nightId || '').split('/').filter(Boolean)
+export function buildExportFileNameParts(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
+  const parts = (leafGroupId || '').split('/').filter(Boolean)
   // Expected: [project, deployment, night]
   const project = parts[0] || 'dataset'
   const deployment = parts[1] || 'deployment'

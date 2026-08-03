@@ -24,7 +24,7 @@ describe('dataset-health', () => {
         path: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/night_summary.json',
         name: 'night_summary.json',
         text: JSON.stringify({
-          nightId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
+          leafGroupId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
           totalDetections: 10,
           totalIdentified: 5,
         }),
@@ -52,17 +52,20 @@ describe('dataset-health', () => {
       }),
     ]
 
-    const report = await runDatasetHealthAudit({ entries })
+    const result = await runDatasetHealthAudit({ entries })
 
-    expect(report.nightSummaryFiles).toBe(1)
-    expect(report.identifiedFiles).toBe(1)
-    expect(report.summaryIssues.some((issue) => issue.type === 'legacy-night-id')).toBe(true)
-    expect(report.invalidIdentifiedJsonCount).toBe(1)
-    expect(report.photoCollisionCount).toBe(1)
-    expect(report.patchCollisionCount).toBe(1)
+    expect(result.mode).toBe('legacy')
+    if (result.mode !== 'legacy') return
+
+    expect(result.report.nightSummaryFiles).toBe(1)
+    expect(result.report.identifiedFiles).toBe(1)
+    expect(result.report.summaryIssues.some((issue) => issue.type === 'legacy-night-id')).toBe(true)
+    expect(result.report.invalidIdentifiedJsonCount).toBe(1)
+    expect(result.report.photoCollisionCount).toBe(1)
+    expect(result.report.patchCollisionCount).toBe(1)
   })
 
-  it('heals legacy summary nightId values', async () => {
+  it('heals legacy summary leafGroupId values', async () => {
     const root = {
       queryPermission: async () => 'granted',
     }
@@ -73,7 +76,7 @@ describe('dataset-health', () => {
       path: 'Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/night_summary.json',
       name: 'night_summary.json',
       text: JSON.stringify({
-        nightId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
+        leafGroupId: 'Dinacon2025/Les/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21',
         totalDetections: 10,
         totalIdentified: 5,
       }),
@@ -87,7 +90,7 @@ describe('dataset-health', () => {
 
     expect(report.scanned).toBe(1)
     expect(report.healed).toBe(1)
-    expect(healedJson.nightId).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21')
+    expect(healedJson.leafGroupId).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21')
   })
 })
 

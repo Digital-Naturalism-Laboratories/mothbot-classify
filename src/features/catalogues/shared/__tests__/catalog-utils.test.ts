@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNightUrl, computeAllowedNightIds, extractRouteIds, parseNightIdParts } from '../catalog-utils'
+import { buildNightUrl, computeAllowedLeafGroupIds, extractRouteIds, parseNightIdParts } from '../catalog-utils'
 
 describe('catalog-utils', () => {
   it('extracts route ids from canonical night route', () => {
@@ -7,7 +7,7 @@ describe('catalog-utils', () => {
     expect(ids).toMatchObject({
       projectId: 'Dinacon2025',
       deploymentId: 'Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20',
-      nightId: '2025-06-21',
+      leafGroupId: '2025-06-21',
       siteId: 'Les',
     })
   })
@@ -16,7 +16,7 @@ describe('catalog-utils', () => {
     const url = buildNightUrl({
       projectId: 'Dinacon2025',
       deploymentId: 'Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20',
-      nightId: '2025-06-21',
+      leafGroupId: '2025-06-21',
     })
     expect(url).toBe('/projects/Dinacon2025/deployments/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/nights/2025-06-21')
   })
@@ -26,7 +26,7 @@ describe('catalog-utils', () => {
     expect(parts).toMatchObject({
       projectId: 'Dinacon2025',
       deploymentId: 'Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20',
-      nightId: '2025-06-21',
+      leafGroupId: '2025-06-21',
       siteId: 'Les',
     })
   })
@@ -37,7 +37,7 @@ describe('catalog-utils', () => {
       'Dinacon2025/Dinacon2025_Les_WilanTopTree_HopeCobo_2025-06-25/2025-06-25': {},
       'Hoya/Hoya_168m_doubleParina_2025-01-26/2025-01-26': {},
     }
-    const allowed = computeAllowedNightIds({
+    const allowed = computeAllowedLeafGroupIds({
       usageScope: 'deployment',
       summaries,
       projectId: 'Dinacon2025',

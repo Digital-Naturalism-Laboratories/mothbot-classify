@@ -5,6 +5,7 @@ import { Icon } from '~/components/atomic/Icon'
 import { CommandDialog, CommandEmpty, CommandInput, CommandItem, CommandList } from '~/components/ui/command'
 import { projectSpeciesSelectionStore, saveProjectSpeciesSelection } from '~/stores/species/project-species-list'
 import { SpeciesList, speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
+import { isInSpeciesNamedFolder } from '~/features/data-flow/1.ingest/species-indexed-paths'
 import { Column } from '~/styles'
 import { $isSpeciesPickerOpen, $speciesPickerProjectId } from './species-picker.state'
 
@@ -16,7 +17,15 @@ export function SpeciesPicker() {
   const lists = useStore(speciesListsStore)
   const selection = useStore(projectSpeciesSelectionStore)
 
-  const options = useMemo(() => Object.values(lists ?? {}), [lists])
+  const options = useMemo(() => {
+    const all = Object.values(lists ?? {})
+    return [...all].sort((a, b) => {
+      const aInSpecies = isInSpeciesNamedFolder(a.sourcePath ?? '')
+      const bInSpecies = isInSpeciesNamedFolder(b.sourcePath ?? '')
+      if (aInSpecies !== bInSpecies) return aInSpecies ? -1 : 1
+      return (a.name ?? '').localeCompare(b.name ?? '')
+    })
+  }, [lists])
 
   function handleSelect(listId: string) {
     if (!listId || !projectId) return
@@ -49,7 +58,7 @@ function ListItem(props: { list: SpeciesList; isSelected?: boolean; onSelect: (i
     <CommandItem onSelect={() => onSelect(list.id)} className='text-ellipsis !py-4'>
       <Column className='gap-2 flex-1'>
         <span className='flex-1'>{list.name}</span>
-        <span className='flex-1 text-11 font-mono text-ink-secondary'>{list.doi}</span>
+        <span className='flex-1 text-11 font-mono text-ink-secondary'>{list.sourcePath || list.doi}</span>
       </Column>
       {isSelected ? <Icon icon={CheckCircleIcon} className='text-brand mr-6' /> : null}
     </CommandItem>

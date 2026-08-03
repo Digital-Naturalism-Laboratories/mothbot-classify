@@ -11,7 +11,10 @@ export type TaxonomyNode = {
   isMorpho?: boolean
 }
 
-export type NightLeftPanelProps = {
+export type LeafGroupLeftPanelProps = {
+  leafGroupId: string
+  hasMachineIdentification?: boolean
+  unassignedCount?: number
   taxonomyAuto?: TaxonomyNode[]
   taxonomyUser?: TaxonomyNode[]
   totalPatches: number
@@ -20,8 +23,18 @@ export type NightLeftPanelProps = {
   sizeThreshold: number
   sizeThresholdMax: number
   sortByClusters: boolean
+  smallestFirst: boolean
+  clustersCollapsed: boolean
   onSizeThresholdChange: (value: number) => void
   onSortByClustersChange: (enabled: boolean) => void
+  onSmallestFirstChange: (enabled: boolean) => void
+  onClustersCollapsedChange: (enabled: boolean) => void
+  availableDetectorIds?: string[]
+  selectedDetectorId?: string
+  onDetectorChange?: (detectorId: string) => void
+  availableBotAlgorithms?: string[]
+  selectedBotAlgorithm?: string
+  onBotAlgorithmChange?: (algorithm: string) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
   onSelectTaxon: (params: {

@@ -13,12 +13,13 @@ export type PatchDownloadContextMenuProps = {
   originalDownloadName?: string | null
   maxLongSide?: number
   menuLabel?: string
+  extraItems?: React.ReactNode
 }
 
 const DEFAULT_MAX_LONG_SIDE = 1000
 
 export function PatchDownloadContextMenu(props: PatchDownloadContextMenuProps) {
-  const { children, file, handle, originalUrl, originalDownloadName, maxLongSide = DEFAULT_MAX_LONG_SIDE, menuLabel = 'Patch download options' } = props
+  const { children, file, handle, originalUrl, originalDownloadName, maxLongSide = DEFAULT_MAX_LONG_SIDE, menuLabel = 'Patch download options', extraItems } = props
   const [shouldPrepareDownload, setShouldPrepareDownload] = useState(false)
 
   const standardizedUrl = useStandardizedImageDownloadUrl(
@@ -51,6 +52,7 @@ export function PatchDownloadContextMenu(props: PatchDownloadContextMenuProps) {
         >
           Download 1000px
         </ContextMenuItem>
+        {extraItems}
       </ContextMenuContent>
     </ContextMenu>
   )

@@ -1,14 +1,14 @@
 import type { TaxonomyNode } from '~/features/left-panel/left-panel.types'
-import { computeAllowedNightIds } from '~/features/catalogues/shared/catalog-utils'
-import type { ScopeType } from '~/features/catalogues/shared/scope-filters'
+import { buildCatalogScopeCounts } from '~/features/catalogues/shared/catalog-utils'
 import {
   buildSpeciesTaxonomySummary,
   mergeSpeciesTaxonomySummary,
-  type NightSummaryEntity,
+  type LeafGroupSummaryEntity,
   type SpeciesTaxonomySummary,
 } from '~/stores/entities/night-summaries'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import type { NightEntity } from '~/stores/entities/4.nights'
+import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
+import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 
 export type SpeciesCatalogItem = {
   speciesName: string
@@ -17,7 +17,7 @@ export type SpeciesCatalogItem = {
 }
 
 export type SpeciesPreviewPair = {
-  nightId: string
+  leafGroupId: string
   patchId: string
 }
 
@@ -28,37 +28,39 @@ export type SpeciesTaxonSelection = {
 
 export type SpeciesUsageSummary = {
   instanceCount: number
-  nightIds: string[]
+  leafGroupIds: string[]
   projectIds: string[]
   previewPairs: SpeciesPreviewPair[]
 }
 
 export function buildSpeciesScopeCounts(params: {
-  summaries?: Record<string, NightSummaryEntity>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  detections?: Record<string, DetectionEntity>
+  nights?: Record<string, LeafGroupEntity>
   projectId?: string
   siteId?: string
   deploymentId?: string
-  nightId?: string
+  leafGroupId?: string
 }) {
-  const { summaries, projectId, siteId, deploymentId, nightId } = params
+  const { summaries, detections, nights, projectId, siteId, deploymentId, leafGroupId } = params
 
-  return {
-    all: countSpeciesForScope({ usageScope: 'all', summaries }),
-    project: projectId ? countSpeciesForScope({ usageScope: 'project', summaries, projectId }) : 0,
-    site: projectId && siteId ? countSpeciesForScope({ usageScope: 'site', summaries, projectId, siteId }) : 0,
-    deployment: projectId && deploymentId ? countSpeciesForScope({ usageScope: 'deployment', summaries, projectId, deploymentId }) : 0,
-    night: projectId && deploymentId && nightId ? countSpeciesForScope({ usageScope: 'night', summaries, projectId, deploymentId, nightId }) : 0,
-  } satisfies Record<ScopeType, number>
+  return buildCatalogScopeCounts({
+    summaries,
+    nights,
+    scopeIds: { projectId, siteId, deploymentId, leafGroupId },
+    countForScope: (allowedLeafGroupIds) =>
+      Object.keys(mergeSpeciesCountSources({ summaries, detections, allowedLeafGroupIds })).length,
+  })
 }
 
 export function buildSpeciesCatalogItems(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  allowedLeafGroupIds?: Set<string>
   detections?: Record<string, DetectionEntity>
 }) {
-  const { summaries, allowedNightIds, detections } = params
-  const counts = buildSpeciesCountIndex({ summaries, allowedNightIds })
-  const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedNightIds, detections })
+  const { summaries, allowedLeafGroupIds, detections } = params
+  const counts = mergeSpeciesCountSources({ summaries, allowedLeafGroupIds, detections })
+  const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedLeafGroupIds, detections })
 
   return Object.entries(counts)
     .map(([speciesName, count]) => ({
@@ -70,15 +72,15 @@ export function buildSpeciesCatalogItems(params: {
 }
 
 export function buildSpeciesTaxonomyIndex(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  allowedLeafGroupIds?: Set<string>
   detections?: Record<string, DetectionEntity>
 }) {
-  const { summaries, allowedNightIds, detections } = params
+  const { summaries, allowedLeafGroupIds, detections } = params
   const taxonomyByName = new Map<string, SpeciesTaxonomySummary>()
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
-    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
 
     for (const [speciesName, taxonomy] of Object.entries(summary?.speciesTaxonomyByName ?? {})) {
       taxonomyByName.set(
@@ -93,7 +95,7 @@ export function buildSpeciesTaxonomyIndex(params: {
 
   for (const detection of Object.values(detections ?? {})) {
     if (!isCatalogSpeciesDetection(detection)) continue
-    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+    if (allowedLeafGroupIds && detection?.leafGroupId && !allowedLeafGroupIds.has(detection.leafGroupId)) continue
 
     const speciesName = normalizeSpeciesName(detection?.taxon?.species)
     if (!speciesName) continue
@@ -157,61 +159,86 @@ export function filterSpeciesByTaxon(params: {
 
 export function buildSpeciesUsageSummary(params: {
   speciesName: string
-  summaries?: Record<string, NightSummaryEntity>
-  nights?: Record<string, NightEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  nights?: Record<string, LeafGroupEntity>
+  allowedLeafGroupIds?: Set<string>
   detections?: Record<string, DetectionEntity>
 }) {
-  const { speciesName, summaries, nights, allowedNightIds, detections } = params
-  const nightIds: string[] = []
+  const { speciesName, summaries, nights, allowedLeafGroupIds, detections } = params
+  const leafGroupIds: string[] = []
   const projectIds = new Set<string>()
-  const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedNightIds, detections })
+  const previewPairsByName = buildSpeciesPreviewPairsByName({ summaries, allowedLeafGroupIds, detections })
   let instanceCount = 0
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
-    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
 
     const count = summary?.speciesCounts?.[speciesName]
     if (!count) continue
 
-    nightIds.push(nightId)
+    leafGroupIds.push(leafGroupId)
     instanceCount += count
 
-    const projectId = nights?.[nightId]?.projectId
+    const projectId = resolveDatasetId(nights?.[leafGroupId])
     if (projectId) projectIds.add(projectId)
   }
 
   return {
     instanceCount,
-    nightIds,
+    leafGroupIds,
     projectIds: Array.from(projectIds),
     previewPairs: previewPairsByName.get(speciesName) || [],
   }
 }
 
-function countSpeciesForScope(params: {
-  usageScope: ScopeType
-  summaries?: Record<string, NightSummaryEntity>
-  projectId?: string
-  siteId?: string
-  deploymentId?: string
-  nightId?: string
+export function mergeSpeciesCountSources(params: {
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  detections?: Record<string, DetectionEntity>
+  allowedLeafGroupIds?: Set<string>
 }) {
-  const { usageScope, summaries, projectId, siteId, deploymentId, nightId } = params
-  const allowedNightIds = computeAllowedNightIds({ usageScope, summaries: summaries || {}, projectId, siteId, deploymentId, nightId })
-  const countIndex = buildSpeciesCountIndex({ summaries, allowedNightIds })
-  return Object.keys(countIndex).length
+  const fromSummaries = buildSpeciesCountIndex(params)
+  const fromDetections = buildSpeciesCountIndexFromDetections(params)
+  const counts: Record<string, number> = {}
+  const keys = new Set([...Object.keys(fromSummaries), ...Object.keys(fromDetections)])
+
+  for (const key of keys) {
+    const usageCount = fromDetections[key] || fromSummaries[key] || 0
+    if (usageCount <= 0) continue
+    counts[key] = usageCount
+  }
+
+  return counts
+}
+
+function buildSpeciesCountIndexFromDetections(params: {
+  detections?: Record<string, DetectionEntity>
+  allowedLeafGroupIds?: Set<string>
+}) {
+  const { detections, allowedLeafGroupIds } = params
+  const counts: Record<string, number> = {}
+
+  for (const detection of Object.values(detections ?? {})) {
+    if (!isCatalogSpeciesDetection(detection)) continue
+    if (allowedLeafGroupIds && detection?.leafGroupId && !allowedLeafGroupIds.has(detection.leafGroupId)) continue
+
+    const speciesName = normalizeSpeciesName(detection?.taxon?.species)
+    if (!speciesName) continue
+
+    counts[speciesName] = (counts[speciesName] || 0) + 1
+  }
+
+  return counts
 }
 
 function buildSpeciesCountIndex(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  allowedLeafGroupIds?: Set<string>
 }) {
-  const { summaries, allowedNightIds } = params
+  const { summaries, allowedLeafGroupIds } = params
   const counts: Record<string, number> = {}
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
-    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
 
     for (const [speciesName, value] of Object.entries(summary?.speciesCounts ?? {})) {
       counts[speciesName] = (counts[speciesName] || 0) + (typeof value === 'number' ? value : 0)
@@ -222,39 +249,39 @@ function buildSpeciesCountIndex(params: {
 }
 
 function buildSpeciesPreviewPairsByName(params: {
-  summaries?: Record<string, NightSummaryEntity>
-  allowedNightIds?: Set<string>
+  summaries?: Record<string, LeafGroupSummaryEntity>
+  allowedLeafGroupIds?: Set<string>
   detections?: Record<string, DetectionEntity>
 }) {
-  const { summaries, allowedNightIds, detections } = params
+  const { summaries, allowedLeafGroupIds, detections } = params
   const previewPairsByName = new Map<string, SpeciesPreviewPair[]>()
 
-  for (const [nightId, summary] of Object.entries(summaries ?? {})) {
-    if (allowedNightIds && !allowedNightIds.has(nightId)) continue
+  for (const [leafGroupId, summary] of Object.entries(summaries ?? {})) {
+    if (allowedLeafGroupIds && !allowedLeafGroupIds.has(leafGroupId)) continue
 
     for (const [speciesName, patchId] of Object.entries(summary?.speciesPreviewPatchIds ?? {})) {
       if (!patchId) continue
       appendPreviewPair({
         previewPairsByName,
         speciesName,
-        previewPair: { nightId, patchId },
+        previewPair: { leafGroupId, patchId },
       })
     }
   }
 
   for (const detection of Object.values(detections ?? {})) {
     if (!isCatalogSpeciesDetection(detection)) continue
-    if (allowedNightIds && detection?.nightId && !allowedNightIds.has(detection.nightId)) continue
+    if (allowedLeafGroupIds && detection?.leafGroupId && !allowedLeafGroupIds.has(detection.leafGroupId)) continue
 
     const speciesName = normalizeSpeciesName(detection?.taxon?.species)
-    const nightId = detection?.nightId
+    const leafGroupId = detection?.leafGroupId
     const patchId = detection?.patchId ? String(detection.patchId) : ''
-    if (!speciesName || !nightId || !patchId) continue
+    if (!speciesName || !leafGroupId || !patchId) continue
 
     appendPreviewPair({
       previewPairsByName,
       speciesName,
-      previewPair: { nightId, patchId },
+      previewPair: { leafGroupId, patchId },
     })
   }
 
@@ -312,7 +339,7 @@ function appendPreviewPair(params: {
 }) {
   const { previewPairsByName, speciesName, previewPair } = params
   const existing = previewPairsByName.get(speciesName) || []
-  const alreadyIncluded = existing.some((entry) => entry.nightId === previewPair.nightId && entry.patchId === previewPair.patchId)
+  const alreadyIncluded = existing.some((entry) => entry.leafGroupId === previewPair.leafGroupId && entry.patchId === previewPair.patchId)
   if (alreadyIncluded) return
 
   previewPairsByName.set(speciesName, [...existing, previewPair])

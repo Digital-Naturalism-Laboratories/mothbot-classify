@@ -70,6 +70,9 @@ export function buildDetectionFromBotShape(params: { shape: any; existingDetecti
     speciesListId: undefined,
     speciesListDOI: undefined,
     originalMothboxLabel: existingDetection?.originalMothboxLabel ?? safeString(shape?.label),
+    classificationType: undefined,
+    humanClassifierId: undefined,
+    botClassifierId: safeString(shape?.detector_bot) || existingDetection?.botClassifierId,
   }
 
   return detection
@@ -96,7 +99,7 @@ export function buildDetectionFromIdentifiedJsonShape(params: { shape: any; phot
     id: detectionId,
     patchId: detectionId,
     photoId: existingDetection?.photoId || (photo as any).id,
-    nightId: (photo as any).nightId,
+    leafGroupId: (photo as any).leafGroupId,
     label: isError ? 'ERROR' : taxon?.scientificName || safeString(shape?.label) || existingDetection?.label,
     taxon: (taxon as any) ?? (isError ? undefined : existingDetection?.taxon),
     score: safeNumber(shape?.score) ?? existingDetection?.score,
@@ -233,20 +236,22 @@ export function updateDetectionAsMorphospecies(params: UpdateDetectionAsMorphosp
 
 export type UpdateDetectionAsErrorParams = {
   existing: DetectionEntity
+  /** Optional error sub-category label, e.g. "ERROR_Frass". */
+  label?: string
   speciesListId?: string
   speciesListDOI?: string
 }
 
 /**
- * Marks a detection as an error.
+ * Marks a detection as an error (optionally with a sub-category label).
  * Delegates to identifyDetection() for the actual logic.
  */
 export function updateDetectionAsError(params: UpdateDetectionAsErrorParams): DetectionEntity {
-  const { existing, speciesListId, speciesListDOI } = params
+  const { existing, label, speciesListId, speciesListDOI } = params
 
   const result = identifyDetection({
     detection: existing,
-    input: { type: 'error' },
+    input: { type: 'error', label },
     context: { speciesListId, speciesListDOI },
   })
 

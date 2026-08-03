@@ -1,7 +1,8 @@
 import { memo, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { PatchDownloadContextMenu } from '~/components/atomic/patch-download-context-menu'
-import { detectionStoreById, detectionsStore } from '~/stores/entities/detections'
+import { ContextMenuSeparator, ContextMenuItem } from '~/components/ui/context-menu'
+import { detectionStoreById, detectionsStore, assignDetectionsToCluster, removeDetectionsFromCluster, splitDetectionsToNewCluster } from '~/stores/entities/detections'
 import { patchStoreById } from '~/stores/entities/patch-selectors'
 import { Badge } from '~/components/ui/badge'
 import { TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
@@ -9,14 +10,18 @@ import {
   selectedPatchIdsStore,
   togglePatchSelection,
   setSelection,
+  clearPatchSelection,
   selectedClusterIdStore,
   setSelectedClusterId,
   selectedSubClusterIdStore,
   setSelectedSubClusterId,
-  selectionNightIdStore,
+  selectionLeafGroupIdStore,
+  activeNightIdsStore,
 } from '~/stores/ui'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { cn } from '~/utils/cn'
 import { useObjectUrl } from '~/utils/use-object-url'
+import { makeIndexedFileHandle } from '~/stores/entities/photos'
 import { Button } from '~/components/ui/button'
 import { ZoomInIcon } from 'lucide-react'
 import type { BadgeVariants } from '~/components/ui/badge'
@@ -25,7 +30,7 @@ import { MoreVertical } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
 import { setMorphoCover } from '~/features/data-flow/3.persist/covers'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { Column, Row } from '~/styles'
 import { toast } from 'sonner'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
@@ -38,30 +43,37 @@ export type PatchItemProps = {
   onImageError?: (id: string) => void
   compact?: boolean
   clusterVariant?: BadgeVariants['variant']
+  collapsedClusterSize?: number
+  isClusterCollapsed?: boolean
+  onToggleClusterCollapse?: (topClusterId: number) => void
 }
 
 function PatchItemImpl(props: PatchItemProps) {
-  const { id, index, compact } = props
+  const { id, index, compact, collapsedClusterSize, isClusterCollapsed, onToggleClusterCollapse } = props
   const patch = useStore(patchStoreById(id))
   const detection = useStore(detectionStoreById(id))
-  const summaries = useStore(nightSummariesStore)
+  const summaries = useStore(leafGroupSummariesStore)
   const detections = useStore(detectionsStore)
   const hoveredTopClusterId = useStore(selectedClusterIdStore)
   const hoveredSubClusterId = useStore(selectedSubClusterIdStore)
   const selected = useStore(selectedPatchIdsStore)
+  const activeNightIds = useStore(activeNightIdsStore)
+  const leafGroups = useStore(leafGroupsStore)
+  const isMultiNight = activeNightIds.size > 1
+  const nightName = isMultiNight && patch?.leafGroupId ? (leafGroups[patch.leafGroupId]?.name ?? '') : ''
   const label = detection ? deriveTaxonNameFromDetection({ detection }) || 'Unlabeled' : 'Unlabeled'
   const rank = typeof detection?.morphospecies === 'string' && !!detection?.morphospecies ? 'morphospecies' : detection?.taxon?.taxonRank
   const morphoKeyForDetection = (detection?.morphospecies || '').trim() ? normalizeMorphoKey(detection?.morphospecies || '') : ''
   const isMorphoBySummary = !!(
-    patch?.nightId &&
+    patch?.leafGroupId &&
     morphoKeyForDetection &&
-    (summaries?.[patch.nightId] as any)?.morphoCounts?.[morphoKeyForDetection]
+    (summaries?.[patch.leafGroupId] as any)?.morphoCounts?.[morphoKeyForDetection]
   )
   const isMorphoEffective = !!((typeof detection?.morphospecies === 'string' && !!detection?.morphospecies) || isMorphoBySummary)
   const clusterId = typeof detection?.clusterId === 'number' ? detection.clusterId : undefined
   const isSelected = selected?.has?.(id)
 
-  const url = useObjectUrl(patch?.imageFile?.file, patch?.imageFile?.handle)
+  const url = useObjectUrl(patch?.imageFile?.file, makeIndexedFileHandle(patch?.imageFile))
 
   const [controlsPinned, setControlsPinned] = useState(false)
 
@@ -81,70 +93,117 @@ function PatchItemImpl(props: PatchItemProps) {
     e.stopPropagation()
     const morphoKey = (typeof detection?.morphospecies === 'string' ? detection?.morphospecies || '' : '').trim()
     if (!morphoKey) return
-    if (!patch?.nightId || !patch?.id) return
-    void setMorphoCover({ label: morphoKey, nightId: patch.nightId, patchId: patch.id })
+    if (!patch?.leafGroupId || !patch?.id) return
+    void setMorphoCover({ label: morphoKey, leafGroupId: patch.leafGroupId, patchId: patch.id })
     toast.success('Image will be shown as morphospecies cover')
   }
 
   const clusterVariant: BadgeVariants['variant'] | undefined =
     props?.clusterVariant ?? (typeof clusterId === 'number' ? getClusterVariant(clusterId) : undefined)
 
+  // Cluster operation targets:
+  // "remove/split" uses the selection if this patch is in it (same leaf group), else just this patch.
+  // "add to cluster" uses the selection from the same leaf group regardless of whether this patch is selected.
+  const hasActiveSelection = (selected?.size ?? 0) > 0 && selectionLeafGroupIdStore.get() === patch?.leafGroupId
+  const clusterTargetIds =
+    selected?.has(id) && hasActiveSelection ? Array.from(selected) : [id]
+  const clusterTargetCount = clusterTargetIds.length
+
+  const addToClusterTargetIds = hasActiveSelection ? Array.from(selected!) : [id]
+  const addToClusterCount = addToClusterTargetIds.length
+  // Non-trivial when there are multiple items OR the single selected item differs from the right-clicked patch
+  const canAddToCluster = addToClusterCount > 1 || (hasActiveSelection && !selected?.has(id))
+
+  const topClusterIdOfPatch = typeof clusterId === 'number' && clusterId >= 0 ? Math.trunc(clusterId) : undefined
+  // Items among clusterTargetIds that share the same top-level cluster as the right-clicked patch
+  const sameClusterTargetIds = topClusterIdOfPatch !== undefined
+    ? clusterTargetIds.filter((tid) => {
+        const det = detections?.[tid]
+        return typeof det?.clusterId === 'number' && det.clusterId >= 0 && Math.trunc(det.clusterId) === topClusterIdOfPatch
+      })
+    : []
+  const canSplit = sameClusterTargetIds.length > 1
+
+  function onAssignToCluster(topClusterId: number) {
+    assignDetectionsToCluster({ detectionIds: addToClusterTargetIds, clusterId: topClusterId })
+    clearPatchSelection()
+  }
+
+  function onRemoveFromCluster() {
+    removeDetectionsFromCluster({ detectionIds: clusterTargetIds })
+    clearPatchSelection()
+  }
+
+  function onSplitToNewCluster() {
+    const leafGroupId = patch?.leafGroupId
+    if (!leafGroupId) return
+    splitDetectionsToNewCluster({ detectionIds: sameClusterTargetIds, leafGroupId })
+    clearPatchSelection()
+  }
+
+  function onCreateNewCluster() {
+    const leafGroupId = patch?.leafGroupId
+    if (!leafGroupId) return
+    splitDetectionsToNewCluster({ detectionIds: clusterTargetIds, leafGroupId })
+    clearPatchSelection()
+  }
+
   function onSelectCluster(e?: React.MouseEvent | React.KeyboardEvent) {
-    const nightId = patch?.nightId
+    const leafGroupId = patch?.leafGroupId
 
     if (typeof clusterId !== 'number') return
-    if (!nightId) return
+    if (!leafGroupId) return
 
     const all = Object.values(detections || {})
 
     const topId = Math.trunc(clusterId)
 
     const ids = all
-      .filter((d) => d?.nightId === nightId && typeof d?.clusterId === 'number' && Math.trunc((d as any)?.clusterId as number) === topId)
+      .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && Math.trunc((d as any)?.clusterId as number) === topId)
       .map((d) => (d as any)?.id)
       .filter((x): x is string => typeof x === 'string' && !!x)
 
     if (ids.length === 0) return
 
     const append = !!(e as any)?.metaKey || !!(e as any)?.ctrlKey
-    const currentNightId = selectionNightIdStore.get()
+    const currentNightId = selectionLeafGroupIdStore.get()
 
-    if (append && currentNightId && currentNightId === nightId) {
+    if (append && currentNightId && currentNightId === leafGroupId) {
       const current = new Set(selectedPatchIdsStore.get() ?? new Set<string>())
       for (const pid of ids) current.add(pid)
-      setSelection({ nightId, patchIds: Array.from(current) })
+      setSelection({ leafGroupId, patchIds: Array.from(current) })
       return
     }
 
-    setSelection({ nightId, patchIds: ids })
+    setSelection({ leafGroupId, patchIds: ids })
   }
 
   function onSelectSubCluster(e?: React.MouseEvent | React.KeyboardEvent) {
-    const nightId = patch?.nightId
+    const leafGroupId = patch?.leafGroupId
 
     if (typeof clusterId !== 'number') return
-    if (!nightId) return
+    if (!leafGroupId) return
 
     const all = Object.values(detections || {})
 
     const ids = all
-      .filter((d) => d?.nightId === nightId && typeof d?.clusterId === 'number' && d?.clusterId === clusterId)
+      .filter((d) => d?.leafGroupId === leafGroupId && typeof d?.clusterId === 'number' && d?.clusterId === clusterId)
       .map((d) => (d as any)?.id)
       .filter((x): x is string => typeof x === 'string' && !!x)
 
     if (ids.length === 0) return
 
     const append = !!(e as any)?.metaKey || !!(e as any)?.ctrlKey
-    const currentNightId = selectionNightIdStore.get()
+    const currentNightId = selectionLeafGroupIdStore.get()
 
-    if (append && currentNightId && currentNightId === nightId) {
+    if (append && currentNightId && currentNightId === leafGroupId) {
       const current = new Set(selectedPatchIdsStore.get() ?? new Set<string>())
       for (const pid of ids) current.add(pid)
-      setSelection({ nightId, patchIds: Array.from(current) })
+      setSelection({ leafGroupId, patchIds: Array.from(current) })
       return
     }
 
-    setSelection({ nightId, patchIds: ids })
+    setSelection({ leafGroupId, patchIds: ids })
   }
 
   return (
@@ -158,6 +217,10 @@ function PatchItemImpl(props: PatchItemProps) {
       data-id={id}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onToggle()
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        if (id && props.onOpenDetail) props.onOpenDetail(id)
       }}
       role='button'
       aria-pressed={isSelected}
@@ -212,12 +275,51 @@ function PatchItemImpl(props: PatchItemProps) {
       />
       <PatchDownloadContextMenu
         file={patch?.imageFile?.file}
-        handle={patch?.imageFile?.handle}
+        handle={makeIndexedFileHandle(patch?.imageFile)}
         originalUrl={url}
         originalDownloadName={patch?.name ?? 'patch.jpg'}
+        extraItems={
+          (() => {
+            const isInCluster = typeof clusterId === 'number' && clusterId >= 0
+            const showMenu = isInCluster || clusterTargetCount > 1
+            if (!showMenu) return null
+            return (
+              <>
+                <ContextMenuSeparator />
+                {isInCluster && onToggleClusterCollapse ? (
+                  <ContextMenuItem onSelect={() => onToggleClusterCollapse(Math.trunc(clusterId as number))}>
+                    {isClusterCollapsed ? `Expand cluster C${Math.trunc(clusterId as number)}` : `Collapse cluster C${Math.trunc(clusterId as number)}`}
+                  </ContextMenuItem>
+                ) : null}
+                {isInCluster && canAddToCluster ? (
+                  <ContextMenuItem onSelect={() => onAssignToCluster(Math.trunc(clusterId as number))}>
+                    {addToClusterCount > 1
+                      ? `Add ${addToClusterCount} selected to C${Math.trunc(clusterId as number)}`
+                      : `Add selected to C${Math.trunc(clusterId as number)}`}
+                  </ContextMenuItem>
+                ) : null}
+                {isInCluster && canSplit ? (
+                  <ContextMenuItem onSelect={() => onSplitToNewCluster()}>
+                    {`Split ${sameClusterTargetIds.length} into new cluster`}
+                  </ContextMenuItem>
+                ) : null}
+                {isInCluster ? (
+                  <ContextMenuItem onSelect={() => onRemoveFromCluster()}>
+                    {clusterTargetCount > 1 ? `Uncluster ${clusterTargetCount} selected` : 'Remove from cluster'}
+                  </ContextMenuItem>
+                ) : null}
+                {clusterTargetCount > 1 ? (
+                  <ContextMenuItem onSelect={() => onCreateNewCluster()}>
+                    {`Create new cluster from ${clusterTargetCount} selected`}
+                  </ContextMenuItem>
+                ) : null}
+              </>
+            )
+          })()
+        }
       >
         {url ? (
-          <div className='flex-1'>
+          <div className='flex-1 relative'>
             <img
               src={url}
               alt={patch?.name ?? 'patch'}
@@ -234,24 +336,36 @@ function PatchItemImpl(props: PatchItemProps) {
                 props?.onImageError?.(id)
               }}
             />
+            {collapsedClusterSize != null && collapsedClusterSize > 1 && (
+              <div className='absolute bottom-4 right-4 bg-black/65 text-white text-[10px] font-mono font-semibold px-[5px] py-[2px] rounded pointer-events-none leading-none'>
+                ×{collapsedClusterSize}
+              </div>
+            )}
           </div>
         ) : (
           <div className='aspect-square w-full ' />
         )}
       </PatchDownloadContextMenu>
 
-      {!compact && <TaxonRankRow rank={rank} label={label} />}
+      {!compact && <TaxonRankRow rank={rank} label={label} nightName={nightName} />}
     </Column>
   )
 }
 
-function TaxonRankRow(props: { rank: string | undefined; label: string | undefined }) {
-  const { rank, label } = props
+function TaxonRankRow(props: { rank: string | undefined; label: string | undefined; nightName?: string }) {
+  const { rank, label, nightName } = props
 
   return (
-    <div className='w-full h-[22px] mx-4 flex gap-4 items-center '>
-      {rank && <TaxonRankLetterBadge rank={rank} size='xsm' />}
-      <Badge size='sm'>{label}</Badge>
+    <div className='w-full mx-4 flex flex-col'>
+      <div className='h-[22px] flex gap-4 items-center'>
+        {rank && <TaxonRankLetterBadge rank={rank} size='xsm' />}
+        <Badge size='sm'>{label}</Badge>
+      </div>
+      {nightName && (
+        <div className='h-[18px] flex items-center'>
+          <span className='text-[10px] text-neutral-400 font-mono truncate leading-none'>{nightName}</span>
+        </div>
+      )}
     </div>
   )
 }

@@ -32,6 +32,8 @@ coverage/
 # Misc
 *.local
 *.log
+verify-report.json
+.dataset-adapter-audit/
 
 # Cache
 .cache/
@@ -50,3 +52,6 @@ Icon
 ._*
 .Spotlight-V100
 .Trashes
+
+
+examples/Mothbox Datasets/

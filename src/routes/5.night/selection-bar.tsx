@@ -9,20 +9,24 @@ export type SelectionBarProps = {
   selectedCount: number
   onIdentify: () => void
   onAccept: () => void
+  onMarkError?: () => void
   onUnselect: () => void
   onSelectAll: () => void
   onResetToAuto?: () => void
+  onUncluster?: () => void
+  onSplitCluster?: () => void
   className?: string
 }
 
 export function SelectionBar(props: SelectionBarProps) {
-  const { selectedCount, onIdentify, onAccept, onUnselect, onSelectAll, onResetToAuto, className } = props
+  const { selectedCount, onIdentify, onAccept, onMarkError, onUnselect, onSelectAll, onResetToAuto, onUncluster, onSplitCluster, className } = props
 
   const hasSelection = selectedCount > 0
   const label = useMemo(() => `${selectedCount} selected`, [selectedCount])
 
   useHotkey('d', () => { if (hasSelection) onIdentify() }, [hasSelection, onIdentify])
   useHotkey('a', () => { if (hasSelection) onAccept() }, [hasSelection, onAccept])
+  useHotkey('e', () => { if (hasSelection) onMarkError?.() }, [hasSelection, onMarkError])
   useHotkey('u', () => { if (hasSelection) onUnselect() }, [hasSelection, onUnselect])
   useHotkey('shift+a', () => { onSelectAll() }, [onSelectAll])
   useHotkey('mod+a', () => { onSelectAll() }, [onSelectAll])
@@ -41,9 +45,12 @@ export function SelectionBar(props: SelectionBarProps) {
         <div className='h-16 w-px bg-neutral-200' />
         <ActionButton label='Identify' keys={['D']} onClick={onIdentify} />
         <ActionButton label='Accept' keys={['A']} onClick={onAccept} tooltip='Accept selected identifications' />
+        {onMarkError ? <ActionButton label='Error' keys={['E']} onClick={onMarkError} tooltip='Mark selected as error (open Identify for Frass / Blur / custom)' /> : null}
         <ActionButton label='Unselect' keys={['U']} onClick={onUnselect} />
         <ActionButton label='Select All' keys={['⇧', 'A']} onClick={onSelectAll} />
         {onResetToAuto ? <ActionButton label='Reset' onClick={onResetToAuto} /> : null}
+        {onUncluster ? <ActionButton label='Uncluster' onClick={onUncluster} tooltip='Remove selected from their clusters' /> : null}
+        {onSplitCluster ? <ActionButton label='Split cluster' onClick={onSplitCluster} tooltip='Move selected into a new cluster' /> : null}
       </div>
     </div>
   )

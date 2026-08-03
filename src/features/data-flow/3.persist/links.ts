@@ -1,28 +1,39 @@
 import { atom } from 'nanostores'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
+import { DB_NAME, idbGet, idbPut } from '~/utils/index-db'
 
 export type MorphoLinksMap = Record<string, string>
 
+export type MorphoLinksStoreMode = 'replace' | 'merge'
+
 export const morphoLinksStore = atom<MorphoLinksMap>({})
 
-import { DB_NAME } from '~/utils/index-db'
-
-let idbGet: ((db: string, store: string, key: string) => Promise<unknown>) | undefined
-let idbPut: ((db: string, store: string, key: string, value: unknown) => Promise<void>) | undefined
 const IDB_STORE = 'morpho-links'
 
 let saveTimer: number | undefined
 
+export function setMorphoLinksForActiveDataset(params: { links: MorphoLinksMap; mode: MorphoLinksStoreMode }) {
+  const { links, mode } = params
+  const next = mode === 'merge' ? { ...(morphoLinksStore.get() || {}), ...links } : { ...links }
+
+  morphoLinksStore.set(next)
+  return next
+}
+
+export async function saveMorphoLinksToIdb(links: MorphoLinksMap) {
+  try {
+    await idbPut(DB_NAME, IDB_STORE, 'links', links)
+  } catch {
+    console.error('🚨 morphoLinks: IDB save failed')
+  }
+}
+
 export async function loadMorphoLinks() {
   try {
-    if (!idbGet) {
-      const mod = await import('~/utils/index-db')
-      idbGet = (mod as any).idbGet
-    }
-    const saved = (await (idbGet as any)(DB_NAME, IDB_STORE, 'links')) as MorphoLinksMap | null
-    if (saved && typeof saved === 'object') morphoLinksStore.set(saved)
+    const saved = (await idbGet(DB_NAME, IDB_STORE, 'links')) as MorphoLinksMap | null
+    if (saved && typeof saved === 'object') setMorphoLinksForActiveDataset({ links: saved, mode: 'replace' })
   } catch {
-    console.error('Error loading morpho links')
+    console.error('🚨 morphoLinks: IDB load failed')
   }
 }
 
@@ -41,16 +52,7 @@ export async function setMorphoLink(params: { morphoKey?: string; label?: string
   else delete next[key]
 
   morphoLinksStore.set(next)
-
-  try {
-    if (!idbPut) {
-      const mod = await import('~/utils/index-db')
-      idbPut = (mod as any).idbPut
-    }
-    await (idbPut as any)(DB_NAME, IDB_STORE, 'links', next)
-  } catch {
-    console.error('Error saving morpho link')
-  }
+  await saveMorphoLinksToIdb(next)
 
   if (saveTimer) window.clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
@@ -61,11 +63,9 @@ export async function setMorphoLink(params: { morphoKey?: string; label?: string
 export async function saveMorphoLinksToDisk() {
   try {
     const mod = await import('./files.writer')
-    const writer = (mod as any)?.writeMorphoLinksToDisk as undefined | (() => Promise<void>)
+    const writer = mod.writeMorphoLinksToDisk
     if (typeof writer === 'function') await writer()
   } catch {
-    console.error('Error writing morpho links to disk')
+    console.error('🚨 morphoLinks: disk save failed')
   }
 }
-
-export {}

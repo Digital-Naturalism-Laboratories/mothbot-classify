@@ -1,54 +1,57 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@nanostores/react'
-import { filesByNightIdStore, patchFileMapByNightStore, indexedFilesStore } from '~/features/data-flow/1.ingest/files.state'
+import { filesByLeafGroupIdStore, patchFileMapByNightStore, indexedFilesStore } from '~/features/data-flow/1.ingest/files.state'
 import { detectionsStore } from '~/stores/entities/detections'
-import { ingestDetectionsForNight } from '~/features/data-flow/1.ingest/ingest'
-import { resetNightIngestProgress, setNightIngestTotal, getActiveNightIds } from '~/stores/ui'
-import { clearFileObjectsForInactiveNights } from '~/stores/entities'
+import { ingestDetectionsForLeafGroup } from '~/features/data-flow/1.ingest/ingest'
+import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
+import { resetNightIngestProgress, setNightIngestTotal, getActiveLeafGroupIds } from '~/stores/ui'
+import { clearFileObjectsForInactiveLeafGroups } from '~/stores/entities'
 
 const inFlightNightIds = new Set<string>()
 
-export function useNightIngest(params: { nightId: string }) {
-  const { nightId } = params
+export function useLeafGroupIngest(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
 
   const indexedFiles = useStore(indexedFilesStore)
-  const filesByNight = useStore(filesByNightIdStore)
+  const filesByNight = useStore(filesByLeafGroupIdStore)
   const patchMapByNight = useStore(patchFileMapByNightStore)
 
-  const [isNightIngesting, setIsNightIngesting] = useState(false)
+  const [isLeafGroupIngesting, setIsNightIngesting] = useState(false)
   const ingestRunRef = useRef(0)
 
   useEffect(() => {
-    const hasAnyForNight = Object.values(detectionsStore.get() || {}).some((d: any) => d?.nightId === nightId)
+    if (isMothboxNextIngestMode()) return
+
+    const hasAnyForNight = Object.values(detectionsStore.get() || {}).some((d: any) => d?.leafGroupId === leafGroupId)
     if (hasAnyForNight) return
     if (!indexedFiles?.length) return
-    if (inFlightNightIds.has(nightId)) {
-      console.log('⏭️ night: ingest already in-flight', { nightId })
+    if (inFlightNightIds.has(leafGroupId)) {
+      console.log('⏭️ night: ingest already in-flight', { leafGroupId })
       return
     }
-    const perNight = filesByNight?.[nightId] || indexedFiles
-    const patchMap = patchMapByNight?.[nightId]
+    const perNight = filesByNight?.[leafGroupId] || indexedFiles
+    const patchMap = patchMapByNight?.[leafGroupId]
     const runId = ++ingestRunRef.current
 
     setIsNightIngesting(true)
     console.log('🌀 night: ingesting detections for night', {
-      nightId,
+      leafGroupId,
       filesCount: perNight?.length || 0,
       patchMapSize: patchMap ? Object.keys(patchMap).length : 0,
     })
     // Initialize progress from prebuilt patch map (trust the store)
     const total = patchMap ? Object.keys(patchMap).length : 0
-    resetNightIngestProgress({ nightId })
-    setNightIngestTotal({ nightId, total })
-    inFlightNightIds.add(nightId)
-    void ingestDetectionsForNight({ files: perNight, nightId, patchMap }).finally(() => {
+    resetNightIngestProgress({ leafGroupId })
+    setNightIngestTotal({ leafGroupId, total })
+    inFlightNightIds.add(leafGroupId)
+    void ingestDetectionsForLeafGroup({ files: perNight, leafGroupId, patchMap }).finally(() => {
       if (ingestRunRef.current === runId) setIsNightIngesting(false)
-      inFlightNightIds.delete(nightId)
-      const activeNightIds = getActiveNightIds()
-      clearFileObjectsForInactiveNights({ activeNightIds })
+      inFlightNightIds.delete(leafGroupId)
+      const activeLeafGroupIds = getActiveLeafGroupIds()
+      clearFileObjectsForInactiveLeafGroups({ activeLeafGroupIds })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nightId, indexedFiles])
+  }, [leafGroupId, indexedFiles])
 
-  return { isNightIngesting }
+  return { isLeafGroupIngesting }
 }

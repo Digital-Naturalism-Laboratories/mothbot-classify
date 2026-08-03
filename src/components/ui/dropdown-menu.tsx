@@ -1,7 +1,7 @@
 'use client'
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { BoxSelectIcon, CheckSquareIcon, ChevronRight, Circle } from 'lucide-react'
+import { ChevronRight, Circle } from 'lucide-react'
 import * as React from 'react'
 import { Switch } from '~/components/ui/switch'
 
@@ -105,17 +105,14 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-sm py-6 pl-32 pr-8 text-sm font-medium outline-none focus:bg-slate-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 dark:focus:bg-slate-700',
+      'relative flex cursor-default select-none items-center justify-between gap-12 rounded-sm px-8 py-6 text-sm font-medium outline-none focus:bg-slate-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 dark:focus:bg-slate-700',
       className,
     )}
     checked={checked}
     {...props}
   >
-    <span className='absolute left-8 flex h-[14px] w-[14px] items-center justify-center'>
-      <Switch checked={!!checked} className='mr-6' size='sm' />
-      {checked ? <CheckSquareIcon className='h-16 w-16 fill-highlight' /> : <BoxSelectIcon className='h-16 w-16 opacity-50' />}
-    </span>
     {children}
+    <Switch checked={!!checked} size='sm' className='pointer-events-none shrink-0' />
   </DropdownMenuPrimitive.CheckboxItem>
 ))
 DropdownMenuCheckboxItem.displayName = DropdownMenuPrimitive.CheckboxItem.displayName

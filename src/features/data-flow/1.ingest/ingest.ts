@@ -1,12 +1,14 @@
 import { projectsStore, type ProjectEntity } from '~/stores/entities/1.projects'
 import { sitesStore, type SiteEntity } from '~/stores/entities/2.sites'
 import { deploymentsStore, type DeploymentEntity } from '~/stores/entities/3.deployments'
-import { nightsStore, type NightEntity } from '~/stores/entities/4.nights'
+import { leafGroupsStore, type LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { photosStore, type PhotoEntity, type IndexedFile } from '~/stores/entities/photos'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
 import { normalizeLegacyNightId, parsePathParts } from './ingest-paths'
 import { parseNightBotDetections, overlayNightUserDetections } from './ingest-night'
+import { isMothboxNextIngestMode } from './ingest-mode'
+import { applyClusterOverridesForLeafGroup } from '~/features/data-flow/3.persist/cluster-overrides'
 
 export async function ingestFilesToStores(params: {
   files: IndexedFile[]
@@ -15,13 +17,17 @@ export async function ingestFilesToStores(params: {
 }) {
   const { files, parseDetectionsForNightId, patchMap } = params
   if (!files?.length) return
+  if (isMothboxNextIngestMode()) {
+    console.warn('🚨 ingestFilesToStores: skipped — mothbox-next package is active; use package reload instead.')
+    return
+  }
   const targetNightId =
     typeof parseDetectionsForNightId === 'string' ? normalizeLegacyNightId(parseDetectionsForNightId) : parseDetectionsForNightId
 
   const proj: Record<string, ProjectEntity> = {}
   const sites: Record<string, SiteEntity> = {}
   const deps: Record<string, DeploymentEntity> = {}
-  const nights: Record<string, NightEntity> = {}
+  const nights: Record<string, LeafGroupEntity> = {}
   const photos: Record<string, PhotoEntity> = {}
   const patches: Record<string, PatchEntity> = {}
   const detections: Record<string, DetectionEntity> = {}
@@ -30,33 +36,33 @@ export async function ingestFilesToStores(params: {
     const parts = parsePathParts({ path: f.path })
     if (!parts) continue
 
-    const { project, site, deployment, night, isPatch, isPhotoJpg, isBotJson, isUserJson, fileName, baseName } = parts
+    const { project, site, deployment, night, isPatch, isPhotoJpg, isBotJson, isArchivedBotJson, isUserJson, fileName, baseName } = parts
     if (!project || !site || !deployment || !night) continue
 
-    const hasRelevantMedia = isPhotoJpg || isPatch || isBotJson || isUserJson
+    const hasRelevantMedia = isPhotoJpg || isPatch || isBotJson || isArchivedBotJson || isUserJson
     if (!hasRelevantMedia) continue
 
     const projectId = project
     const siteId = `${project}/${site}`
     const deploymentId = `${project}/${deployment}`
-    const nightId = normalizeLegacyNightId(`${project}/${deployment}/${night}`)
+    const leafGroupId = normalizeLegacyNightId(`${project}/${deployment}/${night}`)
 
     proj[projectId] = proj[projectId] ?? { id: projectId, name: project }
     sites[siteId] = sites[siteId] ?? { id: siteId, name: site, projectId }
     deps[deploymentId] = deps[deploymentId] ?? { id: deploymentId, name: deployment, projectId, siteId }
-    nights[nightId] = nights[nightId] ?? { id: nightId, name: night, projectId, siteId, deploymentId }
+    nights[leafGroupId] = nights[leafGroupId] ?? { id: leafGroupId, name: night, datasetId: projectId, siteId, deploymentId }
 
     const shouldIncludeMedia =
-      targetNightId === undefined ? true : targetNightId === null ? false : nightId === targetNightId
+      targetNightId === undefined ? true : targetNightId === null ? false : leafGroupId === targetNightId
 
     if (isPhotoJpg && shouldIncludeMedia) {
       const photoId = `${baseName}.jpg`
-      const existing = photos[photoId] ?? { id: photoId, name: photoId, nightId }
-      if (existing.nightId && existing.nightId !== nightId) {
+      const existing = photos[photoId] ?? { id: photoId, name: photoId, leafGroupId }
+      if (existing.leafGroupId && existing.leafGroupId !== leafGroupId) {
         console.warn('🚨 ingest: photoId collision across nights', {
           photoId,
-          existingNightId: existing.nightId,
-          incomingNightId: nightId,
+          existingNightId: existing.leafGroupId,
+          incomingNightId: leafGroupId,
           existingPath: existing.imageFile?.path || existing.botDetectionFile?.path || existing.userDetectionFile?.path,
           incomingPath: f.path,
         })
@@ -69,31 +75,42 @@ export async function ingestFilesToStores(params: {
       const photoId = `${baseName}.jpg`
       const patchId = fileName
       const existingPatch = patches[patchId]
-      if (existingPatch && existingPatch.nightId !== nightId) {
+      if (existingPatch && existingPatch.leafGroupId !== leafGroupId) {
         console.warn('🚨 ingest: patchId collision across nights', {
           patchId,
-          existingNightId: existingPatch.nightId,
-          incomingNightId: nightId,
+          existingNightId: existingPatch.leafGroupId,
+          incomingNightId: leafGroupId,
           existingPath: existingPatch.imageFile?.path,
           incomingPath: f.path,
         })
       }
-      patches[patchId] = existingPatch ?? { id: patchId, name: patchId, nightId, photoId, imageFile: f }
+      patches[patchId] = existingPatch ?? { id: patchId, name: patchId, leafGroupId, photoId, imageFile: f }
       continue
     }
 
     if (isBotJson && shouldIncludeMedia) {
       const photoId = `${baseName}.jpg`
-      const existing = photos[photoId] ?? { id: photoId, name: photoId, nightId }
+      const existing = photos[photoId] ?? { id: photoId, name: photoId, leafGroupId }
       photos[photoId] = { ...existing, botDetectionFile: f }
+      continue
+    }
+
+    if (isArchivedBotJson && shouldIncludeMedia) {
+      // Extract the photo base name from the archived file (img_botdetection_Mothbot_v1.json → img.jpg)
+      const archiveSuffix = fileName.toLowerCase().indexOf('_botdetection_')
+      const archiveBaseName = archiveSuffix >= 0 ? fileName.slice(0, archiveSuffix) : baseName
+      const photoId = `${archiveBaseName}.jpg`
+      const existing = photos[photoId] ?? { id: photoId, name: photoId, leafGroupId }
+      const prev = existing.archivedBotDetectionFiles ?? []
+      photos[photoId] = { ...existing, archivedBotDetectionFiles: [...prev, f] }
       continue
     }
 
     if (isUserJson && shouldIncludeMedia) {
       const photoId = `${baseName}.jpg`
-      const existing = photos[photoId] ?? { id: photoId, name: photoId, nightId }
+      const existing = photos[photoId] ?? { id: photoId, name: photoId, leafGroupId }
       photos[photoId] = { ...existing, userDetectionFile: f }
-      console.log('📂 ingest: found _identified.json', { path: f.path, photoId, nightId })
+      console.log('📂 ingest: found _identified.json', { path: f.path, photoId, leafGroupId })
       continue
     }
   }
@@ -105,7 +122,7 @@ export async function ingestFilesToStores(params: {
       const currentPhotos = photosStore.get() || {}
       // Merge existing photos into local photos, with local photos taking precedence
       for (const [photoId, existingPhoto] of Object.entries(currentPhotos)) {
-        if (normalizeLegacyNightId(existingPhoto.nightId) === targetNightId) {
+        if (normalizeLegacyNightId(existingPhoto.leafGroupId) === targetNightId) {
           if (!photos[photoId]) {
             photos[photoId] = existingPhoto
           } else {
@@ -122,22 +139,25 @@ export async function ingestFilesToStores(params: {
     }
     await parseNightBotDetections({ photos, files, patchMap, parseDetectionsForNightId: targetNightId, patches, detections })
     await overlayNightUserDetections({ photos, parseDetectionsForNightId: targetNightId, detections })
+    if (typeof targetNightId === 'string') {
+      await applyClusterOverridesForLeafGroup({ leafGroupId: targetNightId, detections, photos })
+    }
   }
 
   if (typeof targetNightId === 'string') {
     const currProj = projectsStore.get() || {}
     const currSites = sitesStore.get() || {}
     const currDeps = deploymentsStore.get() || {}
-    const currNights = nightsStore.get() || {}
+    const currNights = leafGroupsStore.get() || {}
     projectsStore.set({ ...currProj, ...proj })
     sitesStore.set({ ...currSites, ...sites })
     deploymentsStore.set({ ...currDeps, ...deps })
-    nightsStore.set({ ...currNights, ...nights })
+    leafGroupsStore.set({ ...currNights, ...nights })
   } else {
     projectsStore.set(proj)
     sitesStore.set(sites)
     deploymentsStore.set(deps)
-    nightsStore.set(nights)
+    leafGroupsStore.set(nights)
   }
 
   if (parseDetectionsForNightId === null) {
@@ -165,8 +185,8 @@ export async function ingestFilesToStores(params: {
   }
 }
 
-export async function ingestDetectionsForNight(params: { files: IndexedFile[]; nightId: string; patchMap?: Record<string, IndexedFile> }) {
-  const { files, nightId, patchMap } = params
-  if (!files?.length || !nightId) return
-  await ingestFilesToStores({ files, parseDetectionsForNightId: nightId, patchMap })
+export async function ingestDetectionsForLeafGroup(params: { files: IndexedFile[]; leafGroupId: string; patchMap?: Record<string, IndexedFile> }) {
+  const { files, leafGroupId, patchMap } = params
+  if (!files?.length || !leafGroupId) return
+  await ingestFilesToStores({ files, parseDetectionsForNightId: leafGroupId, patchMap })
 }

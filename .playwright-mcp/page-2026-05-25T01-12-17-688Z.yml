@@ -1,0 +1,18 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - link "Mothbot Classify" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e7]:
+          - img [ref=e8]
+          - generic [ref=e36]: Mothbot Classify
+      - generic [ref=e37]:
+        - status [ref=e38]
+        - generic [ref=e41]: 🌀 Restoring previously picked folder…
+      - button "?" [ref=e43] [cursor=pointer]:
+        - generic [ref=e45]: "?"
+  - main [ref=e46]:
+    - generic [ref=e48]:
+      - status [ref=e49]
+      - generic [ref=e52]: 🌀 Loading projects folder...
+  - region "Notifications alt+T"

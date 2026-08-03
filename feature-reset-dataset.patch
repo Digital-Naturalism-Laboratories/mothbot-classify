@@ -1,0 +1,370 @@
+--- /dev/null
++++ b/src/features/data-flow/1.ingest/reset-dataset.ts
+@@ -0,0 +1,109 @@
++import { toast } from 'sonner'
++import { clearMothboxNextPackage } from '~/features/mothbox-next/active-package'
++import { resetAllEntityStores } from '~/stores/entities'
++import { datasetsRegistryStore, setDatasetsRegistry, setActiveDatasetFolderName } from '~/stores/datasets-registry'
++import { requireDatasetsFolderHandle } from './datasets-folder-handle'
++import { invalidatePackageSessionCache } from '~/features/data-flow/3.persist/package-session-cache'
++import {
++  PACKAGE_MANAGED_DIR_NAMES,
++  PACKAGE_MANAGED_FILE_NAMES,
++} from '~/features/data-flow/1.ingest/reserved-paths'
++import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
++
++/**
++ * Deletes all Classify-managed files and folders from a dataset package,
++ * restoring it to the state before Classify processed it. Specifically removes:
++ *   - dataset.json, adapter-report.json  (PACKAGE_MANAGED_FILE_NAMES)
++ *   - 00_source/, 01_patches/, 02_records/, 03_classifications/, 04_exports/
++ *     (PACKAGE_MANAGED_DIR_NAMES)
++ *
++ * The original source images, patch crops, and bot-detection JSONs are never
++ * touched — only the files Classify itself wrote are removed.
++ */
++export async function resetDataset(params: { folderName: string }): Promise<void> {
++  const { folderName } = params
++
++  const datasetsRoot = (await requireDatasetsFolderHandle({ mode: 'readwrite' })) as
++    | (FileSystemDirectoryHandleLike & {
++        getDirectoryHandle?: (name: string, opts?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
++      })
++    | null
++
++  if (!datasetsRoot) {
++    throw new Error('Datasets folder is not available. Choose your datasets folder and try again.')
++  }
++
++  // Resolve the actual package folder (may be under _processed for the
++  // sibling-mirror layout — packagePath carries the real path).
++  const registryEntry = datasetsRegistryStore.get().find((e) => e.folderName === folderName)
++  const relativePackagePath = registryEntry?.packagePath ?? folderName
++  const pathSegments = relativePackagePath.split('/').filter(Boolean)
++
++  let packageHandle: FileSystemDirectoryHandleLike | null = null
++  try {
++    let current: FileSystemDirectoryHandleLike = datasetsRoot
++    for (const segment of pathSegments) {
++      const next = await (
++        current as { getDirectoryHandle?: (name: string, opts?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike> }
++      ).getDirectoryHandle?.(segment, { create: false })
++      if (!next) throw new Error(`Could not find "${segment}".`)
++      current = next
++    }
++    packageHandle = current
++  } catch (err) {
++    throw new Error(
++      `Could not find the package folder for "${folderName}": ${err instanceof Error ? err.message : String(err)}`,
++    )
++  }
++
++  // Delete all Classify-managed files and directories from the package root.
++  const deletionErrors: string[] = []
++
++  for (const name of PACKAGE_MANAGED_FILE_NAMES) {
++    try {
++      await packageHandle.removeEntry?.(name, { recursive: false })
++    } catch (err: unknown) {
++      // NotFoundError means it was already gone — that's fine, not an error.
++      if ((err as { name?: string })?.name !== 'NotFoundError') {
++        deletionErrors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
++      }
++    }
++  }
++
++  for (const name of PACKAGE_MANAGED_DIR_NAMES) {
++    try {
++      await packageHandle.removeEntry?.(name, { recursive: true })
++    } catch (err: unknown) {
++      if ((err as { name?: string })?.name !== 'NotFoundError') {
++        deletionErrors.push(`${name}/: ${err instanceof Error ? err.message : String(err)}`)
++      }
++    }
++  }
++
++  if (deletionErrors.length > 0) {
++    throw new Error(
++      `Reset partially failed — some Classify files could not be deleted:\n${deletionErrors.map((e) => `• ${e}`).join('\n')}`,
++    )
++  }
++
++  // Clear the session cache so the app doesn't try to restore stale data.
++  await invalidatePackageSessionCache(folderName)
++
++  // If this dataset was the active one, clear it from all stores.
++  const activeFolder = datasetsRegistryStore.get().find((e) => e.folderName === folderName)
++  const wasActive = !!activeFolder
++
++  if (wasActive) {
++    resetAllEntityStores()
++    clearMothboxNextPackage()
++    setActiveDatasetFolderName(null)
++  }
++
++  // Remove the dataset from the registry — it no longer has a manifest
++  // and will be offered as "pending setup" on the next scan.
++  setDatasetsRegistry(datasetsRegistryStore.get().filter((e) => e.folderName !== folderName))
++
++  toast.success(`"${folderName}" has been reset`, {
++    description: 'Classify files removed. Run Set up to re-index it.',
++  })
++}
+--- a/src/features/data-flow/1.ingest/files-queries.ts
++++ b/src/features/data-flow/1.ingest/files-queries.ts
+@@ -8,6 +8,7 @@
+ import { warmDefaultDatasetInBackground } from './ensure-default-dataset-open'
+ import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
+ import { openDatasetByFolderName } from './open-dataset-by-folder'
++import { resetDataset } from './reset-dataset'
+ import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
+ 
+ export function useRestoreDirectoryQuery() {
+@@ -80,6 +81,14 @@
+     retry: false,
+   })
+ }
++
++export function useResetDatasetMutation() {
++  return useMutation({
++    mutationKey: ['fs', 'reset-dataset'],
++    mutationFn: async (params: { folderName: string }) => resetDataset(params),
++    retry: false,
++  })
++}
+ 
+ export function useScanDatasetsFolderMutation() {
+   return useMutation({
+--- a/src/routes/0.home/home-datasets-panel.tsx
++++ b/src/routes/0.home/home-datasets-panel.tsx
+@@ -1,5 +1,6 @@
++import { useState } from 'react'
+ import { useStore } from '@nanostores/react'
+-import { EllipsisIcon, FolderOpenIcon, RefreshCwIcon } from 'lucide-react'
++import { EllipsisIcon, FolderOpenIcon, RefreshCwIcon, RotateCcwIcon } from 'lucide-react'
+ import { Loader } from '~/components/atomic/Loader'
+ import { Button } from '~/components/ui/button'
+ import {
+@@ -8,11 +9,19 @@
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+ } from '~/components/ui/dropdown-menu'
++import {
++  ContextMenu,
++  ContextMenuContent,
++  ContextMenuItem,
++  ContextMenuTrigger,
++  ContextMenuSeparator,
++} from '~/components/ui/context-menu'
+ import { isDirectoryPickerLikelySupported, pickDirectoryHandle } from '~/features/data-flow/1.ingest/directory-picker'
+ import {
+   useSetupDatasetsFolderMutation,
+   useOpenDatasetMutation,
+   useScanDatasetsFolderMutation,
++  useResetDatasetMutation,
+ } from '~/features/data-flow/1.ingest/files-queries'
+ import {
+   activeDatasetFolderNameStore,
+@@ -22,6 +31,8 @@
+ import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
+ import { datasetsWorkspaceStore } from '~/stores/datasets-workspace'
+ import { cn } from '~/utils/cn'
++import { openGlobalDialog, closeGlobalDialog } from '~/components/dialogs/global-dialog'
++import { DialogHeader, DialogTitle, DialogFooter } from '~/components/ui/dialog'
+ 
+ export function HomeDatasetsPanel() {
+   const registry = useStore(datasetsRegistryStore)
+@@ -30,6 +41,7 @@
+   const openMutation = useOpenDatasetMutation()
+   const setupMutation = useSetupDatasetsFolderMutation()
+   const scanMutation = useScanDatasetsFolderMutation()
++  const resetMutation = useResetDatasetMutation()
+   const isScanning = scanMutation.isPending
+   const isChoosing = setupMutation.isPending
+   const openingFolderName = openMutation.isPending ? openMutation.variables?.folderName : undefined
+@@ -40,8 +52,6 @@
+     openMutation.mutate({ folderName })
+   }
+ 
+-  // Called directly from the click handler so showDirectoryPicker fires inside
+-  // the user gesture — required by Firefox (and good practice everywhere).
+   async function onChooseFolder() {
+     if (isChoosing) return
+     const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+@@ -49,6 +59,21 @@
+     setupMutation.mutate(handle)
+   }
+ 
++  function onResetDataset(folderName: string) {
++    openGlobalDialog({
++      component: ResetDatasetConfirmDialog,
++      props: {
++        folderName,
++        onConfirm: () => {
++          closeGlobalDialog()
++          resetMutation.mutate({ folderName })
++        },
++      },
++      align: 'center',
++      className: 'max-w-[400px]',
++    })
++  }
++
+   return (
+     <div className='shadow-border flex min-h-0 flex-1 flex-col rounded-2xl bg-white p-0 pb-16'>
+       <div className='mb-8 flex shrink-0 items-center justify-between gap-8 px-16 pt-16'>
+@@ -83,8 +108,10 @@
+                 entry={entry}
+                 isActive={entry.folderName === activeFolderName}
+                 isOpening={entry.folderName === openingFolderName}
+-                disabled={isScanning}
++                isResetting={resetMutation.isPending && resetMutation.variables?.folderName === entry.folderName}
++                disabled={isScanning || resetMutation.isPending}
+                 onSelect={onSelectDataset}
++                onReset={onResetDataset}
+               />
+             ))}
+           </ul>
+@@ -152,41 +179,116 @@
+   entry: DatasetRegistryEntry
+   isActive: boolean
+   isOpening: boolean
++  isResetting: boolean
+   disabled: boolean
+   onSelect: (folderName: string) => void
++  onReset: (folderName: string) => void
+ }
+ 
+ function DatasetListItem(props: DatasetListItemProps) {
+-  const { entry, isActive, isOpening, disabled, onSelect } = props
++  const { entry, isActive, isOpening, isResetting, disabled, onSelect, onReset } = props
+ 
+   return (
+     <li className='mx-8'>
+-      <button
+-        type='button'
+-        disabled={disabled}
+-        onClick={() => onSelect(entry.folderName)}
+-        className={cn(
+-          'w-full rounded-md px-8 py-8 text-left text-13',
+-          'transition-[background-color,color,scale] duration-150 ease-out',
+-          'active:not-disabled:scale-[0.96]',
+-          isActive ? 'bg-neutral-100 font-medium text-neutral-900' : 'text-neutral-700 hover:bg-neutral-50',
+-          disabled ? 'cursor-wait opacity-70' : 'cursor-pointer',
+-        )}
+-      >
+-        <div className='flex items-start justify-between gap-8'>
+-          <div className='min-w-0 flex-1'>
+-            <div className='truncate'>{entry.folderName}</div>
+-            {entry.datasetId && entry.datasetId !== entry.folderName ? (
+-              <div className='truncate text-12 text-neutral-500'>{entry.datasetId}</div>
+-            ) : null}
+-          </div>
+-          {isOpening ? (
+-            <span className='inline-flex shrink-0 items-center gap-4 text-12 text-neutral-500'>
+-              <Loader size={12} />
++      <ContextMenu>
++        <ContextMenuTrigger asChild>
++          <button
++            type='button'
++            disabled={disabled}
++            onClick={() => onSelect(entry.folderName)}
++            className={cn(
++              'w-full rounded-md px-8 py-8 text-left text-13',
++              'transition-[background-color,color,scale] duration-150 ease-out',
++              'active:not-disabled:scale-[0.96]',
++              isActive ? 'bg-neutral-100 font-medium text-neutral-900' : 'text-neutral-700 hover:bg-neutral-50',
++              disabled ? 'cursor-wait opacity-70' : 'cursor-pointer',
++            )}
++          >
++            <div className='flex items-start justify-between gap-8'>
++              <div className='min-w-0 flex-1'>
++                <div className='truncate'>{entry.folderName}</div>
++                {entry.datasetId && entry.datasetId !== entry.folderName ? (
++                  <div className='truncate text-12 text-neutral-500'>{entry.datasetId}</div>
++                ) : null}
++              </div>
++              {isOpening || isResetting ? (
++                <span className='inline-flex shrink-0 items-center gap-4 text-12 text-neutral-500'>
++                  <Loader size={12} />
++                </span>
++              ) : null}
++            </div>
++          </button>
++        </ContextMenuTrigger>
++
++        <ContextMenuContent className='w-[200px]'>
++          <ContextMenuItem onSelect={() => onSelect(entry.folderName)} disabled={disabled}>
++            <span className='inline-flex items-center gap-8'>
++              <FolderOpenIcon className='h-14 w-14 text-neutral-500' />
++              Open
++            </span>
++          </ContextMenuItem>
++          <ContextMenuSeparator />
++          <ContextMenuItem
++            onSelect={() => onReset(entry.folderName)}
++            disabled={disabled}
++            className='text-red-600 focus:text-red-700'
++          >
++            <span className='inline-flex items-center gap-8'>
++              <RotateCcwIcon className='h-14 w-14' />
++              Reset dataset
+             </span>
+-          ) : null}
+-        </div>
+-      </button>
++          </ContextMenuItem>
++        </ContextMenuContent>
++      </ContextMenu>
+     </li>
+   )
+ }
++
++function ResetDatasetConfirmDialog(props: { folderName: string; onConfirm: () => void }) {
++  const { folderName, onConfirm } = props
++  const [confirming, setConfirming] = useState(false)
++
++  async function handleConfirm() {
++    setConfirming(true)
++    onConfirm()
++  }
++
++  return (
++    <div>
++      <DialogHeader>
++        <DialogTitle>Reset "{folderName}"?</DialogTitle>
++      </DialogHeader>
++
++      <p className='mt-12 text-13 text-neutral-700 text-pretty'>
++        This removes all files Classify added to this dataset — the manifest, records, and classifications. Your
++        original source images, patches, and detection JSON files are not affected.
++      </p>
++      <p className='mt-8 text-13 text-neutral-500 text-pretty'>
++        After resetting, you can run Set up again to re-index the dataset from scratch. This is useful if the
++        underlying processed data has changed.
++      </p>
++
++      <DialogFooter className='mt-20'>
++        <Button variant='outline' type='button' disabled={confirming} onClick={closeGlobalDialog}>
++          Cancel
++        </Button>
++        <Button
++          type='button'
++          variant='primary'
++          disabled={confirming}
++          className='bg-red-600 hover:bg-red-700 focus:ring-red-500'
++          onClick={() => void handleConfirm()}
++        >
++          {confirming ? (
++            <span className='inline-flex items-center gap-6'>
++              <Loader size={14} />
++              Resetting…
++            </span>
++          ) : (
++            'Reset dataset'
++          )}
++        </Button>
++      </DialogFooter>
++    </div>
++  )
++}

@@ -5,13 +5,13 @@ import {
   buildSpeciesTaxonomyIndex,
   buildSpeciesUsageSummary,
 } from '../species-data'
-import type { NightSummaryEntity } from '~/stores/entities/night-summaries'
+import type { LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 
 describe('species-data', () => {
   it('builds a complete species list from summaries even when detections are missing', () => {
-    const summaries: Record<string, NightSummaryEntity> = {
+    const summaries: Record<string, LeafGroupSummaryEntity> = {
       'ProjectA/Deployment1/Night1': {
-        nightId: 'ProjectA/Deployment1/Night1',
+        leafGroupId: 'ProjectA/Deployment1/Night1',
         totalDetections: 10,
         totalIdentified: 2,
         speciesCounts: {
@@ -28,7 +28,7 @@ describe('species-data', () => {
         },
       },
       'ProjectA/Deployment1/Night2': {
-        nightId: 'ProjectA/Deployment1/Night2',
+        leafGroupId: 'ProjectA/Deployment1/Night2',
         totalDetections: 8,
         totalIdentified: 1,
         speciesCounts: {
@@ -50,14 +50,14 @@ describe('species-data', () => {
         speciesName: 'pipiens',
         count: 3,
         previewPairs: [
-          { nightId: 'ProjectA/Deployment1/Night1', patchId: 'pipiens-1.jpg' },
-          { nightId: 'ProjectA/Deployment1/Night2', patchId: 'pipiens-2.jpg' },
+          { leafGroupId: 'ProjectA/Deployment1/Night1', patchId: 'pipiens-1.jpg' },
+          { leafGroupId: 'ProjectA/Deployment1/Night2', patchId: 'pipiens-2.jpg' },
         ],
       },
       {
         speciesName: 'aegypti',
         count: 1,
-        previewPairs: [{ nightId: 'ProjectA/Deployment1/Night1', patchId: 'aegypti-1.jpg' }],
+        previewPairs: [{ leafGroupId: 'ProjectA/Deployment1/Night1', patchId: 'aegypti-1.jpg' }],
       },
     ])
   })
@@ -66,7 +66,7 @@ describe('species-data', () => {
     const taxonomyByName = buildSpeciesTaxonomyIndex({
       summaries: {
         'ProjectA/Deployment1/Night1': {
-          nightId: 'ProjectA/Deployment1/Night1',
+          leafGroupId: 'ProjectA/Deployment1/Night1',
           totalDetections: 10,
           totalIdentified: 1,
           speciesCounts: { pipiens: 1 },
@@ -75,7 +75,7 @@ describe('species-data', () => {
       detections: {
         a: {
           id: 'a',
-          nightId: 'ProjectA/Deployment1/Night1',
+          leafGroupId: 'ProjectA/Deployment1/Night1',
           patchId: 'patch-1.jpg',
           detectedBy: 'user',
           taxon: {
@@ -99,9 +99,9 @@ describe('species-data', () => {
   })
 
   it('scopes usage and scope counts to the selected nights', () => {
-    const summaries: Record<string, NightSummaryEntity> = {
+    const summaries: Record<string, LeafGroupSummaryEntity> = {
       'ProjectA/Deploy_Site1_2025/Night1': {
-        nightId: 'ProjectA/Deploy_Site1_2025/Night1',
+        leafGroupId: 'ProjectA/Deploy_Site1_2025/Night1',
         totalDetections: 10,
         totalIdentified: 2,
         speciesCounts: { pipiens: 2 },
@@ -111,7 +111,7 @@ describe('species-data', () => {
         },
       },
       'ProjectA/Deploy_Site1_2025/Night2': {
-        nightId: 'ProjectA/Deploy_Site1_2025/Night2',
+        leafGroupId: 'ProjectA/Deploy_Site1_2025/Night2',
         totalDetections: 10,
         totalIdentified: 2,
         speciesCounts: { aegypti: 1 },
@@ -121,7 +121,7 @@ describe('species-data', () => {
         },
       },
       'ProjectB/Deploy_Site2_2025/Night3': {
-        nightId: 'ProjectB/Deploy_Site2_2025/Night3',
+        leafGroupId: 'ProjectB/Deploy_Site2_2025/Night3',
         totalDetections: 10,
         totalIdentified: 2,
         speciesCounts: { pipiens: 4 },
@@ -132,7 +132,7 @@ describe('species-data', () => {
       },
     }
 
-    const allowedNightIds = new Set(['ProjectA/Deploy_Site1_2025/Night1'])
+    const allowedLeafGroupIds = new Set(['ProjectA/Deploy_Site1_2025/Night1'])
     const usage = buildSpeciesUsageSummary({
       speciesName: 'pipiens',
       summaries,
@@ -141,7 +141,7 @@ describe('species-data', () => {
         'ProjectA/Deploy_Site1_2025/Night2': { id: 'ProjectA/Deploy_Site1_2025/Night2', projectId: 'ProjectA', name: 'Night2' },
         'ProjectB/Deploy_Site2_2025/Night3': { id: 'ProjectB/Deploy_Site2_2025/Night3', projectId: 'ProjectB', name: 'Night3' },
       } as any,
-      allowedNightIds,
+      allowedLeafGroupIds,
       detections: {},
     })
 
@@ -150,11 +150,11 @@ describe('species-data', () => {
       projectId: 'ProjectA',
       siteId: 'Site1',
       deploymentId: 'Deploy_Site1_2025',
-      nightId: 'Night1',
+      leafGroupId: 'Night1',
     })
 
     expect(usage.instanceCount).toBe(2)
-    expect(usage.nightIds).toEqual(['ProjectA/Deploy_Site1_2025/Night1'])
+    expect(usage.leafGroupIds).toEqual(['ProjectA/Deploy_Site1_2025/Night1'])
     expect(usage.projectIds).toEqual(['ProjectA'])
     expect(scopeCounts).toEqual({
       all: 2,

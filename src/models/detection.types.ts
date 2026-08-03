@@ -1,5 +1,7 @@
 import type { TaxonRecord } from '~/models/taxonomy/types'
 
+export type DetectionClassificationType = 'accept' | 'taxon' | 'morphospecies' | 'error'
+
 /**
  * Core detection entity type.
  * Represents a single detection (patch) with its identification state.
@@ -16,7 +18,7 @@ export type DetectionEntity = {
   id: string
   patchId: string
   photoId: string
-  nightId: string
+  leafGroupId: string
   label?: string
   taxon?: TaxonRecord
   score?: number
@@ -27,11 +29,17 @@ export type DetectionEntity = {
   identifiedAt?: number
   isError?: boolean
   clusterId?: number
+  botClassifierId?: string
   // When user types free text identification, store the morphospecies string
   morphospecies?: string
   speciesListId?: string
   speciesListDOI?: string
   // Original label from bot detection JSON (e.g., "ORDER_Diptera")
   originalMothboxLabel?: string
+  classificationType?: DetectionClassificationType
+  humanClassifierId?: string
+  pixelMassPixels?: number
+  pixelMassMm2?: number | null
+  pixelMassTimestamp?: string
+  detectorId?: string
 }
-

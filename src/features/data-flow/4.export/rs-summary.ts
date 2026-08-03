@@ -1,4 +1,4 @@
-import { detectionsStore, getDetectionsForNight, getIdentifiedDetectionsForNight, type DetectionEntity } from '~/stores/entities/detections'
+import { detectionsStore, getDetectionsForLeafGroup, getIdentifiedDetectionsForLeafGroup, type DetectionEntity } from '~/stores/entities/detections'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
 import { idbGet } from '~/utils/index-db'
@@ -10,10 +10,10 @@ import { getProjectExportPath, sanitizeForFileName, buildExportFileNameParts } f
 
 type ZipInput = Zippable
 
-export async function exportNightSummaryRS(params: { nightId: string }): Promise<boolean> {
-  const { nightId } = params
-  if (!nightId) return false
-  console.log('🏁 exportNightSummaryRS: start', { nightId })
+export async function exportNightSummaryRS(params: { leafGroupId: string }): Promise<boolean> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return false
+  console.log('🏁 exportNightSummaryRS: start', { leafGroupId })
 
   const root = (await idbGet(
     persistenceConstants.IDB_NAME,
@@ -25,7 +25,7 @@ export async function exportNightSummaryRS(params: { nightId: string }): Promise
   const granted = await ensureReadWritePermission(root as any)
   if (!granted) return false
 
-  const csvGenerated = await generateNightDarwinCSVString({ nightId })
+  const csvGenerated = await generateNightDarwinCSVString({ leafGroupId })
   if (!csvGenerated) return false
   const { csv } = csvGenerated
 
@@ -35,7 +35,7 @@ export async function exportNightSummaryRS(params: { nightId: string }): Promise
   const allPatches = patchesStore.get() || {}
   const allPhotos = photosStore.get() || {}
 
-  const identified = getIdentifiedDetectionsForNight(nightId)
+  const identified = getIdentifiedDetectionsForLeafGroup(leafGroupId)
 
   const bySpecies: Map<string, DetectionEntity> = new Map()
   for (const det of identified) {
@@ -56,8 +56,8 @@ export async function exportNightSummaryRS(params: { nightId: string }): Promise
   }
 
   const zipped = zipSync(zipEntries, { level: 6 })
-  const projectExportPath = getProjectExportPath({ nightId })
-  const zipFileName = buildRSSummaryFileName({ nightId })
+  const projectExportPath = getProjectExportPath({ leafGroupId })
+  const zipFileName = buildRSSummaryFileName({ leafGroupId })
   const pathParts = [...projectExportPath.split('/').filter(Boolean), zipFileName]
   await fsaaWriteBytes(root, pathParts, zipped)
   console.log('✅ exportNightSummaryRS: written file', { path: pathParts.join('/') })
@@ -65,9 +65,9 @@ export async function exportNightSummaryRS(params: { nightId: string }): Promise
   return true
 }
 
-function buildRSSummaryFileName(params: { nightId: string }): string {
-  const { nightId } = params
-  const { datasetName, siteName, deploymentName, nightName } = buildExportFileNameParts({ nightId })
+function buildRSSummaryFileName(params: { leafGroupId: string }): string {
+  const { leafGroupId } = params
+  const { datasetName, siteName, deploymentName, nightName } = buildExportFileNameParts({ leafGroupId })
 
   const fileName = siteName
     ? `${datasetName}_${siteName}_${deploymentName}_${nightName}_rs_summary.zip`

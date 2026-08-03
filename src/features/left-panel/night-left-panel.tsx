@@ -2,21 +2,36 @@ import { Column, PanelHeading } from '~/styles'
 import { cn } from '~/utils/cn'
 import { Progress } from '~/components/ui/progress'
 import { Button } from '~/components/ui/button'
-import { useParams } from '@tanstack/react-router'
 import { useStore } from '@nanostores/react'
 import { useState, type ReactNode } from 'react'
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu'
 import { detectionsStore } from '~/stores/entities/detections'
+import { selectedPatchIdsStore } from '~/stores/ui'
 import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
+import { Number } from '~/components/atomic/number'
 import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
 import { PatchSizeControl } from '~/components/atomic/patch-size-control'
-import type { NightLeftPanelProps } from './left-panel.types'
+import type { LeafGroupLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
 import { TaxonomySection } from './taxonomy-section'
+import { NightSelectorSection } from './night-selector'
+import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
+import { VisualizationDialog } from '~/features/data-flow/4.export/visualization/visualization-dialog'
 
-export function NightLeftPanel(props: NightLeftPanelProps) {
+export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   const {
+    leafGroupId,
+    hasMachineIdentification = true,
+    unassignedCount = 0,
     taxonomyAuto,
     taxonomyUser,
     totalPatches,
@@ -25,8 +40,18 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     sizeThreshold,
     sizeThresholdMax,
     sortByClusters,
+    smallestFirst,
+    clustersCollapsed,
     onSizeThresholdChange,
     onSortByClustersChange,
+    onSmallestFirstChange,
+    onClustersCollapsedChange,
+    availableDetectorIds,
+    selectedDetectorId,
+    onDetectorChange,
+    availableBotAlgorithms,
+    selectedBotAlgorithm,
+    onBotAlgorithmChange,
     selectedTaxon,
     selectedBucket,
     onSelectTaxon,
@@ -34,35 +59,51 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
     className,
   } = props
 
-  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
-  const nightId = `${params.projectId}/${params.deploymentId}/${params.nightId}`
   const detections = useStore(detectionsStore)
-  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false)
+  const selectedPatchIds = useStore(selectedPatchIdsStore)
+  const selectedCount = selectedPatchIds?.size ?? 0
+  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(true)
+  const [vizDialogOpen, setVizDialogOpen] = useState(false)
   const errorCountForNight = Object.values(detections ?? {}).filter(
-    (d) => (d as any)?.nightId === nightId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
+    (d) => (d as any)?.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
   ).length
 
   return (
-    <Column className={cn('px-16 py-20 pt-12', className)}>
+    <Column className={cn('bg-sidebar pl-14 pr-16 py-20 pt-12', className)}>
+      <NightSelectorSection />
+      {availableDetectorIds && availableDetectorIds.length > 1 ? (
+        <DetectorSelectorSection
+          detectorIds={availableDetectorIds}
+          selectedDetectorId={selectedDetectorId}
+          onDetectorChange={onDetectorChange}
+          className='mb-16'
+        />
+      ) : null}
       <WarningsBox warnings={warnings} className='mb-16' />
       <div className='mb-16'>
         <PanelHeading className='mb-6'>Summary</PanelHeading>
         <div className='space-y-4 text-13 text-neutral-700'>
           <div className='flex items-center justify-between'>
             <span>Total patches</span>
-            <span className='font-medium'>{totalPatches}</span>
+            <Number value={totalPatches} mono format className='font-medium' />
           </div>
           <div className='flex items-center justify-between'>
             <span>Total detections</span>
-            <span className='font-medium'>{totalDetections}</span>
+            <Number value={totalDetections} mono format className='font-medium' />
           </div>
           <div className='flex items-center justify-between'>
             <span>Identified</span>
-            <span className='font-medium'>{totalIdentified}</span>
+            <Number value={totalIdentified} mono format className='font-medium' />
           </div>
           <div className='pt-4'>
             <Progress value={totalDetections ? Math.round((totalIdentified / totalDetections) * 100) : 0} />
           </div>
+          {selectedCount > 0 && (
+            <div className='flex items-center justify-between pt-2'>
+              <span className='text-blue-600'>Selected</span>
+              <span className='font-medium tabular-nums text-blue-600'>{selectedCount}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -73,19 +114,51 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
       >
         <PatchSizeControl compact />
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
+        <LabeledCheckboxControl
+          label='Smallest first'
+          checked={smallestFirst}
+          onChange={onSmallestFirstChange}
+        />
+        <LabeledCheckboxControl
+          label='Sort by clusters'
+          checked={sortByClusters}
+          onChange={onSortByClustersChange}
+        />
+        <LabeledCheckboxControl
+          label='Collapse all clusters'
+          checked={clustersCollapsed}
+          onChange={onClustersCollapsedChange}
+        />
       </LayoutOptionsSection>
 
-      <TaxonomySection
-        title='Machine identified'
-        nodes={taxonomyAuto}
-        bucket='auto'
-        sortByClusters={sortByClusters}
-        onSortByClustersChange={onSortByClustersChange}
-        selectedTaxon={selectedTaxon}
-        selectedBucket={selectedBucket}
-        onSelectTaxon={onSelectTaxon}
-        emptyText='No detections'
-      />
+      {(hasMachineIdentification || (availableBotAlgorithms && availableBotAlgorithms.length > 0)) ? (
+        <TaxonomySection
+          title='Machine identified'
+          nodes={taxonomyAuto}
+          bucket='auto'
+          selectedTaxon={selectedTaxon}
+          selectedBucket={selectedBucket}
+          onSelectTaxon={onSelectTaxon}
+          emptyText='No detections'
+          aggregateLabel={UNAPPROVED_AGGREGATE_LABEL}
+          availableAlgorithms={availableBotAlgorithms}
+          selectedAlgorithm={selectedBotAlgorithm}
+          onAlgorithmChange={onBotAlgorithmChange}
+        />
+      ) : (
+        <TaxonomySection
+          title='Unassigned'
+          nodes={[]}
+          bucket='auto'
+          selectedTaxon={selectedTaxon}
+          selectedBucket={selectedBucket}
+          onSelectTaxon={onSelectTaxon}
+          emptyText='No unassigned patches'
+          aggregateLabel={UNASSIGNED_AGGREGATE_LABEL}
+          aggregateCount={unassignedCount}
+          alwaysShowAggregate
+        />
+      )}
 
       <TaxonomySection
         className='mt-16'
@@ -100,14 +173,22 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
       />
 
       <div className='mt-auto pt-16'>
-        <Button className='w-full' onClick={() => showDarwinExportToast({ nightId })}>
+        <Button className='w-full' onClick={() => showDarwinExportToast({ leafGroupId })}>
           Export Darwin CSV
         </Button>
+        <Button className='w-full mt-8' variant='outline' onClick={() => setVizDialogOpen(true)}>
+          Export Visualization
+        </Button>
+        <VisualizationDialog
+          open={vizDialogOpen}
+          onClose={() => setVizDialogOpen(false)}
+          initialLeafGroupIds={[leafGroupId]}
+        />
 
         {/* <Button
           className='w-full mt-8'
           onClick={() => {
-            const p = exportNightSummaryRS({ nightId })
+            const p = exportNightSummaryRS({ leafGroupId })
             toast.promise(p, {
               loading: '💾 Exporting RS summary…',
               success: '✅ RS summary exported',
@@ -122,10 +203,46 @@ export function NightLeftPanel(props: NightLeftPanelProps) {
   )
 }
 
-function showDarwinExportToast(params: { nightId: string }) {
-  const { nightId } = params
+type DetectorSelectorSectionProps = {
+  detectorIds: string[]
+  selectedDetectorId?: string
+  onDetectorChange?: (id: string) => void
+  className?: string
+}
 
-  const promise = exportNightDarwinCSV({ nightId })
+function DetectorSelectorSection(props: DetectorSelectorSectionProps) {
+  const { detectorIds, selectedDetectorId, onDetectorChange, className } = props
+  return (
+    <div className={cn('mb-16 flex items-center justify-between gap-8', className)}>
+      <div className='flex min-w-0 items-baseline gap-6'>
+        <PanelHeading className='shrink-0'>Detection run</PanelHeading>
+        <span className='truncate text-13 font-medium text-ink-primary'>{selectedDetectorId ?? '—'}</span>
+      </div>
+      {detectorIds.length > 1 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size='icon-sm' variant='ghostMuted' aria-label='Choose detection run' icon={EllipsisIcon} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side='right' align='start' sideOffset={4}>
+            <DropdownMenuLabel>Detection run</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={selectedDetectorId ?? ''} onValueChange={(v) => onDetectorChange?.(v)}>
+              {detectorIds.map((id) => (
+                <DropdownMenuRadioItem key={id} value={id}>
+                  {id}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  )
+}
+
+function showDarwinExportToast(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
+
+  const promise = exportNightDarwinCSV({ leafGroupId })
 
   toast.promise(promise, {
     loading: '💾 Exporting Darwin CSV…',
@@ -134,13 +251,13 @@ function showDarwinExportToast(params: { nightId: string }) {
       action: {
         label: 'Copy file path',
         onClick: () => {
-          void copyNightExportFilePathToClipboard({ nightId })
+          void copyNightExportFilePathToClipboard({ leafGroupId })
         },
       },
       cancel: {
         label: 'Copy folder path',
         onClick: () => {
-          void copyNightFolderPathToClipboard({ nightId })
+          void copyNightFolderPathToClipboard({ leafGroupId })
         },
       },
     }),
@@ -219,4 +336,25 @@ function getSizeThresholdLabel(params: { value: number; max: number }) {
   if (max <= 0) return 'No size data'
   if (value <= 0) return 'All sizes'
   return `>= ${value}px`
+}
+
+type LabeledCheckboxControlProps = {
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}
+
+function LabeledCheckboxControl(props: LabeledCheckboxControlProps) {
+  const { label, checked, onChange } = props
+  return (
+    <label className='flex items-center justify-between gap-8 text-13 cursor-pointer select-none'>
+      <span className='text-ink-secondary'>{label}</span>
+      <input
+        type='checkbox'
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className='accent-blue-600 cursor-pointer'
+      />
+    </label>
+  )
 }

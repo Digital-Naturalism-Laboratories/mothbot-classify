@@ -3,7 +3,7 @@ import { atom } from 'nanostores'
 import { cn } from '~/utils/cn'
 import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
 
-export const patchColumnsStore = atom<number>(6)
+export const patchColumnsStore = atom<number>(7)
 
 export function setPatchColumns(value: number) {
   const clamped = Math.max(1, Math.min(12, Math.round(value || 1)))

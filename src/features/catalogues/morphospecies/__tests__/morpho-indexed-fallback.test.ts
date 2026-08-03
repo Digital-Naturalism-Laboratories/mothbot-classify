@@ -34,8 +34,8 @@ describe('morpho indexed fallback', () => {
 
     expect(fallback.counts).toEqual({ netelia1: 2 })
     expect(fallback.previewPairsByKey.netelia1).toEqual([
-      { nightId: 'project/deployment/night', patchId: 'netelia_a.jpg' },
-      { nightId: 'project/deployment/night', patchId: 'netelia_b.jpg' },
+      { leafGroupId: 'project/deployment/night', patchId: 'netelia_a.jpg' },
+      { leafGroupId: 'project/deployment/night', patchId: 'netelia_b.jpg' },
     ])
     expect(fallback.taxonomyByKey.netelia1).toMatchObject({
       class: 'Insecta',
@@ -47,19 +47,28 @@ describe('morpho indexed fallback', () => {
   })
 
   it('uses all summary nights when no scope filter is applied', () => {
-    const nightIds = getRelevantNightIdsForMorphoFallback({
+    const leafGroupIds = getRelevantNightIdsForMorphoFallback({
       summaries: {
         'project-a/deployment-a/night-a': {},
         'project-b/deployment-b/night-b': {},
       },
     })
 
-    expect(nightIds).toEqual(['project-a/deployment-a/night-a', 'project-b/deployment-b/night-b'])
+    expect(leafGroupIds).toEqual(['project-a/deployment-a/night-a', 'project-b/deployment-b/night-b'])
+  })
+
+  it('falls back to loaded night ids when summaries are empty', () => {
+    const leafGroupIds = getRelevantNightIdsForMorphoFallback({
+      summaries: {},
+      leafGroupIds: ['project/deployment/night-1'],
+    })
+
+    expect(leafGroupIds).toEqual(['project/deployment/night-1'])
   })
 
   it('loads fallback when summaries have morpho counts but no preview ids or taxonomy', () => {
     const shouldLoad = shouldLoadMorphoIndexedFallback({
-      nightIds: ['project/deployment/night'],
+      leafGroupIds: ['project/deployment/night'],
       summaries: {
         'project/deployment/night': {
           morphoCounts: { netelia1: 2 },

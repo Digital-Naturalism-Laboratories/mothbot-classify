@@ -3,15 +3,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // Mock dependencies BEFORE importing the module under test
 // Must match the exact import paths used in detections.ts
 vi.mock('~/features/data-flow/3.persist/detection-persistence', () => ({
-  scheduleSaveForNight: vi.fn(),
+  scheduleSaveForLeafGroup: vi.fn(),
 }))
 
 vi.mock('~/stores/entities/night-summaries', () => ({
-  nightSummariesStore: {
+  leafGroupSummariesStore: {
     get: vi.fn(() => ({})),
     set: vi.fn(),
   },
-  buildNightSummary: vi.fn(() => ({})),
+  buildLeafGroupSummary: vi.fn(() => ({})),
 }))
 
 vi.mock('~/features/data-flow/2.identify/species-list.store', () => ({
@@ -90,7 +90,7 @@ describe('Detection Identification Scenarios', () => {
     id: 'patch1',
     patchId: 'patch1',
     photoId: 'photo1',
-    nightId: 'project/deployment/night1',
+    leafGroupId: 'project/deployment/night1',
     detectedBy: 'auto' as const,
   } as const
 

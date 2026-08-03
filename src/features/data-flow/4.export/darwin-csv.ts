@@ -6,7 +6,7 @@ import {
 } from '~/models/taxonomy/extract'
 import { getValidScientificNameForExport } from '~/models/taxonomy/morphospecies'
 import { patchesStore, type PatchEntity } from '~/stores/entities/5.patches'
-import { getDetectionsForNight, type DetectionEntity } from '~/stores/entities/detections'
+import { getDetectionsForLeafGroup, type DetectionEntity } from '~/stores/entities/detections'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
 import { userSessionStore } from '~/stores/ui'
 import { objectsToCSV } from '~/utils/csv'
@@ -14,6 +14,7 @@ import { fsaaWriteText, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos, getPhotoBaseFromPhotoId } from '~/utils/paths'
 import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getProjectExportPath } from './export-utils'
+import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classification'
 
 const DARWIN_COLUMNS = [
   // Taxonomy columns
@@ -46,6 +47,8 @@ const DARWIN_COLUMNS = [
   'width',
   'height',
   'area',
+  'pixel_mass_pixels',
+  'pixel_mass_mm2',
 
   // Date/Time
   'eventDate',
@@ -66,10 +69,10 @@ const DARWIN_COLUMNS = [
 type DarwinColumn = (typeof DARWIN_COLUMNS)[number]
 type DarwinRow = Record<DarwinColumn, string>
 
-export async function exportNightDarwinCSV(params: { nightId: string }): Promise<boolean> {
-  const { nightId } = params
-  if (!nightId) return false
-  console.log('🏁 exportNightDarwinCSV: start', { nightId })
+export async function exportNightDarwinCSV(params: { leafGroupId: string }): Promise<boolean> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return false
+  console.log('🏁 exportNightDarwinCSV: start', { leafGroupId })
 
   const root = (await idbGet(
     persistenceConstants.IDB_NAME,
@@ -81,12 +84,12 @@ export async function exportNightDarwinCSV(params: { nightId: string }): Promise
   const granted = await ensureReadWritePermission(root as any)
   if (!granted) return false
 
-  const generated = await generateNightDarwinCSVString({ nightId })
+  const generated = await generateNightDarwinCSVString({ leafGroupId })
   if (!generated) return false
   const { csv } = generated
 
-  const fileName = buildNightExportFileName({ nightId })
-  const projectExportPath = getProjectExportPath({ nightId })
+  const fileName = buildNightExportFileName({ leafGroupId })
+  const projectExportPath = getProjectExportPath({ leafGroupId })
   const pathParts = [...projectExportPath.split('/').filter(Boolean), fileName]
 
   await fsaaWriteText(root, pathParts, csv)
@@ -95,9 +98,9 @@ export async function exportNightDarwinCSV(params: { nightId: string }): Promise
   return true
 }
 
-export async function openNightFolderPicker(params: { nightId: string }): Promise<boolean> {
-  const { nightId } = params
-  if (!nightId) return false
+export async function openNightFolderPicker(params: { leafGroupId: string }): Promise<boolean> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return false
 
   const root = (await idbGet(
     persistenceConstants.IDB_NAME,
@@ -110,7 +113,7 @@ export async function openNightFolderPicker(params: { nightId: string }): Promis
   if (!granted) return false
 
   const allPhotos = photosStore.get() || {}
-  const photos = Object.values(allPhotos).filter((p) => p.nightId === nightId)
+  const photos = Object.values(allPhotos).filter((p) => p.leafGroupId === leafGroupId)
   if (!photos.length) return false
 
   const nightDiskPath = getNightDiskPathFromPhotos({ photos })
@@ -137,12 +140,12 @@ export async function openNightFolderPicker(params: { nightId: string }): Promis
   }
 }
 
-export async function copyNightFolderPathToClipboard(params: { nightId: string }): Promise<boolean> {
-  const { nightId } = params
-  if (!nightId) return false
+export async function copyNightFolderPathToClipboard(params: { leafGroupId: string }): Promise<boolean> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return false
 
   const allPhotos = photosStore.get() || {}
-  const photos = Object.values(allPhotos).filter((p) => p.nightId === nightId)
+  const photos = Object.values(allPhotos).filter((p) => p.leafGroupId === leafGroupId)
   if (!photos.length) return false
 
   const nightDiskPath = getNightDiskPathFromPhotos({ photos })
@@ -153,12 +156,12 @@ export async function copyNightFolderPathToClipboard(params: { nightId: string }
   return ok
 }
 
-export async function copyNightExportFilePathToClipboard(params: { nightId: string }): Promise<boolean> {
-  const { nightId } = params
-  if (!nightId) return false
+export async function copyNightExportFilePathToClipboard(params: { leafGroupId: string }): Promise<boolean> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return false
 
-  const fileName = buildNightExportFileName({ nightId })
-  const projectExportPath = getProjectExportPath({ nightId })
+  const fileName = buildNightExportFileName({ leafGroupId })
+  const projectExportPath = getProjectExportPath({ leafGroupId })
   const fullPath = [...projectExportPath.split('/').filter(Boolean), fileName].join('/')
 
   const ok = await writeTextToClipboard(fullPath)
@@ -192,17 +195,17 @@ async function writeTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export async function generateNightDarwinCSVString(params: { nightId: string }): Promise<{ csv: string; nightDiskPath: string } | null> {
-  const { nightId } = params
-  if (!nightId) return null
+export async function generateNightDarwinCSVString(params: { leafGroupId: string }): Promise<{ csv: string; nightDiskPath: string } | null> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return null
 
   const allPhotos = photosStore.get() || {}
   const allPatches = patchesStore.get() || {}
 
-  const detections = getDetectionsForNight(nightId)
-  console.log('📥 Export: incoming detections', { nightId, count: detections.length, detections })
+  const detections = getDetectionsForLeafGroup(leafGroupId)
+  console.log('📥 Export: incoming detections', { leafGroupId, count: detections.length, detections })
 
-  const photos = Object.values(allPhotos).filter((p) => p.nightId === nightId)
+  const photos = Object.values(allPhotos).filter((p) => p.leafGroupId === leafGroupId)
   if (!photos.length) return null
 
   const nightDiskPath = getNightDiskPathFromPhotos({ photos })
@@ -212,11 +215,11 @@ export async function generateNightDarwinCSVString(params: { nightId: string }):
   for (const d of detections) {
     const patch = allPatches[d.patchId]
     const photo = allPhotos[d.photoId]
-    const rowObj = buildDarwinShapeFromDetection({ detection: d, patch, photo, nightId, nightDiskPath })
+    const rowObj = buildDarwinShapeFromDetection({ detection: d, patch, photo, leafGroupId, nightDiskPath })
     rowObjs.push(rowObj)
   }
 
-  console.log('📤 Export: output rows', { nightId, count: rowObjs.length, rows: rowObjs })
+  console.log('📤 Export: output rows', { leafGroupId, count: rowObjs.length, rows: rowObjs })
 
   // Handle empty detections case: return CSV with headers only
   if (rowObjs.length === 0) {
@@ -229,9 +232,9 @@ export async function generateNightDarwinCSVString(params: { nightId: string }):
   return { csv, nightDiskPath }
 }
 
-function buildNightExportFileName(params: { nightId: string }): string {
-  const { nightId } = params
-  const { datasetName, siteName, deploymentName, nightName } = buildExportFileNameParts({ nightId })
+function buildNightExportFileName(params: { leafGroupId: string }): string {
+  const { leafGroupId } = params
+  const { datasetName, siteName, deploymentName, nightName } = buildExportFileNameParts({ leafGroupId })
   const today = formatTodayYyyyMm_Dd()
 
   const fileName = siteName
@@ -240,12 +243,12 @@ function buildNightExportFileName(params: { nightId: string }): string {
   return fileName
 }
 
-function parseNightIdParts(params: { nightId: string }): { project: string; deployment: string; night: string } | null {
-  const { nightId } = params
-  if (!nightId) return null
+function parseNightIdParts(params: { leafGroupId: string }): { project: string; deployment: string; night: string } | null {
+  const { leafGroupId } = params
+  if (!leafGroupId) return null
 
-  const parts = nightId.split('/').filter(Boolean)
-  // nightId format: project/deployment/night
+  const parts = leafGroupId.split('/').filter(Boolean)
+  // leafGroupId format: project/deployment/night
   if (parts.length < 3) return null
 
   const project = parts[0] || ''
@@ -261,12 +264,13 @@ export function buildDarwinShapeFromDetection(params: {
   detection: DetectionEntity
   patch?: PatchEntity
   photo?: PhotoEntity
-  nightId: string
+  leafGroupId: string
   nightDiskPath: string
 }): DarwinRow {
-  const { detection, patch, photo, nightId, nightDiskPath } = params
+  const { detection, patch, photo, leafGroupId, nightDiskPath } = params
   const baseName = getPhotoBaseFromPhotoId(photo?.id || '')
-  const verbatimEventDate = extractVerbatimEventDateFromPhotoBase({ baseName })
+  const capturedAt = typeof patch?.capturedAt === 'string' ? patch.capturedAt.trim() : ''
+  const verbatimEventDate = extractVerbatimEventDateFromPhotoBase({ baseName }) || capturedAt
   const { eventDate, eventTime, utcOffset } = deriveEventDateTime({ verbatimEventDate })
   const filepath = patch?.imageFile?.path || ''
   const image_id = patch?.id || ''
@@ -298,10 +302,12 @@ export function buildDarwinShapeFromDetection(params: {
         morphospecies: detection?.morphospecies,
         label: detection?.label,
       })
-  const name = isError ? 'ERROR' : deriveTaxonNameFromDetection({ detection })
+  // Keep the error sub-category (e.g. "ERROR_Frass") in the exported name.
+  const errorName = /^ERROR[_:]/i.test((detection?.label ?? '').trim()) ? detection!.label!.trim() : 'ERROR'
+  const name = isError ? errorName : deriveTaxonNameFromDetection({ detection })
 
-  const nightParts = parseNightIdParts({ nightId })
-  const datasetID = nightParts ? `${nightParts.project}_${nightParts.deployment}_${nightParts.night}` : nightId.replaceAll('/', '_')
+  const nightParts = parseNightIdParts({ leafGroupId })
+  const datasetID = nightParts ? `${nightParts.project}_${nightParts.deployment}_${nightParts.night}` : leafGroupId.replaceAll('/', '_')
   const parentEventID = nightParts ? `${nightParts.project}_${nightParts.deployment}` : datasetID
   const eventID = photo?.id || ''
   const occurrenceID = patch?.id || ''
@@ -309,7 +315,9 @@ export function buildDarwinShapeFromDetection(params: {
   // Deployment is datasetID without the trailing night date segment
   const deployment = extractDeploymentFromDatasetID({ datasetID })
   const mothbox = extractMothboxFromNightDiskPath({ nightDiskPath })
-  const detectionBy = extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
+  const detectionBy = detection?.botClassifierId
+    ? botAlgorithmLabel(detection.botClassifierId)
+    : extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
   const detection_confidence = detection?.score != null ? String(detection.score) : ''
   const userInitials = userSessionStore.get()?.initials || ''
   const identifiedBy = detection?.detectedBy === 'user' ? userInitials : ''
@@ -349,6 +357,8 @@ export function buildDarwinShapeFromDetection(params: {
     ...geometryFields,
     deployment,
     image_id,
+    pixel_mass_pixels: detection?.pixelMassPixels != null ? String(detection.pixelMassPixels) : '',
+    pixel_mass_mm2: detection?.pixelMassMm2 != null ? String(detection.pixelMassMm2) : '',
   }
   return row
 }
@@ -369,7 +379,7 @@ function deriveEventDateTime(params: { verbatimEventDate: string }): { eventDate
 
   if (!verbatimEventDate) return { eventDate: '', eventTime: '', utcOffset: '' }
   const m = verbatimEventDate.match(/(\d{4})_(\d{2})_(\d{2})__([0-9]{2})_([0-9]{2})_([0-9]{2})/)
-  if (!m) return { eventDate: '', eventTime: '', utcOffset: '' }
+  if (!m) return deriveIsoEventDateTime({ verbatimEventDate })
   const yyyy = m[1]
   const MM = m[2]
   const dd = m[3]
@@ -380,6 +390,38 @@ function deriveEventDateTime(params: { verbatimEventDate: string }): { eventDate
   const eventTime = `${hh}:${mm}:${ss}`
   const utcOffset = ''
   return { eventDate, eventTime, utcOffset }
+}
+
+function deriveIsoEventDateTime(params: { verbatimEventDate: string }): { eventDate: string; eventTime: string; utcOffset: string } {
+  const trimmed = params.verbatimEventDate.trim()
+  const match = trimmed.match(
+    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:\s*(Z)|([+-]\d{2}(?::?\d{2})?))?$/i,
+  )
+  if (match) {
+    return {
+      eventDate: match[1],
+      eventTime: match[2],
+      utcOffset: match[3] ? '+00:00' : normalizeUtcOffset(match[4]),
+    }
+  }
+
+  const parsed = Date.parse(trimmed)
+  if (!Number.isFinite(parsed)) return { eventDate: '', eventTime: '', utcOffset: '' }
+
+  const iso = new Date(parsed).toISOString()
+  return {
+    eventDate: iso.slice(0, 10),
+    eventTime: iso.slice(11, 19),
+    utcOffset: '',
+  }
+}
+
+function normalizeUtcOffset(value?: string): string {
+  if (!value) return ''
+  if (/^[+-]\d{2}$/.test(value)) return `${value}:00`
+  const compact = value.match(/^([+-]\d{2})(\d{2})$/)
+  if (compact) return `${compact[1]}:${compact[2]}`
+  return value
 }
 
 function extractMothboxFromNightDiskPath(params: { nightDiskPath: string }): string {

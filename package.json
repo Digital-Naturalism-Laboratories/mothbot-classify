@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --open",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -12,10 +12,12 @@
     "test": "vitest run",
     "test:run": "vitest run --reporter=dot",
     "test:watch": "vitest",
+    "verify:mothbox-next": "bun run scripts/verify-mothbox-next.ts",
     "species:search": "bun run scripts/species-search.ts",
     "generate-pwa-assets": "pwa-assets-generator --preset minimal public/mothbot.svg"
   },
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@nanostores/react": "^1.0.0",
     "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -32,12 +34,14 @@
     "@tanstack/react-router": "1",
     "@tanstack/react-virtual": "^3.10.8",
     "autoprefixer": "^10.4.21",
+    "baseline-browser-mapping": "^2.10.19",
     "chroma-js": "^3.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "fflate": "^0.8.2",
     "fuzzysort": "^3.1.0",
+    "hyparquet": "^1.26.0",
     "lucide-react": "^0.542.0",
     "nanostores": "^1.0.1",
     "next-themes": "^0.4.6",
@@ -55,7 +59,11 @@
     "vite-plugin-pwa": "^1.2.0",
     "windy-radix-palette": "^2.0.0-beta.7"
   },
+  "overrides": {
+    "caniuse-lite": "1.0.30001788"
+  },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "@eslint/js": "^9.33.0",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.0",

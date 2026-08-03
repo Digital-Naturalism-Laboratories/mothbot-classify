@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizePathsToRoot, type IndexedPickedFile } from '../files.fs'
+import { normalizeIndexedFilesForIngest, normalizePathsToRoot, type IndexedPickedFile } from '../files.fs'
 
 function makeEntry(path: string): IndexedPickedFile {
   return {
@@ -76,6 +76,22 @@ describe('normalizePathsToRoot', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.files[0]?.path).toBe('Dinacon2025/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/photo_botdetection.json')
+  })
+
+  it('skips legacy root discovery for mothbox-next packages with 00_source archive', () => {
+    const files = [
+      makeEntry('dataset.json'),
+      makeEntry('01_patches/patch_a.jpg'),
+      makeEntry('00_source/Dinacon2025_Les_BeachPalm_hopeCobo_2025-06-20/2025-06-21/patches/patch_b.jpg'),
+    ]
+
+    const result = normalizeIndexedFilesForIngest({ files })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.files.some((f) => f.path === 'dataset.json')).toBe(true)
+    expect(result.files.some((f) => f.path === '01_patches/patch_a.jpg')).toBe(true)
+    expect(result.files.some((f) => f.path.startsWith('00_source/'))).toBe(true)
   })
 
   it('fails fast when parse confidence is too low', () => {

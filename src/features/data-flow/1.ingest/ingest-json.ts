@@ -38,10 +38,16 @@ export type BotDetectionJson = {
   }>
 }
 
+/** `_identified.json` shapes: bot-like row plus optional user / UI fields. */
+export type UserIdentifiedShape = BotDetectionJson['shapes'][number] & {
+  is_error?: boolean
+  morphospecies?: string
+}
+
 export type UserDetectionJson = {
   version?: string
   photoBase?: string
-  shapes?: BotDetectionJson['shapes']
+  shapes?: UserIdentifiedShape[]
 }
 
 export async function parseBotDetectionJsonSafely(params: { file: IndexedFile }): Promise<BotDetectionJson | null> {
@@ -67,14 +73,7 @@ export async function parseUserDetectionJsonSafely(params: { file: IndexedFile }
   }
 }
 
-export function extractPatchFilename(params: { patchPath: string }) {
-  const { patchPath } = params
-  if (!patchPath) return ''
-  const normalized = patchPath.replaceAll('\\', '/').trim()
-  const segments = normalized.split('/')
-  const name = segments[segments.length - 1]
-  return name ?? ''
-}
+export { extractPatchFilename } from '~/features/mothbox-next/patch-path'
 
 async function ensureTextFromIndexedFile(f: IndexedFile): Promise<string> {
   const hasFile = !!(f as any)?.file

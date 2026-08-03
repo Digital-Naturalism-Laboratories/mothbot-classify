@@ -1,24 +1,26 @@
-import { ingestDetectionsForNight } from './ingest'
+import { ingestDetectionsForLeafGroup } from './ingest'
 import { indexedFilesStore, patchFileMapByNightStore } from './files.state'
 import { detectionsStore } from '~/stores/entities/detections'
-import { nightSummariesStore } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
+import { isMothboxNextIngestMode } from './ingest-mode'
 
-export async function ensureDetectionsLoadedForNight(params: { nightId: string }) {
-  const { nightId } = params
-  const loadedCount = countLoadedDetectionsForNight({ nightId })
-  const expectedCount = nightSummariesStore.get()?.[nightId]?.totalDetections ?? 0
+export async function ensureDetectionsLoadedForNight(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
+  if (isMothboxNextIngestMode()) return
+  const loadedCount = countLoadedDetectionsForNight({ leafGroupId })
+  const expectedCount = leafGroupSummariesStore.get()?.[leafGroupId]?.totalDetections ?? 0
 
   if (!shouldLoadNightDetections({ loadedCount, expectedCount })) return
 
-  console.log('🌀 ensureDetectionsLoadedForNight: loading', { nightId })
+  console.log('🌀 ensureDetectionsLoadedForNight: loading', { leafGroupId })
 
   const indexedFiles = indexedFilesStore.get() || []
   const patchMapByNight = patchFileMapByNightStore.get() || {}
-  const patchMap = patchMapByNight[nightId]
+  const patchMap = patchMapByNight[leafGroupId]
 
-  await ingestDetectionsForNight({ files: indexedFiles, nightId, patchMap })
+  await ingestDetectionsForLeafGroup({ files: indexedFiles, leafGroupId, patchMap })
 
-  console.log('✅ ensureDetectionsLoadedForNight: complete', { nightId })
+  console.log('✅ ensureDetectionsLoadedForNight: complete', { leafGroupId })
 }
 
 function shouldLoadNightDetections(params: { loadedCount: number; expectedCount: number }) {
@@ -30,13 +32,13 @@ function shouldLoadNightDetections(params: { loadedCount: number; expectedCount:
   return loadedCount < expectedCount
 }
 
-function countLoadedDetectionsForNight(params: { nightId: string }) {
-  const { nightId } = params
+function countLoadedDetectionsForNight(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
   const detections = detectionsStore.get() || {}
   let loadedCount = 0
 
   for (const detection of Object.values(detections)) {
-    if (detection?.nightId === nightId) loadedCount += 1
+    if (detection?.leafGroupId === leafGroupId) loadedCount += 1
   }
 
   return loadedCount

@@ -36,15 +36,20 @@ Notes:
 - Each bot detection JSON includes a shapes array; each shape has a patch_path to its patch image under night/patches.
 - Example file: `project-1/site-1/deployment-1/night-1/fondoGorila_2025_01_28__04_59_06_HDR0_botdetection.json`.
 
+Canonical app terms (use in new code):
+
+- **Dataset scope**: manifest `dataset_id` (`LeafGroupEntity.datasetId`, `IdentifyDialog.datasetId`)
+- **Leaf group**: classification bucket id (`leafGroupId` on patches/photos/detections; routes `/datasets/.../groups/...`)
+- **Nav**: `activeHierarchyStore` + manifest levels (adapter-defined keys like `deployment` / `night`)
+
 In-memory entity stores (nanostores):
 
-- projectsStore: key=id=name=project
-- sitesStore: key=id=`{project}/{site}`
-- deploymentsStore: key=id=`{project}/{site}/{deployment}`
-- nightsStore: key=id=`{project}/{site}/{deployment}/{night}`
-- photosStore: key=id=`{photoBase}.jpg`; links imageFile and botDetectionFile
-- patchesStore: key=id=`{patchFilename}`; links photoId and nightId
-- detectionsStore: key=id=`{patchFilename}`; parsed from JSON shapes; fields: taxon?, label? (legacy/display), score, direction, shapeType, points, detectedBy, identifiedAt?, isError?
+- leafGroupsStore: leaf group metadata (`datasetId`, siteId, deploymentId); id is opaque (`camera_day_id` or legacy path)
+- projectsStore / sitesStore / deploymentsStore: hydration aliases for legacy + package writers
+- photosStore / patchesStore / detectionsStore: keyed by patch id; use `leafGroupId` not `nightId`
+- detectionsStore fields: taxon?, label?, score, detectedBy, identifiedAt?, isError?, morphospecies?, etc.
+
+Legacy folder ingest still uses project/site/deployment/night paths; mothbox-next packages use manifest hierarchy + leaf groups.
 
 Parsing rules:
 

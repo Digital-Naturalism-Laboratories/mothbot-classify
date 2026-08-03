@@ -25,10 +25,13 @@ export function ConfirmDialog() {
 
   const [open, setOpen] = useState(false)
 
-  function onClickConfirmAction() {
+  async function onClickConfirmAction() {
     setConfirming(true)
-    confirmDialogData?.onConfirm()
-    if (confirmDialogData?.closeAfterConfirm) closeConfirmDialog()
+    try {
+      await Promise.resolve(confirmDialogData?.onConfirm())
+    } finally {
+      if (confirmDialogData?.closeAfterConfirm) closeConfirmDialog()
+    }
   }
 
   function onClickCancel() {

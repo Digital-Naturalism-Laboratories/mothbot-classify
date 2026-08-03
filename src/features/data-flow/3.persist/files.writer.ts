@@ -1,14 +1,23 @@
-import { detectionsStore, getDetectionsForNight, getIdentifiedDetectionsForNight, type DetectionEntity } from '~/stores/entities/detections'
+import { detectionsStore, getDetectionsForLeafGroup, getIdentifiedDetectionsForLeafGroup, type DetectionEntity } from '~/stores/entities/detections'
 import { photosStore, type PhotoEntity } from '~/stores/entities/photos'
 import { idbGet } from '~/utils/index-db'
-import { nightSummariesStore, type NightSummaryEntity } from '~/stores/entities/night-summaries'
+import { leafGroupSummariesStore, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 import { ensureReadWritePermission, persistenceConstants } from './files.persistence'
 import { userSessionStore } from '~/stores/ui'
 import { morphoLinksStore } from './links'
 import { getPhotoBaseFromPhotoId, getNightDiskPathFromPhoto } from '~/utils/paths'
 import { buildIdentifiedJsonShapeFromDetection } from '~/models/detection-shapes'
 import { setDetectionSaveScheduler } from './detection-persistence'
-import { buildNightSummary } from '~/stores/entities/night-summaries'
+import { setClusterOverridesSaveScheduler, saveClusterOverrides } from './cluster-overrides'
+import { isMothboxNextIngestMode } from '~/features/data-flow/1.ingest/ingest-mode'
+import { exportUserDetectionsForMothboxNextPackage } from '~/features/mothbox-next/persist/package-fs-writer'
+import { buildLeafGroupSummary } from '~/stores/entities/night-summaries'
+import { writeTextFile } from '~/utils/fs-directory-handle'
+import {
+  morphoLinksMapToRecords,
+  PACKAGE_MORPHO_LINKS_RECORD,
+} from '~/features/mothbox-next/morpho-links-package'
+import { serializeNdjsonLines } from '~/features/mothbox-next/parse-ndjson'
 
 type FileSystemDirectoryHandleLike = {
   getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
@@ -20,26 +29,32 @@ type FileSystemFileHandleLike = {
 }
 
 const pendingTimers: Record<string, number> = {}
+const PACKAGE_SAVE_TIMER_KEY = '__mothbox-next-package__'
 
-export function scheduleSaveUserDetections(params: { nightId: string; delayMs?: number }) {
-  const { nightId } = params
+export function scheduleSaveUserDetections(params: { leafGroupId: string; delayMs?: number }) {
+  const { leafGroupId } = params
 
   const delayMs = typeof params?.delayMs === 'number' ? params.delayMs : 400
 
-  if (!nightId) return
+  if (!leafGroupId) return
 
-  const prev = pendingTimers[nightId]
+  const timerKey = isMothboxNextIngestMode() ? PACKAGE_SAVE_TIMER_KEY : leafGroupId
+  const prev = pendingTimers[timerKey]
   if (prev) window.clearTimeout(prev)
 
   const t = window.setTimeout(() => {
-    void exportUserDetectionsForNight({ nightId })
+    if (isMothboxNextIngestMode()) {
+      void exportUserDetectionsForMothboxNextPackage()
+      return
+    }
+    void exportUserDetectionsForNight({ leafGroupId })
   }, delayMs)
 
-  pendingTimers[nightId] = t
+  pendingTimers[timerKey] = t
 }
 
-export async function exportUserDetectionsForNight(params: { nightId: string }) {
-  const { nightId } = params
+export async function exportUserDetectionsForNight(params: { leafGroupId: string }) {
+  const { leafGroupId } = params
   const root = (await idbGet(
     persistenceConstants.IDB_NAME,
     persistenceConstants.IDB_STORE,
@@ -53,8 +68,8 @@ export async function exportUserDetectionsForNight(params: { nightId: string }) 
 
   const allPhotos = photosStore.get() || {}
 
-  const detectionsForNight = getDetectionsForNight(nightId)
-  const identifiedForNight = getIdentifiedDetectionsForNight(nightId)
+  const detectionsForNight = getDetectionsForLeafGroup(leafGroupId)
+  const identifiedForNight = getIdentifiedDetectionsForLeafGroup(leafGroupId)
   const byPhoto: Record<string, DetectionEntity[]> = {}
 
   for (const d of identifiedForNight) {
@@ -64,7 +79,7 @@ export async function exportUserDetectionsForNight(params: { nightId: string }) 
     byPhoto[photoId].push(d)
   }
 
-  const photosForNight = Object.values(allPhotos).filter((p) => p.nightId === nightId)
+  const photosForNight = Object.values(allPhotos).filter((p) => p.leafGroupId === leafGroupId)
   const nightDiskPathByPhotoId: Record<string, string> = {}
 
   for (const p of photosForNight) {
@@ -93,9 +108,9 @@ export async function exportUserDetectionsForNight(params: { nightId: string }) 
   await Promise.all(tasks)
 
   // Update + persist night summary
-  const summary = buildNightSummary({ nightId, detections: detectionsForNight })
-  const currentSummaries = nightSummariesStore.get() || {}
-  nightSummariesStore.set({ ...currentSummaries, [nightId]: summary })
+  const summary = buildLeafGroupSummary({ leafGroupId, detections: detectionsForNight })
+  const currentSummaries = leafGroupSummariesStore.get() || {}
+  leafGroupSummariesStore.set({ ...currentSummaries, [leafGroupId]: summary })
 
   const anyPhoto = photosForNight[0]
   if (anyPhoto) {
@@ -122,7 +137,12 @@ export async function writeMorphoLinksToDisk() {
 
     const links = morphoLinksStore.get() || {}
 
-    // Persist a single file under the projects root
+    if (isMothboxNextIngestMode()) {
+      const rows = morphoLinksMapToRecords(links)
+      await writeTextFile(root, PACKAGE_MORPHO_LINKS_RECORD, serializeNdjsonLines(rows))
+      return
+    }
+
     await writeJson(root, ['morpho_links.json'], links)
   } catch {
     // ignore write errors
@@ -164,5 +184,20 @@ async function writeJson(root: FileSystemDirectoryHandleLike, path: string[], da
   await writable.close()
 }
 
-// Initialize the scheduler so detections.ts can use it without circular dependency
+// Initialize schedulers so detections.ts can trigger saves without circular dependencies
 setDetectionSaveScheduler(scheduleSaveUserDetections)
+
+const pendingClusterOverridesTimers: Record<string, number> = {}
+setClusterOverridesSaveScheduler((leafGroupId: string) => {
+  const prev = pendingClusterOverridesTimers[leafGroupId]
+  if (prev) window.clearTimeout(prev)
+  pendingClusterOverridesTimers[leafGroupId] = window.setTimeout(() => {
+    const all = detectionsStore.get() || {}
+    const overrides: Record<string, number> = {}
+    for (const det of Object.values(all)) {
+      if (det.leafGroupId !== leafGroupId) continue
+      if (typeof det.clusterId === 'number') overrides[det.id] = det.clusterId
+    }
+    void saveClusterOverrides(leafGroupId, overrides)
+  }, 400)
+})

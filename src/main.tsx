@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import './styles/fonts.css'
 import './styles/index.css'
 import { RouterProvider } from '@tanstack/react-router'
 import { router } from './router.tsx'

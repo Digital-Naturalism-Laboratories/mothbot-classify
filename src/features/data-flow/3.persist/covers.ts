@@ -3,7 +3,7 @@ import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { normalizeLegacyNightId } from '~/features/data-flow/1.ingest/ingest-paths'
 import { DB_NAME } from '~/utils/index-db'
 
-export type MorphoCover = { nightId: string; patchId: string }
+export type MorphoCover = { leafGroupId: string; patchId: string }
 
 export const morphoCoversStore = atom<Record<string, MorphoCover>>({})
 
@@ -35,17 +35,17 @@ export async function loadMorphoCovers() {
   }
 }
 
-export async function setMorphoCover(params: { morphoKey?: string; label?: string; nightId?: string; patchId?: string }) {
-  const { nightId, patchId } = params
+export async function setMorphoCover(params: { morphoKey?: string; label?: string; leafGroupId?: string; patchId?: string }) {
+  const { leafGroupId, patchId } = params
 
   const keySource = (params?.morphoKey || params?.label || '').trim()
   const morphoKey = normalizeMorphoKey(keySource)
 
   if (!morphoKey) return
-  if (!nightId || !patchId) return
+  if (!leafGroupId || !patchId) return
 
   const current = morphoCoversStore.get() || {}
-  const next = { ...current, [morphoKey]: { nightId: normalizeLegacyNightId(nightId), patchId } }
+  const next = { ...current, [morphoKey]: { leafGroupId: normalizeLegacyNightId(leafGroupId), patchId } }
   morphoCoversStore.set(next)
 
   try {
@@ -90,9 +90,9 @@ export async function clearMorphoCover(params: { morphoKey?: string; label?: str
 function normalizeMorphoCovers(covers: Record<string, MorphoCover>) {
   const normalized: Record<string, MorphoCover> = {}
   for (const [key, value] of Object.entries(covers ?? {})) {
-    const normalizedNightId = normalizeLegacyNightId(value?.nightId ?? '')
+    const normalizedNightId = normalizeLegacyNightId(value?.leafGroupId ?? '')
     if (!normalizedNightId || !value?.patchId) continue
-    normalized[key] = { nightId: normalizedNightId, patchId: value.patchId }
+    normalized[key] = { leafGroupId: normalizedNightId, patchId: value.patchId }
   }
   return normalized
 }

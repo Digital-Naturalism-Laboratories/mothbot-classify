@@ -8,6 +8,8 @@ import { useStore } from '@nanostores/react'
 import { DialogTitle } from '@radix-ui/react-dialog'
 import { TaxonRankBadge, TaxonRankLetterBadge } from '~/components/taxon-rank-badge'
 import { detectionsStore, type DetectionEntity } from '~/stores/entities/detections'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
+import { isDetectionInDataset } from '~/features/mothbox-next/dataset-scope'
 import { Column } from '~/styles'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
 import { openGlobalDialog } from '~/components/dialogs/global-dialog'
@@ -16,6 +18,13 @@ import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { detectMissingRanks } from '~/models/taxonomy/rank'
 import { TaxonomyGapFillDialogContent } from './taxonomy-gap-fill-dialog'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
+import { matchDefaultTaxa } from './default-taxa'
+import {
+  STANDARD_ERROR_REASONS,
+  addCustomErrorReason,
+  customErrorReasonsStore,
+  errorLabelForReason,
+} from './error-categories'
 
 const MAX_SPECIES_UI_RESULTS = 50
 
@@ -23,16 +32,19 @@ export type IdentifyDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (label: string, taxon?: TaxonRecord) => void
-  projectId?: string
+  /** Manifest dataset_id for species list and recents scope */
+  datasetId?: string
   detectionIds?: string[]
 }
 
 export function IdentifyDialog(props: IdentifyDialogProps) {
-  const { open, onOpenChange, onSubmit, projectId, detectionIds } = props
+  const { open, onOpenChange, onSubmit, datasetId, detectionIds } = props
 
   const [query, setQuery] = useState('')
   const selection = useStore(projectSpeciesSelectionStore)
   const detections = useStore(detectionsStore)
+  const customErrorReasons = useStore(customErrorReasonsStore)
+  const leafGroups = useStore(leafGroupsStore)
   const isSpeciesLoading = useStore(speciesListsLoadingStore)
   const listRef = useRef<HTMLDivElement>(null)
   const { setConfirmDialog } = useConfirmDialog()
@@ -62,9 +74,9 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [query])
 
   const speciesOptions = useMemo(() => {
-    const res = getSpeciesOptions({ selection, projectId, query })
+    const res = getSpeciesOptions({ selection, datasetId, query })
     return res
-  }, [selection, projectId, query])
+  }, [selection, datasetId, query])
 
   const speciesOptionsLimited = useMemo(() => {
     const list = speciesOptions || []
@@ -73,8 +85,8 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [speciesOptions])
 
   const recentOptions = useMemo(() => {
-    return getRecentOptions({ detections, projectId })
-  }, [detections, projectId])
+    return getRecentOptions({ detections, datasetId, leafGroups })
+  }, [detections, datasetId, leafGroups])
 
   const filteredRecentOptions = useMemo(() => {
     const q = (query ?? '').trim().toLowerCase()
@@ -83,12 +95,31 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [recentOptions, query])
 
   const morphoOptions = useMemo(() => {
-    return getMorphoOptions({ detections, projectId, query })
-  }, [detections, projectId, query])
+    return getMorphoOptions({ detections, datasetId, leafGroups, query })
+  }, [detections, datasetId, leafGroups, query])
 
   const morphoOptionsLimited = useMemo(() => {
     return limitOptions(morphoOptions || [])
   }, [morphoOptions])
+
+  const standardTaxaMatches = useMemo(() => matchDefaultTaxa(query), [query])
+
+  const errorReasons = useMemo(() => [...STANDARD_ERROR_REASONS, ...customErrorReasons], [customErrorReasons])
+
+  const errorUi = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    // "error frass" / "err blur" lets the user name a (possibly new) sub-category.
+    const prefixMatch = /^err(?:or)?\s+(.+)$/i.exec(query.trim())
+    const typedReason = prefixMatch ? prefixMatch[1]!.trim() : ''
+    const novelReason =
+      typedReason && !errorReasons.some((r) => r.toLowerCase() === typedReason.toLowerCase()) ? typedReason : ''
+    const isErrPrefix = q.startsWith('err')
+    const reasonMatches = errorReasons.filter((r) => isErrPrefix || r.toLowerCase().includes(q))
+    // Shown only for error-related queries — the empty state stays taxon-focused,
+    // and generic errors have the E hotkey.
+    const show = q !== '' && (isErrPrefix || reasonMatches.length > 0 || !!novelReason)
+    return { show, reasonMatches, novelReason }
+  }, [query, errorReasons])
 
   function submitSelection(label: string, taxon?: TaxonRecord) {
     const value = (label ?? '').trim()
@@ -267,14 +298,47 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
           <CommandList ref={listRef}>
             <CommandEmpty>No matches. Press Enter to use your text.</CommandEmpty>
 
-            {query.trim().toUpperCase() === 'ERROR' ? (
-              <CommandGroup heading='Actions'>
-                <CommandItem onSelect={() => submitSelection('ERROR')}>
+            {errorUi.show ? (
+              <CommandGroup heading='Errors'>
+                <CommandItem key='error-generic' onSelect={() => submitSelection('ERROR')}>
                   <div className='flex items-center justify-between w-full'>
-                    <span className='text-13 text-red-700'>ERROR</span>
-                    <span className='text-11 text-neutral-500'>Mark as error</span>
+                    <span className='text-13 text-red-700'>Error</span>
+                    <span className='text-11 text-neutral-500'>generic · hotkey E</span>
                   </div>
                 </CommandItem>
+                {errorUi.reasonMatches.map((reason) => (
+                  <CommandItem key={'error-' + reason} onSelect={() => submitSelection(errorLabelForReason(reason))}>
+                    <div className='flex items-center justify-between w-full'>
+                      <span className='text-13 text-red-700'>Error: {reason}</span>
+                      <span className='text-11 text-neutral-500'>{errorLabelForReason(reason)}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+                {errorUi.novelReason ? (
+                  <CommandItem
+                    key='error-new'
+                    onSelect={() => {
+                      addCustomErrorReason(errorUi.novelReason)
+                      submitSelection(errorLabelForReason(errorUi.novelReason))
+                    }}
+                  >
+                    <span className='text-13 text-red-700'>Add error type: “{errorUi.novelReason}”</span>
+                  </CommandItem>
+                ) : null}
+              </CommandGroup>
+            ) : null}
+
+            {standardTaxaMatches.length > 0 ? (
+              <CommandGroup heading='Standard taxa'>
+                {standardTaxaMatches.map((t) => (
+                  <SpeciesOptionRow
+                    key={'std:' + t.scientificName}
+                    label={getDisplayLabelForTaxon(t)}
+                    taxon={t}
+                    onSelect={() => handleSelectTaxon(t)}
+                    itemClassName='row gap-x-8 !py-8'
+                  />
+                ))}
               </CommandGroup>
             ) : null}
 
@@ -609,14 +673,14 @@ function logIdentificationResult(params: LogIdentificationResultParams) {
 
 type GetSpeciesOptionsParams = {
   selection?: Record<string, string>
-  projectId?: string
+  datasetId?: string
   query: string
 }
 
 function getSpeciesOptions(params: GetSpeciesOptionsParams) {
-  const { selection, projectId, query } = params
+  const { selection, datasetId, query } = params
 
-  const listId = projectId ? selection?.[projectId] : undefined
+  const listId = datasetId ? selection?.[datasetId] : undefined
   if (!listId) {
     return []
   }
@@ -626,17 +690,18 @@ function getSpeciesOptions(params: GetSpeciesOptionsParams) {
 
 type GetRecentOptionsParams = {
   detections?: Record<string, DetectionEntity>
-  projectId?: string
+  datasetId?: string
+  leafGroups?: Record<string, { datasetId?: string }>
 }
 
 function getRecentOptions(params: GetRecentOptionsParams) {
-  const { detections, projectId } = params
+  const { detections, datasetId, leafGroups } = params
 
   const all = Object.values(detections ?? {})
     .filter(
       (d: DetectionEntity | undefined) =>
         d?.detectedBy === 'user' &&
-        isDetectionInProject({ detection: d, projectId }) &&
+        isDetectionInDataset({ detection: d, datasetId: datasetId, leafGroups }) &&
         (!!d?.taxon?.scientificName || !!d?.label || !!d?.morphospecies),
     )
     .sort((a, b) => ((b?.identifiedAt ?? 0) as number) - ((a?.identifiedAt ?? 0) as number))
@@ -674,12 +739,13 @@ function rankToTextClass(rank?: string | null) {
 
 type GetMorphoOptionsParams = {
   detections?: Record<string, DetectionEntity>
-  projectId?: string
+  datasetId?: string
+  leafGroups?: Record<string, { datasetId?: string }>
   query: string
 }
 
 function getMorphoOptions(params: GetMorphoOptionsParams) {
-  const { detections, projectId, query } = params
+  const { detections, datasetId, leafGroups, query } = params
 
   const q = (query ?? '').trim().toLowerCase()
   const map = new Map<string, { label: string; taxon?: TaxonRecord; count: number; last: number }>()
@@ -688,7 +754,7 @@ function getMorphoOptions(params: GetMorphoOptionsParams) {
     const det = d as DetectionEntity | undefined
     if (!det) continue
     if (det.detectedBy !== 'user') continue
-    if (!isDetectionInProject({ detection: det, projectId })) continue
+    if (!isDetectionInDataset({ detection: det, datasetId: datasetId, leafGroups })) continue
     const raw = typeof det.morphospecies === 'string' ? det.morphospecies : ''
     const label = (raw ?? '').trim()
     if (!label) continue
@@ -711,12 +777,3 @@ function deriveLabelFromTaxon(t: TaxonRecord): string {
   return preferred || getDisplayLabelForTaxon(t)
 }
 
-function isDetectionInProject(params: { detection?: DetectionEntity; projectId?: string }) {
-  const { detection, projectId } = params
-  if (!projectId) return true
-
-  const nightId = (detection?.nightId ?? '').trim()
-  if (!nightId) return false
-
-  return nightId.startsWith(projectId + '/')
-}

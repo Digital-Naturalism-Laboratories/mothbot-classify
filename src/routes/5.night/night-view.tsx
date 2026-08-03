@@ -1,34 +1,50 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useParams } from '@tanstack/react-router'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useHotkey } from '~/utils/use-hotkey'
+import { useRouter } from '@tanstack/react-router'
 import { expandMany, makeKey } from '~/features/left-panel/collapse.store'
 import { ensureSpeciesListSelection } from '~/features/data-flow/2.identify/species-picker.state'
-import { nightsStore } from '~/stores/entities/4.nights'
+import { buildLeafGroupLinkParams, isSingleLeafHierarchy } from '~/features/mothbox-next/hierarchy-routes'
+import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
+import { isNoMachineIdClassifier } from '~/features/mothbox-next/bot-shape-to-classification'
+import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
+import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import type { PatchEntity } from '~/stores/entities/5.patches'
 import { patchesStore } from '~/stores/entities/5.patches'
 import type { DetectionEntity } from '~/stores/entities/detections'
-import { acceptDetections, detectionsStore, labelDetections, resetDetections } from '~/stores/entities/detections'
+import { acceptDetections, detectionsStore, labelDetections, resetDetections, removeDetectionsFromCluster, splitDetectionsToNewCluster } from '~/stores/entities/detections'
+import { popClusterUndo } from '~/stores/cluster-undo'
+import { triggerClusterOverridesSave } from '~/features/data-flow/3.persist/cluster-overrides'
+import { scheduleSaveForLeafGroup } from '~/features/data-flow/3.persist/detection-persistence'
 import { photosStore } from '~/stores/entities/photos'
-import { clearPatchSelection, selectedPatchIdsStore, setSelection, markNightAsActive, getActiveNightIds } from '~/stores/ui'
-import { clearFileObjectsForInactiveNights } from '~/stores/entities'
+import { clearPatchSelection, selectedPatchIdsStore, setSelection, markLeafGroupAsActive, getActiveLeafGroupIds, activeNightIdsStore, setActiveNightIds } from '~/stores/ui'
+import { clearFileObjectsForInactiveLeafGroups } from '~/stores/entities'
 import { Row } from '~/styles'
 import { IdentifyDialog } from '~/features/data-flow/2.identify/identify-dialog'
 import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
-import { NightLeftPanel } from '@/features/left-panel/night-left-panel'
+import { LeafGroupLeftPanel } from '@/features/left-panel/night-left-panel'
 import { PatchDetailDialog } from './patch-detail-dialog'
 import { PatchGrid } from '~/features/patch-grid/patch-grid'
 import { SelectionBar } from './selection-bar'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { computeDetectionLongestDimension } from '~/features/patch-grid/grid-utils'
+import { countUnassignedDetectionsForNight, nightHasMachineIdentification } from '~/features/labeling/night-labeling-mode'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
+import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
+import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
+import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
 
-export function NightView(props: { nightId: string }) {
-  const { nightId } = props
+export function NightView(props: { leafGroupId: string }) {
+  const { leafGroupId } = props
 
   const router = useRouter()
-  const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
-  const nights = useStore(nightsStore)
+  const folderName = useStore(activeDatasetFolderNameStore)
+  const resolvedHierarchy = useStore(activeHierarchyStore)
+  const singleLeafDataset = isSingleLeafHierarchy(resolvedHierarchy)
+  const nights = useStore(leafGroupsStore)
   const patches = useStore(patchesStore)
   const detections = useStore(detectionsStore)
   const photos = useStore(photosStore)
@@ -37,24 +53,105 @@ export function NightView(props: { nightId: string }) {
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
   const [sizeThreshold, setSizeThreshold] = useState(0)
   const [sortByClusters, setSortByClusters] = useState(false)
+  const [smallestFirst, setSmallestFirst] = useState(false)
+  const [clustersCollapsed, setClustersCollapsed] = useState(false)
+  const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
+  const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
+  const [selectedDetectorId, setSelectedDetectorId] = useState<string | undefined>(undefined)
+  const allDetectionsRef = useRef<Record<string, DetectionEntity>>({})
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
   const hasAppliedDefaultFallbackRef = useRef(false)
   const selected = useStore(selectedPatchIdsStore)
   const { setConfirmDialog } = useConfirmDialog()
 
-  const night = nights[nightId]
+  const activeNightIds = useStore(activeNightIdsStore)
+  const activePackage = useStore(mothboxNextPackageStore)
+  const leafGroupSummaries = useStore(leafGroupSummariesStore)
+  const night = nights[leafGroupId]
+
+  const availableBotAlgorithms = useMemo(() => {
+    const files = activePackage?.loaded?.classificationFiles
+    if (!files) return []
+    const algSet = new Set<string>()
+    for (const file of files) {
+      for (const row of file.rows) {
+        // Exclude detector model names (end in .pt) — they aren't species-ID algorithms
+        if (row.classifier_type === 'bot' && row.classifier_id && !row.classifier_id.endsWith('.pt')) algSet.add(row.classifier_id)
+      }
+    }
+    return [...algSet].sort()
+  }, [activePackage])
+
+  // When dataset changes, set default algorithm: prefer the row marked classified_at=1
+  // (AMI convention), otherwise fall back to the first valid bot classifier found
+  // (Mothbot data, which has only one algorithm and doesn't use the marker).
+  useEffect(() => {
+    const files = activePackage?.loaded?.classificationFiles
+    if (!files) { setSelectedBotAlgorithm(undefined); return }
+    let marked: string | undefined
+    let realFallback: string | undefined
+    let anyFallback: string | undefined
+    for (const file of files) {
+      for (const row of file.rows) {
+        if (row.classifier_type === 'bot' && row.classifier_id && !row.classifier_id.endsWith('.pt')) {
+          if (row.classified_at === 1) marked ??= row.classifier_id
+          anyFallback ??= row.classifier_id
+          // Prefer a real algorithm over the "No Machine ID" (un-identified) bucket.
+          if (!isNoMachineIdClassifier(row.classifier_id)) realFallback ??= row.classifier_id
+        }
+      }
+    }
+    setSelectedBotAlgorithm(marked ?? realFallback ?? anyFallback)
+  }, [activePackage])
+
+  // Detector versions — derived from unique detectorId values across all loaded patches.
+  const availableDetectorIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const patch of Object.values(patches)) {
+      if (patch.detectorId) ids.add(patch.detectorId)
+    }
+    return [...ids].sort()
+  }, [activePackage, patches])
+
+  // When the package loads, snapshot all detections so detector switching can
+  // restore them without a full reload. Also set the default detector (prefer
+  // bot runs over human).
+  useEffect(() => {
+    allDetectionsRef.current = { ...(detectionsStore.get() || {}) }
+    if (availableDetectorIds.length > 1) {
+      const defaultDetector = availableDetectorIds.find((id) => id !== 'HumanDetection') ?? availableDetectorIds[0]
+      setSelectedDetectorId(defaultDetector)
+    } else {
+      setSelectedDetectorId(availableDetectorIds[0])
+    }
+  }, [activePackage])
+  const routeContext = useMemo(
+    () => ({
+      folderName,
+      projectId: night?.datasetId ?? '',
+      deploymentId: night?.deploymentId ?? '',
+      leafGroupId,
+      nightName: night?.name ?? leafGroupId,
+    }),
+    [folderName, night?.datasetId, night?.deploymentId, night?.name, leafGroupId],
+  )
+
+  // Reset to single-night view when navigating to a new night
+  useEffect(() => {
+    setActiveNightIds([leafGroupId])
+  }, [leafGroupId])
 
   useEffect(() => {
-    markNightAsActive({ nightId })
-    const activeNightIds = getActiveNightIds()
-    clearFileObjectsForInactiveNights({ activeNightIds })
+    markLeafGroupAsActive({ leafGroupId })
+    const activeLeafGroupIds = getActiveLeafGroupIds()
+    clearFileObjectsForInactiveLeafGroups({ activeLeafGroupIds })
 
     return () => {
-      const activeNightIdsAfterUnmount = getActiveNightIds()
-      clearFileObjectsForInactiveNights({ activeNightIds: activeNightIdsAfterUnmount })
+      const activeLeafGroupIdsAfterUnmount = getActiveLeafGroupIds()
+      clearFileObjectsForInactiveLeafGroups({ activeLeafGroupIds: activeLeafGroupIdsAfterUnmount })
     }
-  }, [nightId])
+  }, [leafGroupId])
 
   // Sync selection with URL search params (bucket, rank, name)
   const search = router.state.location.search as unknown as {
@@ -76,23 +173,23 @@ export function NightView(props: { nightId: string }) {
       expandLeftPanelPathForSelection({
         selectedBucket: nextBucket,
         selectedTaxon: { rank: validRank, name },
-        nightId,
+        leafGroupIds: activeNightIdsStore.get(),
         detections,
       })
     }
-  }, [search, nightId, detections, selectedBucket])
+  }, [search, leafGroupId, detections, selectedBucket])
 
   const fallbackSnapshot = useMemo(() => {
-    return buildDefaultFallbackSnapshot({ detections, nightId })
-  }, [detections, nightId])
+    return buildDefaultFallbackSnapshot({ detections, leafGroupId })
+  }, [detections, leafGroupId])
 
   useEffect(() => {
     hasAppliedDefaultFallbackRef.current = false
-  }, [nightId])
+  }, [leafGroupId])
 
   useEffect(() => {
     setSizeThreshold(0)
-  }, [nightId])
+  }, [leafGroupId])
 
   useEffect(() => {
     if (hasAppliedDefaultFallbackRef.current) return
@@ -110,18 +207,53 @@ export function NightView(props: { nightId: string }) {
     const fallbackTaxon = fallbackSnapshot.hasUserInsecta ? ({ rank: 'class', name: 'Insecta' } as const) : undefined
     setSelectedBucket('user')
     setSelectedTaxon(fallbackTaxon)
-    navigateToTaxonSelection({ router, params, taxon: fallbackTaxon, bucket: 'user' })
-  }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, params])
+    navigateToTaxonSelection({ router, routeContext, taxon: fallbackTaxon, bucket: 'user', singleLeafDataset })
+  }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, routeContext, singleLeafDataset])
+
+  const collapsedClusterSet = useMemo(() => {
+    if (!clustersCollapsed && clusterOverrides.size === 0) return new Set<number>()
+    const allTopIds = new Set<number>()
+    for (const det of Object.values(detections)) {
+      if (activeNightIds.has((det as any).leafGroupId) && typeof (det as any).clusterId === 'number' && (det as any).clusterId >= 0) {
+        allTopIds.add(Math.trunc((det as any).clusterId as number))
+      }
+    }
+    const result = new Set<number>()
+    for (const topId of allTopIds) {
+      const overridden = clusterOverrides.has(topId)
+      if (overridden ? !clustersCollapsed : clustersCollapsed) result.add(topId)
+    }
+    return result
+  }, [clustersCollapsed, clusterOverrides, detections, activeNightIds])
+
+  const onClusterCollapseToggle = useCallback((topClusterId: number) => {
+    setClusterOverrides((prev) => {
+      const next = new Set(prev)
+      if (next.has(topClusterId)) next.delete(topClusterId)
+      else next.add(topClusterId)
+      return next
+    })
+  }, [])
 
   const list = useMemo(() => {
-    return Object.values(patches).filter((patch) => patch.nightId === nightId)
-  }, [patches, nightId])
-  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForNight({ detections, nightId, bucket: 'auto' }), [detections, nightId])
-  const taxonomyUser = useMemo(() => buildTaxonomyTreeForNight({ detections, nightId, bucket: 'user' }), [detections, nightId])
-  const totalDetections = useMemo(() => Object.values(detections ?? {}).filter((d) => d.nightId === nightId).length, [detections, nightId])
+    const multiDetector = availableDetectorIds.length > 1
+    return Object.values(patches).filter((patch) => {
+      if (!activeNightIds.has(patch.leafGroupId)) return false
+      // When multiple detectors are loaded, only show patches for the active
+      // detector so the other detector's patches don't bleed through as Unassigned.
+      if (multiDetector && selectedDetectorId) return patch.detectorId === selectedDetectorId
+      return true
+    })
+  }, [patches, activeNightIds, availableDetectorIds, selectedDetectorId])
+  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'auto' }), [detections, activeNightIds])
+  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'user' }), [detections, activeNightIds])
+  const totalDetections = useMemo(
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + (leafGroupSummaries[id]?.totalDetections ?? 0), 0),
+    [leafGroupSummaries, activeNightIds],
+  )
   const totalIdentified = useMemo(
-    () => Object.values(detections ?? {}).filter((d) => d.nightId === nightId && (d as any)?.detectedBy === 'user').length,
-    [detections, nightId],
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + (leafGroupSummaries[id]?.totalIdentified ?? 0), 0),
+    [leafGroupSummaries, activeNightIds],
   )
   const sizeThresholdMax = useMemo(() => {
     return getMaxDetectionLongestDimension({ patches: list, detections })
@@ -136,19 +268,58 @@ export function NightView(props: { nightId: string }) {
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
   const selectedDetectionIds = useMemo(() => Array.from(selected ?? []), [selected])
 
-  const nightWarnings = useMemo(
-    () => computeNightWarnings({ photos, detections, patches, nightId }),
-    [photos, detections, patches, nightId],
+  const hasSelectedInCluster = useMemo(() => {
+    if (!selected?.size) return false
+    for (const id of Array.from(selected)) {
+      const det = detections?.[id]
+      if (typeof det?.clusterId === 'number' && det.clusterId >= 0) return true
+    }
+    return false
+  }, [selected, detections])
+
+  const hasMultipleSelectedInSameCluster = useMemo(() => {
+    if ((selected?.size ?? 0) < 2) return false
+    const clusterCounts = new Map<number, number>()
+    for (const id of Array.from(selected!)) {
+      const det = detections?.[id]
+      if (typeof det?.clusterId === 'number' && det.clusterId >= 0) {
+        const topId = Math.trunc(det.clusterId)
+        clusterCounts.set(topId, (clusterCounts.get(topId) ?? 0) + 1)
+      }
+    }
+    for (const count of clusterCounts.values()) {
+      if (count >= 2) return true
+    }
+    return false
+  }, [selected, detections])
+
+  const leafGroupWarnings = useMemo(
+    () => computeLeafGroupWarnings({ photos, detections, patches, leafGroupId }),
+    [photos, detections, patches, leafGroupId],
+  )
+  const hasMachineIdentification = useMemo(
+    () => Array.from(activeNightIds).some((id) => nightHasMachineIdentification({ photos, detections, leafGroupId: id })),
+    [photos, detections, activeNightIds],
+  )
+  const unassignedCount = useMemo(
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + countUnassignedDetectionsForNight({ detections, leafGroupId: id }), 0),
+    [detections, activeNightIds],
   )
 
   function onIdentify() {
     if (selectedCount === 0) return
-    ensureSpeciesListSelection({ projectId: (night as any)?.projectId, onReady: () => setIdentifyOpen(true) })
+    ensureSpeciesListSelection({ projectId: night?.datasetId, onReady: () => setIdentifyOpen(true) })
   }
 
   function onAccept() {
     if (selectedDetectionIds.length === 0) return
     acceptDetections({ detectionIds: selectedDetectionIds })
+    clearPatchSelection()
+  }
+
+  function onMarkError() {
+    if (selectedDetectionIds.length === 0) return
+    labelDetections({ detectionIds: selectedDetectionIds, label: 'ERROR' })
     clearPatchSelection()
   }
 
@@ -167,7 +338,76 @@ export function NightView(props: { nightId: string }) {
 
   function onSelectAll() {
     const allPatchIds = filtered.map((p) => p.id)
-    setSelection({ nightId, patchIds: allPatchIds })
+    if (activeNightIds.size > 1) {
+      selectedPatchIdsStore.set(new Set(allPatchIds))
+    } else {
+      setSelection({ leafGroupId, patchIds: allPatchIds })
+    }
+  }
+
+  function onBotAlgorithmChange(algorithm: string) {
+    const files = activePackage?.loaded?.classificationFiles
+    if (!files) return
+
+    setSelectedBotAlgorithm(algorithm)
+
+    // Filter to only the selected algorithm's bot rows (keep all human rows intact)
+    const filteredFiles = files.map((file) => ({
+      ...file,
+      rows: file.rows.filter((row) => row.classifier_type !== 'bot' || row.classifier_id === algorithm),
+    }))
+
+    const flattened = flattenClassificationFiles({ files: filteredFiles })
+    const resolvedClassifications = resolveCurrentClassifications({ rows: flattened })
+    const classificationByPatch = new Map(resolvedClassifications.map((r) => [r.patch_id, r]))
+
+    const currentDetections = detectionsStore.get() || {}
+    const updatedDetections: Record<string, DetectionEntity> = {}
+
+    for (const [patchId, detection] of Object.entries(currentDetections)) {
+      const classification = classificationByPatch.get(patchId)
+      if (classification) {
+        updatedDetections[patchId] = {
+          ...detection,
+          ...detectionFromClassification({
+            row: classification,
+            leafGroupId: detection.leafGroupId,
+            photoId: detection.photoId,
+          }),
+          // Preserve geometry fields that come from patchSource, not classification
+          direction: detection.direction,
+          shapeType: detection.shapeType,
+          points: detection.points,
+          clusterId: detection.clusterId,
+        }
+      } else {
+        updatedDetections[patchId] = {
+          ...detection,
+          label: undefined,
+          taxon: undefined,
+          detectedBy: 'auto',
+          botClassifierId: undefined,
+          score: undefined,
+          classificationType: undefined,
+          humanClassifierId: undefined,
+          morphospecies: undefined,
+        }
+      }
+    }
+
+    detectionsStore.set(updatedDetections)
+    rebuildLeafGroupSummariesFromDetections(updatedDetections)
+  }
+
+  function onDetectorChange(detectorId: string) {
+    const allDetections = allDetectionsRef.current
+    const currentPatches = Object.values(patchesStore.get())
+    const detectorPatchIds = new Set(currentPatches.filter((p) => p.detectorId === detectorId).map((p) => p.id))
+    const filtered = Object.fromEntries(Object.entries(allDetections).filter(([id]) => detectorPatchIds.has(id)))
+    detectionsStore.set(filtered)
+    rebuildLeafGroupSummariesFromDetections(filtered)
+    setSelectedDetectorId(detectorId)
+    setSelectedBotAlgorithm(undefined)
   }
 
   async function onResetToAuto() {
@@ -191,17 +431,59 @@ export function NightView(props: { nightId: string }) {
     })
   }
 
+  function onRemoveSelectedFromCluster() {
+    if (!selectedDetectionIds.length) return
+    removeDetectionsFromCluster({ detectionIds: selectedDetectionIds })
+    clearPatchSelection()
+  }
+
+  function onSplitSelectedCluster() {
+    if (!selectedDetectionIds.length || !leafGroupId) return
+    splitDetectionsToNewCluster({ detectionIds: selectedDetectionIds, leafGroupId })
+    clearPatchSelection()
+  }
+
   function onOpenPatchDetail(id: string) {
     if (!id) return
     setDetailPatchId(id)
     setDetailOpen(true)
   }
 
+  useHotkey('c', () => {
+    setClustersCollapsed((prev) => !prev)
+    setClusterOverrides(new Set())
+  }, [])
+
+  useHotkey('mod+z', () => {
+    const snapshot = popClusterUndo()
+    if (!snapshot) return
+    const current = detectionsStore.get() || {}
+
+    if (snapshot.kind === 'cluster-move') {
+      const { prevClusterIds, leafGroupIds } = snapshot
+      const updated = { ...current }
+      for (const [id, clusterId] of Object.entries(prevClusterIds)) {
+        if (updated[id]) updated[id] = { ...updated[id], clusterId }
+      }
+      detectionsStore.set(updated)
+      for (const lgId of leafGroupIds) triggerClusterOverridesSave(lgId)
+    } else if (snapshot.kind === 'identification') {
+      const { prevDetections, leafGroupIds } = snapshot
+      const updated = { ...current, ...prevDetections }
+      detectionsStore.set(updated)
+      rebuildLeafGroupSummariesFromDetections(updated)
+      for (const lgId of leafGroupIds) scheduleSaveForLeafGroup(lgId)
+    }
+  }, [])
+
   if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
 
   return (
     <Row className='w-full h-full overflow-hidden gap-x-4'>
-      <NightLeftPanel
+      <LeafGroupLeftPanel
+        leafGroupId={leafGroupId}
+        hasMachineIdentification={hasMachineIdentification}
+        unassignedCount={unassignedCount}
         taxonomyAuto={taxonomyAuto}
         taxonomyUser={taxonomyUser}
         totalPatches={totalPatches}
@@ -209,43 +491,60 @@ export function NightView(props: { nightId: string }) {
         totalIdentified={totalIdentified}
         sizeThreshold={clampedSizeThreshold}
         sizeThresholdMax={sizeThresholdMax}
-        warnings={nightWarnings}
+        warnings={leafGroupWarnings}
         sortByClusters={sortByClusters}
+        smallestFirst={smallestFirst}
+        clustersCollapsed={clustersCollapsed}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onSortByClustersChange={setSortByClusters}
+        onSmallestFirstChange={setSmallestFirst}
+        onClustersCollapsedChange={(v) => { setClustersCollapsed(v); setClusterOverrides(new Set()) }}
+        availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
+        selectedDetectorId={selectedDetectorId}
+        onDetectorChange={onDetectorChange}
+        availableBotAlgorithms={availableBotAlgorithms.length > 0 ? availableBotAlgorithms : undefined}
+        selectedBotAlgorithm={selectedBotAlgorithm}
+        onBotAlgorithmChange={onBotAlgorithmChange}
         selectedTaxon={selectedTaxon as any}
         selectedBucket={selectedBucket}
         onSelectTaxon={({ taxon, bucket }) => {
           setSelectedTaxon(taxon as any)
           setSelectedBucket(bucket)
-          navigateToTaxonSelection({ router, params, taxon, bucket })
+          navigateToTaxonSelection({ router, routeContext, taxon, bucket, singleLeafDataset })
         }}
         className='w-[300px] overflow-y-auto'
       />
       <div className='relative flex-1 min-h-0 overflow-hidden'>
         <PatchGrid
           patches={filtered}
-          nightId={nightId}
+          leafGroupId={leafGroupId}
           className='h-full'
           onOpenPatchDetail={onOpenPatchDetail}
           selectedTaxon={selectedTaxon as any}
           selectedBucket={selectedBucket}
           sortByClusters={sortByClusters}
+          smallestFirst={smallestFirst}
+          hasMachineIdentification={hasMachineIdentification}
+          collapsedClusterSet={collapsedClusterSet.size > 0 ? collapsedClusterSet : undefined}
+          onClusterCollapseToggle={onClusterCollapseToggle}
         />
         <SelectionBar
           selectedCount={selectedCount}
           onIdentify={onIdentify}
           onAccept={onAccept}
+          onMarkError={onMarkError}
           onUnselect={onUnselect}
           onSelectAll={onSelectAll}
           onResetToAuto={onResetToAuto}
+          onUncluster={hasSelectedInCluster ? onRemoveSelectedFromCluster : undefined}
+          onSplitCluster={hasMultipleSelectedInSameCluster ? onSplitSelectedCluster : undefined}
         />
       </div>
       <IdentifyDialog
         open={identifyOpen}
         onOpenChange={setIdentifyOpen}
         onSubmit={onSubmitLabel}
-        projectId={(night as any)?.projectId}
+        datasetId={night?.datasetId}
         detectionIds={selectedDetectionIds}
       />
       <PatchDetailDialog open={detailOpen} onOpenChange={setDetailOpen} patchId={detailPatchId} />
@@ -263,8 +562,8 @@ type TaxonomyNode = {
 
 const UNASSIGNED_LABEL = 'Unassigned'
 
-function buildTaxonomyTreeForNight(params: { detections: Record<string, any>; nightId: string; bucket: 'auto' | 'user' }) {
-  const { detections, nightId, bucket } = params
+function buildTaxonomyTreeForLeafGroup(params: { detections: Record<string, any>; leafGroupIds: Set<string>; bucket: 'auto' | 'user' }) {
+  const { detections, leafGroupIds, bucket } = params
   const onlyUser = bucket === 'user'
   const roots: TaxonomyNode[] = []
   function ensureChild(nodes: TaxonomyNode[], rank: TaxonomyNode['rank'], name: string, isMorphoSpecies?: boolean): TaxonomyNode {
@@ -278,7 +577,7 @@ function buildTaxonomyTreeForNight(params: { detections: Record<string, any>; ni
     return node
   }
   for (const d of Object.values(detections ?? {})) {
-    if ((d as any)?.nightId !== nightId) continue
+    if (!leafGroupIds.has((d as any)?.leafGroupId)) continue
     const detectedBy = (d as any)?.detectedBy === 'user' ? 'user' : 'auto'
     if ((onlyUser && detectedBy !== 'user') || (!onlyUser && detectedBy !== 'auto')) continue
     // Skip error items from taxonomy tree; they are shown as a separate "Errors" row
@@ -420,17 +719,17 @@ function clampSizeThreshold(params: { value: number; max: number }) {
 function expandLeftPanelPathForSelection(params: {
   selectedBucket?: 'auto' | 'user'
   selectedTaxon?: TaxonSelection
-  nightId: string
+  leafGroupIds: Set<string>
   detections: Record<string, DetectionEntity>
 }) {
-  const { selectedBucket, selectedTaxon, nightId, detections } = params
+  const { selectedBucket, selectedTaxon, leafGroupIds, detections } = params
   if (!selectedBucket || !selectedTaxon) return
   if (selectedTaxon.rank === 'class') return
 
   let match: DetectionEntity | undefined
   for (const d of Object.values(detections || {})) {
     const det = d as DetectionEntity
-    if ((det as any)?.nightId !== nightId) continue
+    if (!leafGroupIds.has((det as any)?.leafGroupId)) continue
     const detectedBy = det?.detectedBy === 'user' ? 'user' : 'auto'
     if (selectedBucket && detectedBy !== selectedBucket) continue
     const t = det?.taxon
@@ -465,16 +764,32 @@ function expandLeftPanelPathForSelection(params: {
     const genusName = t?.genus
     if (orderName) keys.push(makeKey({ bucket: selectedBucket, rank: 'order', path: orderName }))
     if (orderName && familyName) keys.push(makeKey({ bucket: selectedBucket, rank: 'family', path: `${orderName}/${familyName}` }))
-    if (orderName && familyName && genusName)
-      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: `${orderName}/${familyName}/${genusName}` }))
+    if (genusName) {
+      // Build the collapse key to match GenusNode: order/family/genus when all present,
+      // order/genus when family absent, or just genus when both are absent (StandaloneGenusNode).
+      const genusPath =
+        orderName && familyName
+          ? `${orderName}/${familyName}/${genusName}`
+          : orderName
+            ? `${orderName}/${genusName}`
+            : genusName
+      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: genusPath }))
+    }
   } else if (selectedTaxon.rank === 'species') {
     const orderName = selectedBucket === 'user' ? t?.order || UNASSIGNED_LABEL : t?.order
     const familyName = selectedBucket === 'user' ? t?.family || UNASSIGNED_LABEL : t?.family
     const genusName = selectedBucket === 'user' ? t?.genus || UNASSIGNED_LABEL : t?.genus
     if (orderName) keys.push(makeKey({ bucket: selectedBucket, rank: 'order', path: orderName }))
     if (orderName && familyName) keys.push(makeKey({ bucket: selectedBucket, rank: 'family', path: `${orderName}/${familyName}` }))
-    if (orderName && familyName && genusName)
-      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: `${orderName}/${familyName}/${genusName}` }))
+    if (genusName) {
+      const genusPath =
+        orderName && familyName
+          ? `${orderName}/${familyName}/${genusName}`
+          : orderName
+            ? `${orderName}/${genusName}`
+            : genusName
+      keys.push(makeKey({ bucket: selectedBucket, rank: 'genus', path: genusPath }))
+    }
   }
 
   if (keys.length) expandMany(keys)
@@ -503,11 +818,18 @@ function parseTaxonFromSearch(params: { search?: { bucket?: 'auto' | 'user'; ran
 
 function navigateToTaxonSelection(params: {
   router: ReturnType<typeof useRouter>
-  params: { projectId: string; deploymentId: string; nightId: string }
+  routeContext: {
+    folderName?: string | null
+    projectId: string
+    deploymentId: string
+    leafGroupId: string
+    nightName: string
+  }
   taxon?: TaxonSelection
   bucket: 'auto' | 'user'
+  singleLeafDataset?: boolean
 }) {
-  const { router, params: routeParams, taxon, bucket } = params
+  const { router, routeContext, taxon, bucket, singleLeafDataset } = params
   const search: { bucket?: 'auto' | 'user'; rank?: 'class' | 'order' | 'family' | 'genus' | 'species'; name?: string } = {
     bucket,
   }
@@ -517,36 +839,40 @@ function navigateToTaxonSelection(params: {
     search.name = taxon.name
   }
 
+  const link = buildLeafGroupLinkParams({
+    folderName: routeContext.folderName,
+    projectId: routeContext.projectId,
+    deploymentId: routeContext.deploymentId,
+    night: { id: routeContext.leafGroupId, name: routeContext.nightName },
+    singleLeafDataset,
+  })
+
   router.navigate({
-    to: '/projects/$projectId/deployments/$deploymentId/nights/$nightId',
-    params: {
-      projectId: routeParams.projectId,
-      deploymentId: routeParams.deploymentId,
-      nightId: routeParams.nightId,
-    },
+    to: link.to,
+    params: link.params,
     search,
   })
 }
 
-function computeNightWarnings(params: {
+function computeLeafGroupWarnings(params: {
   photos: Record<string, any>
   detections: Record<string, DetectionEntity>
   patches: Record<string, PatchEntity>
-  nightId: string
+  leafGroupId: string
 }) {
-  const { photos, detections, patches, nightId } = params
+  const { photos, detections, patches, leafGroupId } = params
   let jsonWithoutPhotoCount = 0
   let missingPatchImageCount = 0
 
   for (const photo of Object.values(photos ?? {})) {
-    if ((photo as any)?.nightId !== nightId) continue
+    if ((photo as any)?.leafGroupId !== leafGroupId) continue
     const hasJson = !!(photo as any)?.botDetectionFile
     const hasImage = !!(photo as any)?.imageFile
     if (hasJson && !hasImage) jsonWithoutPhotoCount++
   }
 
   for (const detection of Object.values(detections ?? {})) {
-    if ((detection as any)?.nightId !== nightId) continue
+    if ((detection as any)?.leafGroupId !== leafGroupId) continue
     const patchId = (detection as any)?.patchId
     const patch = patches?.[patchId]
     const hasPatchImage = !!patch?.imageFile
@@ -565,15 +891,15 @@ function matchesSpeciesName(params: { taxon?: { species?: string }; morphospecie
 
 function buildDefaultFallbackSnapshot(params: {
   detections: Record<string, DetectionEntity>
-  nightId: string
+  leafGroupId: string
 }) {
-  const { detections, nightId } = params
+  const { detections, leafGroupId } = params
   let autoDetectionsCount = 0
   let userDetectionsCount = 0
   let hasUserInsecta = false
 
   for (const detection of Object.values(detections ?? {})) {
-    if (detection?.nightId !== nightId) continue
+    if (detection?.leafGroupId !== leafGroupId) continue
     if (detection?.detectedBy === 'user') {
       userDetectionsCount++
       if (detection?.taxon?.class === 'Insecta') hasUserInsecta = true
