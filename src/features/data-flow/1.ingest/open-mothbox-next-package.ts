@@ -19,6 +19,16 @@ import { cancelDatasetAutoLoad, OPEN_PACKAGE_TOAST_ID } from './dataset-auto-loa
 /** Cancel button attached to the "Opening dataset…" toast. */
 const CANCEL_LOAD_ACTION = { label: 'Cancel', onClick: () => cancelDatasetAutoLoad() }
 
+/**
+ * Terminal toasts reuse OPEN_PACKAGE_TOAST_ID to replace the in-progress
+ * "Opening dataset…" toast. Sonner carries over options that aren't respecified
+ * when updating a toast by id, so duration/action must be set explicitly here —
+ * otherwise the success toast inherits `duration: Infinity` and the Cancel
+ * button from the loading toast and never goes away.
+ */
+const SUCCESS_TOAST_OPTIONS = { duration: 3000, action: undefined } as const
+const ERROR_TOAST_OPTIONS = { duration: Infinity, action: undefined } as const
+
 export type OpenPackageResult =
   | { ok: true; fromCache?: boolean }
   | { ok: false; message?: string }
@@ -112,6 +122,7 @@ export async function openMothboxNextPackageFromHandle(
         toast.success('Dataset opened', {
           id: OPEN_PACKAGE_TOAST_ID,
           description: `Restored from cache · ${folderName}`,
+          ...SUCCESS_TOAST_OPTIONS,
         })
       } else {
         toast.dismiss(OPEN_PACKAGE_TOAST_ID)
@@ -139,7 +150,7 @@ export async function openMothboxNextPackageFromHandle(
     if (!ingest.ok) {
       const message = formatFilesystemError(ingest.message)
       pickerErrorStore.set(message)
-      toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message })
+      toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
       return { ok: false, message }
     }
 
@@ -159,6 +170,7 @@ export async function openMothboxNextPackageFromHandle(
       toast.success('Dataset opened', {
         id: OPEN_PACKAGE_TOAST_ID,
         description: `Mothbox-next package · ${folderName}`,
+        ...SUCCESS_TOAST_OPTIONS,
       })
     } else {
       toast.dismiss(OPEN_PACKAGE_TOAST_ID)
@@ -168,7 +180,7 @@ export async function openMothboxNextPackageFromHandle(
   } catch (err) {
     const message = formatFilesystemError(err)
     pickerErrorStore.set(message)
-    toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message })
+    toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
     return { ok: false, message }
   }
 }
