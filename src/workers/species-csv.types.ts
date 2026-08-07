@@ -1,4 +1,5 @@
 import type { TaxonRecord } from '~/models/taxonomy/types'
+import type { SpeciesListValidation } from '~/models/taxonomy/species-list-validation'
 
 export type SpeciesCsvWorkerRequest = {
   requestId: string
@@ -17,4 +18,5 @@ export type SpeciesCsvWorkerResponse = {
   sourcePath: string
   records: TaxonRecord[]
   recordCount: number
+  validation: SpeciesListValidation
 }

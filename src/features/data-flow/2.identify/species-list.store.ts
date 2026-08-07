@@ -11,6 +11,8 @@ export type SpeciesList = {
   sourcePath: string
   recordCount: number
   records: import('~/models/taxonomy/types').TaxonRecord[]
+  /** Result of checking the CSV's headers — drives the picker's warnings. */
+  validation?: import('~/models/taxonomy/species-list-validation').SpeciesListValidation
 }
 
 export const speciesListsStore = atom<Record<string, SpeciesList>>({})

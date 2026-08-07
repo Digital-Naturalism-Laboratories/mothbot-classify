@@ -63,6 +63,7 @@ export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[]
             sourcePath: response.sourcePath,
             records: response.records,
             recordCount: response.recordCount,
+            validation: response.validation,
           }
 
           invalidateSpeciesIndexForListId(response.id)
