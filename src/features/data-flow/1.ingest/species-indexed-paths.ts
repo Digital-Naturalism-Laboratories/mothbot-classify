@@ -6,7 +6,11 @@
 export function isSpeciesListIndexedPath(path: string) {
   const pathLower = path.replaceAll('\\', '/').toLowerCase()
   const isCsv = pathLower.endsWith('.csv') || pathLower.endsWith('.tsv')
-  return isCsv
+  if (!isCsv) return false
+  // Darwin Core / summary CSVs this app writes into `exports/` are outputs, not
+  // species lists — excluding them keeps the picker to real reference lists.
+  if (pathLower.includes('/exports/') || pathLower.startsWith('exports/')) return false
+  return true
 }
 
 /**

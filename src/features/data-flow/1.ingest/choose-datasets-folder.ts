@@ -58,8 +58,8 @@ export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike)
   toast.success('Datasets folder set', {
     description:
       speciesFileCount > 0
-        ? `Packages live here; ${speciesFileCount} species list${speciesFileCount === 1 ? '' : 's'} loaded from ${name}/Species/.`
-        : `Legacy datasets will be converted into subfolders here (e.g. ${name}/my-dataset/). Add CSVs under ${name}/Species/ for identify lists.`,
+        ? `Packages live here; ${speciesFileCount} species list${speciesFileCount === 1 ? '' : 's'} loaded from CSVs in ${name}/.`
+        : `Legacy datasets will be converted into subfolders here (e.g. ${name}/my-dataset/). Drop a CSV anywhere under ${name}/ to use it as an identify list.`,
   })
   return true
 }

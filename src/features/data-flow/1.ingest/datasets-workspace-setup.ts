@@ -78,6 +78,14 @@ export async function scanDatasetsRegistry(options?: ScanDatasetsFolderOptions) 
   const entries = await scanDatasetsFolder(options)
   rememberDefaultDatasetSelection()
 
+  // Re-scan for species list CSVs too, so a CSV dropped anywhere in the datasets
+  // folder shows up in the picker after a refresh instead of only on app restart.
+  // Uses the silent loader — refresh already gives its own feedback.
+  await loadWorkspaceSpeciesLists().catch((error) => {
+    console.warn('🌀 scanDatasetsRegistry: species lists refresh failed', error)
+    return 0
+  })
+
   // If a dataset is already open, reload it so any new night folders added on
   // disk are picked up without requiring a full dataset reset.
   const activeFolderName = activeDatasetFolderNameStore.get()

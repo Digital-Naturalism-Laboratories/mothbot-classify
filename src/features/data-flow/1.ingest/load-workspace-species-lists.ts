@@ -25,6 +25,8 @@ export async function loadWorkspaceSpeciesLists(): Promise<number> {
       directoryHandle: root,
       pathToDirectory: [],
       items: indexed,
+      // One unreadable folder shouldn't discard every CSV found elsewhere.
+      skipUnreadableDirectories: true,
     })
   } catch (err) {
     console.warn('🚨 species: failed to scan datasets folder for CSV/TSV files', err)

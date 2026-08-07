@@ -64,16 +64,26 @@ export async function collectFilesWithPathsRecursively(params: {
   pathToDirectory: string[]
   items: IndexedPickedFile[]
   rootDir?: FileSystemDirectoryHandleLike
+  /**
+   * When true, a folder that can't be read is logged and skipped instead of
+   * aborting the whole walk. Used by the species-list scan, where one
+   * unreadable folder shouldn't wipe out every CSV found elsewhere.
+   */
+  skipUnreadableDirectories?: boolean
 }) {
-  const { directoryHandle, pathToDirectory, items } = params
+  const { directoryHandle, pathToDirectory, items, skipUnreadableDirectories } = params
   const rootDir = params.rootDir ?? directoryHandle
 
   try {
-    await collectDirectoryEntries({ directoryHandle, pathToDirectory, items, rootDir })
+    await collectDirectoryEntries({ directoryHandle, pathToDirectory, items, rootDir, skipUnreadableDirectories })
   } catch (err) {
     const folderLabel = [...pathToDirectory, (directoryHandle as { name?: string }).name]
       .filter(Boolean)
       .join('/') || 'dataset root'
+    if (skipUnreadableDirectories) {
+      console.warn(`🌀 skipping unreadable folder “${folderLabel}”: ${formatFilesystemError(err)}`)
+      return
+    }
     throw new Error(`Could not read folder “${folderLabel}”: ${formatFilesystemError(err)}`)
   }
 }
@@ -83,8 +93,9 @@ async function collectDirectoryEntries(params: {
   pathToDirectory: string[]
   items: IndexedPickedFile[]
   rootDir: FileSystemDirectoryHandleLike
+  skipUnreadableDirectories?: boolean
 }) {
-  const { directoryHandle, pathToDirectory, items, rootDir } = params
+  const { directoryHandle, pathToDirectory, items, rootDir, skipUnreadableDirectories } = params
 
   for await (const entry of iterateDirectoryEntries(directoryHandle)) {
     const entryName = (entry as unknown as { name?: string })?.name ?? ''
@@ -111,6 +122,7 @@ async function collectDirectoryEntries(params: {
           pathToDirectory: [...pathToDirectory, entryName],
           items,
           rootDir,
+          skipUnreadableDirectories,
         })
       }
       continue
