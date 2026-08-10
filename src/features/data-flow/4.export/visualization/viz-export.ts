@@ -1,6 +1,6 @@
 import { ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
 import { photosStore } from '~/stores/entities/photos'
-import { fsaaWriteBytes, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
+import { fsaaResolveAvailableFileName, fsaaWriteBytes, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos } from '~/utils/paths'
 import { loadTerminalFolderPaths } from '~/features/data-flow/1.ingest/terminal-paths.storage'
@@ -43,9 +43,12 @@ export async function exportVisualization(
   const folderPath = resolveExportFolderPath(config)
   const pathParts = folderPath.split('/').filter(Boolean)
   const fileName = buildVizFileName(config)
-  await fsaaWriteBytes(root, [...pathParts, fileName], bytes)
+  // Don't clobber an earlier export with the same name — write a numbered
+  // version (…_2.png, …_3.png) alongside it instead.
+  const writePath = await fsaaResolveAvailableFileName(root, [...pathParts, fileName])
+  await fsaaWriteBytes(root, writePath, bytes)
 
-  const filePath = [...pathParts, fileName].join('/')
+  const filePath = writePath.join('/')
   // Absolute path when the datasets root's disk path is known (a browser can't
   // read it from the folder handle, but it's captured for terminal commands).
   const diskRoot = loadTerminalFolderPaths().datasetsRootPath.trim().replace(/[/\\]+$/, '')
