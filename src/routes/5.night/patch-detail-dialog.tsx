@@ -18,6 +18,7 @@ import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
 import { getProjectIdFromNightId } from '~/utils/paths'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
+import { buildDetectionPolygonPoints } from '~/models/detection-overlay'
 
 export type PatchDetailDialogProps = {
   open: boolean
@@ -70,7 +71,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
 
         <div className={`grid grid-cols-1 gap-12 ${showNobg ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <PatchDetails patch={patch} detection={detection} />
-          <SourcePhoto photo={photo} />
+          <SourcePhoto photo={photo} detection={detection} />
           {showNobg ? <NobgImage patch={patch} detection={detection} botData={botData} /> : null}
         </div>
 
@@ -249,30 +250,85 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
   )
 }
 
-function SourcePhoto(props: { photo?: PhotoEntity }) {
-  const { photo } = props
+function SourcePhoto(props: { photo?: PhotoEntity; detection?: DetectionEntity }) {
+  const { photo, detection } = props
 
   const photoUrl = useObjectUrl(photo?.imageFile?.file, makeIndexedFileHandle(photo?.imageFile))
   const hasPhotoRecord = !!photo
   const sourceUnavailable = hasPhotoRecord && !photoUrl
 
+  // Natural pixel size of the source photo — the detection's points are in that
+  // same coordinate space, so it doubles as the SVG viewBox.
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null)
+  useEffect(() => { setNaturalSize(null) }, [photoUrl])
+
+  const polygonPoints = useMemo(
+    () => buildDetectionPolygonPoints({ points: detection?.points }),
+    [detection?.points],
+  )
+  const showOverlay = !!photoUrl && !!polygonPoints && !!naturalSize
+
   return (
     <div className='space-y-8'>
-      <ImageWithDownloadName
-        src={photoUrl}
-        alt={photo?.name ?? 'photo'}
-        downloadName={photo?.name ?? undefined}
-        className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
-        fallback={
-          <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 flex items-center justify-center p-16 text-center'>
-            <p className='text-13 text-neutral-500'>
-              {sourceUnavailable
-                ? 'Source image was not found in this dataset. It may only have been shared with the processed data, without the original source photos.'
-                : 'No source photo linked to this patch.'}
-            </p>
-          </div>
-        }
-      />
+      {/* `relative` so the overlay can sit exactly on the image's layout box. */}
+      <div className='relative'>
+        <ImageWithDownloadName
+          src={photoUrl}
+          alt={photo?.name ?? 'photo'}
+          downloadName={photo?.name ?? undefined}
+          className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
+          onLoad={(e) => {
+            const img = e.currentTarget
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+              setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
+            }
+          }}
+          fallback={
+            <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 flex items-center justify-center p-16 text-center'>
+              <p className='text-13 text-neutral-500'>
+                {sourceUnavailable
+                  ? 'Source image was not found in this dataset. It may only have been shared with the processed data, without the original source photos.'
+                  : 'No source photo linked to this patch.'}
+              </p>
+            </div>
+          }
+        />
+        {showOverlay ? (
+          /*
+           * `preserveAspectRatio="xMidYMid meet"` letterboxes the viewBox exactly
+           * the way `object-contain` letterboxes the photo, so points given in
+           * original-image pixels land in the right place at any rendered size.
+           */
+          <svg
+            className='pointer-events-none absolute inset-0 h-full w-full'
+            viewBox={`0 0 ${naturalSize!.width} ${naturalSize!.height}`}
+            preserveAspectRatio='xMidYMid meet'
+            aria-hidden='true'
+          >
+            {/* Dark halo underneath keeps the outline readable on pale backgrounds. */}
+            <polygon
+              points={polygonPoints!}
+              fill='none'
+              stroke='rgba(0,0,0,0.55)'
+              strokeWidth={4}
+              vectorEffect='non-scaling-stroke'
+            />
+            <polygon
+              points={polygonPoints!}
+              fill='rgba(236,72,153,0.18)'
+              stroke='#ec4899'
+              strokeWidth={2}
+              vectorEffect='non-scaling-stroke'
+            />
+          </svg>
+        ) : null}
+      </div>
+      {showOverlay ? (
+        <p className='text-11 text-neutral-500'>
+          <span className='inline-block h-8 w-8 rounded-sm border border-[#ec4899] bg-[#ec4899]/20 align-middle mr-4' />
+          Pink outline shows where this patch was cropped from.
+        </p>
+      ) : null}
       <div className='flex flex-wrap gap-8'>
         {photoUrl ? (
           <a href={photoUrl} target='_blank' rel='noreferrer'>
@@ -437,6 +493,7 @@ function copyToClipboard(text?: string) {
   if (!value) return
   void navigator?.clipboard?.writeText?.(value)
 }
+
 
 /**
  * Picks a safe download filename for "Download original". `patch.name` is
