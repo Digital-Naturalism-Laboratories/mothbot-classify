@@ -1,4 +1,25 @@
 import { deriveSiteFromDeploymentFolder } from '../1.ingest/ingest-paths'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { joinPackagePath } from '~/features/mothbox-next/package-paths'
+
+/**
+ * Exports folder inside a Mothbox Next package, a sibling of `02_records/` and
+ * `03_classifications/`. Numbered to sort alongside them.
+ */
+export const PACKAGE_EXPORTS_FOLDER = '04_exports'
+
+/**
+ * Path to the package-level exports folder, relative to the datasets root —
+ * e.g. `Tucson/_processed/DesertHouse/04_exports`.
+ *
+ * Returns null when no Mothbox Next package is open (legacy datasets), so
+ * callers can fall back to their per-project export path.
+ */
+export function getPackageExportFolderPath(): string | null {
+  const packageRoot = mothboxNextPackageStore.get()?.packageRoot
+  if (!packageRoot) return null
+  return joinPackagePath(packageRoot, PACKAGE_EXPORTS_FOLDER)
+}
 
 export function getProjectExportPath(params: { leafGroupId: string }): string {
   const { leafGroupId } = params

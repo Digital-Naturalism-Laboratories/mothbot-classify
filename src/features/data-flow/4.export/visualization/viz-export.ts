@@ -4,7 +4,7 @@ import { fsaaResolveAvailableFileName, fsaaWriteBytes, type FileSystemDirectoryH
 import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos } from '~/utils/paths'
 import { loadTerminalFolderPaths } from '~/features/data-flow/1.ingest/terminal-paths.storage'
-import { formatTodayYyyyMm_Dd, getProjectExportPath, sanitizeForFileName } from '../export-utils'
+import { formatTodayYyyyMm_Dd, getPackageExportFolderPath, getProjectExportPath, sanitizeForFileName } from '../export-utils'
 import { buildVizDetections } from './viz-data'
 import { loadPatchImages } from './viz-images'
 import { renderMosaicFromDetections } from './viz-renderer'
@@ -57,7 +57,14 @@ export async function exportVisualization(
 }
 
 function resolveExportFolderPath(config: VizConfig): string {
-  // Derive from actual photo disk paths for consistency with the Darwin CSV path style.
+  // Mothbox Next packages: every visualization lands in one place —
+  // <package>/04_exports, alongside 02_records and 03_classifications — rather
+  // than being scattered into a per-night folder for each export.
+  const packageExports = getPackageExportFolderPath()
+  if (packageExports) return packageExports
+
+  // Legacy datasets have no package root; keep deriving from photo disk paths
+  // for consistency with the Darwin CSV path style.
   const allPhotos = Object.values(photosStore.get() ?? {})
   for (const leafGroupId of config.selectedLeafGroupIds) {
     const photos = allPhotos.filter((p) => p.leafGroupId === leafGroupId)
