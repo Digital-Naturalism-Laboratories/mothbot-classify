@@ -58,5 +58,17 @@ export async function openDatasetByFolderName(params: {
   }
 
   const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast, originalSourceHandle })
+
+  // Mothbot Process can add night folders to a package without updating its
+  // records, so check once the package is actually open. Read-only; the user
+  // confirms before anything is written. Self-suppresses during a merge.
+  if (opened.ok) {
+    const { checkForNewNightsInOpenPackage } = await import('./check-for-new-nights')
+    await checkForNewNightsInOpenPackage().catch((error) => {
+      console.warn('🌀 openDatasetByFolderName: new-night check failed', error)
+      return 0
+    })
+  }
+
   return opened.ok
 }

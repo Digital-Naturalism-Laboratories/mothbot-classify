@@ -25,10 +25,12 @@ describe('getPackageExportFolderPath', () => {
     expect(getPackageExportFolderPath()).toBe('Tucson/_processed/DesertHouse/04_exports')
   })
 
-  it('handles a package sitting at the datasets root', () => {
+  it('handles a package opened at its own root, where packageRoot is empty', () => {
+    // Regression: the persisted projectsRoot handle IS the package directory,
+    // so dataset.json sits at depth 1 and packageRoot is ''. Treating that as
+    // "no package" silently disabled 04_exports entirely.
     setPackageRoot('')
-    // No package root recorded ⇒ caller falls back to the legacy path.
-    expect(getPackageExportFolderPath()).toBeNull()
+    expect(getPackageExportFolderPath()).toBe('04_exports')
   })
 
   it('returns null when no package is open, so legacy datasets keep their path', () => {

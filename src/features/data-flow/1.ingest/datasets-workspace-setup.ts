@@ -93,5 +93,7 @@ export async function scanDatasetsRegistry(options?: ScanDatasetsFolderOptions) 
     await openDatasetByFolderName({ folderName: activeFolderName, showSuccessToast: false })
   }
 
+  // The new-night check runs inside openDatasetByFolderName above, so there's
+  // nothing extra to do here.
   return entries
 }
