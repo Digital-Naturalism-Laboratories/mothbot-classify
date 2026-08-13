@@ -247,7 +247,7 @@ export function VisualizationDialog(props: Props) {
             <div className='flex gap-8 items-center flex-wrap'>
               <SegmentedControl
                 value={config.sortMode}
-                options={[{ value: 'size', label: 'Size' }, { value: 'cluster', label: 'Cluster' }, { value: 'taxon', label: 'Taxon' }, { value: 'none', label: 'None' }]}
+                options={[{ value: 'size', label: 'Size' }, { value: 'time', label: 'Time' }, { value: 'cluster', label: 'Cluster' }, { value: 'taxon', label: 'Taxon' }, { value: 'none', label: 'None' }]}
                 onChange={(v) => update({ sortMode: v as VizSortMode })}
               />
               {(config.sortMode === 'taxon' || config.taxaFilter.length > 0) && (

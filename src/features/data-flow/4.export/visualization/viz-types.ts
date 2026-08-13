@@ -1,5 +1,5 @@
 export type VizLayout = 'bar' | 'radial' | 'shape'
-export type VizSortMode = 'size' | 'cluster' | 'taxon' | 'none'
+export type VizSortMode = 'size' | 'time' | 'cluster' | 'taxon' | 'none'
 export type VizTaxaRank = 'order' | 'family' | 'genus' | 'species'
 /** Selection-first with override: what set of patches to visualize. */
 export type VizScope = 'selection' | 'night' | 'dataset'

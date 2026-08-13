@@ -1,7 +1,9 @@
 import type { DetectionEntity } from '~/models/detection.types'
 import { detectionsStore, getDetectionsForLeafGroup } from '~/stores/entities/detections'
+import { patchesStore } from '~/stores/entities/5.patches'
 import { selectedPatchIdsStore } from '~/stores/ui'
 import { RANK_HIERARCHY } from '~/models/taxonomy/types'
+import { resolveCaptureTimestamp } from '~/models/detection-time'
 import type { VizConfig, VizTaxaRank } from './viz-types'
 
 const TAXON_ORDER: VizTaxaRank[] = ['order', 'family', 'genus', 'species']
@@ -107,6 +109,17 @@ function sortDetections(dets: DetectionEntity[], config: VizConfig): DetectionEn
   const arr = [...dets]
   if (config.sortMode === 'size') {
     arr.sort((a, b) => detSize(b) - detSize(a))
+  } else if (config.sortMode === 'time') {
+    // Chronological, earliest first, so a radial reads clockwise through the
+    // night and a bar reads left-to-right. Undated items sort last rather than
+    // landing at the epoch and skewing the whole layout.
+    const times = buildTimestampLookup(arr)
+    arr.sort((a, b) => {
+      const at = times.get(a.id) ?? Number.POSITIVE_INFINITY
+      const bt = times.get(b.id) ?? Number.POSITIVE_INFINITY
+      if (at !== bt) return at - bt
+      return (a.id ?? '').localeCompare(b.id ?? '')
+    })
   } else if (config.sortMode === 'cluster') {
     arr.sort((a, b) => clusterSortKey(a) - clusterSortKey(b))
   } else if (config.sortMode === 'taxon') {
@@ -114,6 +127,23 @@ function sortDetections(dets: DetectionEntity[], config: VizConfig): DetectionEn
     arr.sort((a, b) => taxonSortKey(a, upto).localeCompare(taxonSortKey(b, upto)))
   }
   return arr
+}
+
+/** Resolves each detection's capture time once, so the comparator stays cheap. */
+function buildTimestampLookup(dets: DetectionEntity[]): Map<string, number> {
+  const patches = patchesStore.get() ?? {}
+  const times = new Map<string, number>()
+  for (const det of dets) {
+    const patch = det.patchId ? patches[det.patchId] : undefined
+    const time = resolveCaptureTimestamp({
+      capturedAt: patch?.capturedAt,
+      photoId: det.photoId,
+      patchId: det.patchId,
+      fileName: patch?.imageFile?.name,
+    })
+    if (time != null && det.id) times.set(det.id, time)
+  }
+  return times
 }
 
 function clusterSortKey(det: DetectionEntity): number {
