@@ -13,6 +13,8 @@ export type VizConfig = {
 
   // ordering / selection
   sortMode: VizSortMode
+  /** Flip the chosen sort's direction. Applies to every sort mode. */
+  sortReversed: boolean
   taxaRank: VizTaxaRank
   taxaFilter: string[]
   onePerCluster: boolean
@@ -41,6 +43,7 @@ export function defaultVizConfig(leafGroupIds: string[], hasSelection: boolean):
     scope: hasSelection ? 'selection' : 'night',
     selectedLeafGroupIds: leafGroupIds,
     sortMode: 'size',
+    sortReversed: false,
     taxaRank: 'family',
     taxaFilter: [],
     onePerCluster: false,

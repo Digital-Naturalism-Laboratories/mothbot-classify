@@ -260,6 +260,21 @@ export function VisualizationDialog(props: Props) {
                   <option value='species'>Species</option>
                 </select>
               )}
+              <button
+                type='button'
+                onClick={() => update({ sortReversed: !config.sortReversed })}
+                aria-pressed={config.sortReversed}
+                title={config.sortReversed ? 'Reversed order — click to restore' : 'Reverse the sort order'}
+                className={cn(
+                  'rounded border px-8 py-4 text-13 transition-colors',
+                  config.sortReversed
+                    ? 'border-brand bg-brand/10 text-brand font-medium'
+                    : 'border-neutral-300 dark:border-neutral-600 bg-background hover:bg-neutral-100 dark:hover:bg-neutral-800',
+                  config.sortMode === 'none' && 'opacity-60',
+                )}
+              >
+                ⇅ Reverse
+              </button>
             </div>
           </Section>
 

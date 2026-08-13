@@ -84,5 +84,6 @@ function buildVizFileName(config: VizConfig): string {
       ? sanitizeForFileName(config.selectedLeafGroupIds[0]!.split('/').pop() ?? 'night')
       : `${config.selectedLeafGroupIds.length}-nights`
   const date = formatTodayYyyyMm_Dd()
-  return `${scope}_mosaic-${config.layout}-${config.sortMode}_${date}.png`
+  const sort = config.sortReversed ? `${config.sortMode}-rev` : config.sortMode
+  return `${scope}_mosaic-${config.layout}-${sort}_${date}.png`
 }

@@ -126,6 +126,11 @@ function sortDetections(dets: DetectionEntity[], config: VizConfig): DetectionEn
     const upto = TAXON_ORDER.indexOf(config.taxaRank) + 1
     arr.sort((a, b) => taxonSortKey(a, upto).localeCompare(taxonSortKey(b, upto)))
   }
+
+  // Applied after sorting so it flips whichever order was produced — including
+  // 'none', where it reverses the natural order the detections came in.
+  if (config.sortReversed) arr.reverse()
+
   return arr
 }
 
