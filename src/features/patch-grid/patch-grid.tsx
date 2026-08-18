@@ -61,8 +61,16 @@ export type PatchGridProps = {
   onImageProgress?: (loaded: number, total: number) => void
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
-  sortByClusters?: boolean
-  smallestFirst?: boolean
+  /** Group patches under taxonomic headers. Off ⇒ one flat list. */
+  groupByTaxon?: boolean
+  /** Put every clustered patch ahead of every unclustered one. */
+  clusteredFirst?: boolean
+  /** Keep members of a cluster contiguous. */
+  groupByClusters?: boolean
+  /** Order by size (clusters by their representative's size). */
+  sortBySize?: boolean
+  /** Flip whatever order the options above produce. */
+  reversed?: boolean
   hasMachineIdentification?: boolean
   collapsedClusterSet?: Set<number>
   onClusterCollapseToggle?: (topClusterId: number) => void
@@ -78,8 +86,11 @@ export function PatchGrid(props: PatchGridProps) {
     onImageProgress,
     selectedTaxon,
     selectedBucket,
-    sortByClusters = false,
-    smallestFirst = false,
+    groupByTaxon = true,
+    clusteredFirst = true,
+    groupByClusters = true,
+    sortBySize = true,
+    reversed = false,
     hasMachineIdentification = true,
     collapsedClusterSet,
     onClusterCollapseToggle,
@@ -97,7 +108,10 @@ export function PatchGrid(props: PatchGridProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   const detections = useStore(detectionsStore)
-  const orderedIds = useMemo(() => orderPatchIds({ patches, detections, smallestFirst }), [patches, detections, smallestFirst])
+  const orderedIds = useMemo(
+    () => orderPatchIds({ patches, detections, clusteredFirst, groupByClusters, sortBySize, reversed }),
+    [patches, detections, clusteredFirst, groupByClusters, sortBySize, reversed],
+  )
 
   const { displayIds, patchClusterMeta } = useMemo(
     () => computeDisplayIds({ orderedIds, detections, leafGroupId, collapsedClusterSet }),
@@ -132,8 +146,9 @@ export function PatchGrid(props: PatchGridProps) {
   }, [itemWidth, gapPx])
 
   const blocks = useMemo(() => {
-    return buildGridBlocks({ orderedIds: displayIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification })
-  }, [displayIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters, hasMachineIdentification])
+    // buildGridBlocks' `flatten` is the inverse of taxonomic grouping.
+    return buildGridBlocks({ orderedIds: displayIds, detections, columns, selectedTaxon, selectedBucket, flatten: !groupByTaxon, hasMachineIdentification })
+  }, [displayIds, detections, columns, selectedTaxon, selectedBucket, groupByTaxon, hasMachineIdentification])
 
   const visualOrderIds = useMemo(() => {
     return flattenBlocksToVisualOrder({ blocks })
@@ -192,10 +207,10 @@ export function PatchGrid(props: PatchGridProps) {
   // Preserve scroll position on minor list changes (e.g., identifying items)
   // Only reset scroll when the viewing context changes (night, bucket, or selected taxon)
   const lastContextRef = useRef<string>(
-    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}|${smallestFirst}`,
+    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${groupByTaxon}|${clusteredFirst}|${groupByClusters}|${sortBySize}|${reversed}`,
   )
   useEffect(() => {
-    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${sortByClusters}|${smallestFirst}`
+    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${groupByTaxon}|${clusteredFirst}|${groupByClusters}|${sortBySize}|${reversed}`
     const contextChanged = currentContext !== lastContextRef.current
     lastContextRef.current = currentContext
 
@@ -211,7 +226,7 @@ export function PatchGrid(props: PatchGridProps) {
     setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, sortByClusters, smallestFirst])
+  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, groupByTaxon, clusteredFirst, groupByClusters, sortBySize, reversed])
 
   useEffect(() => {
     const el = containerRef.current
@@ -478,15 +493,16 @@ function buildGridBlocks(params: {
   columns: number
   selectedTaxon?: { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string }
   selectedBucket?: 'auto' | 'user'
-  sortByClusters?: boolean
+  /** Render one flat list instead of per-taxon blocks. */
+  flatten?: boolean
   hasMachineIdentification?: boolean
 }) {
-  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, sortByClusters = false, hasMachineIdentification = true } = params
+  const { orderedIds, detections, columns, selectedTaxon, selectedBucket, flatten = false, hasMachineIdentification = true } = params
   const UNASSIGNED_LABEL = 'Unassigned'
   const out: GridBlock[] = []
   if (!orderedIds.length) return out
 
-  if (sortByClusters) {
+  if (flatten) {
     const header = getFlatHeaderForClusterSort({ selectedTaxon, selectedBucket, count: orderedIds.length, hasMachineIdentification })
     out.push(header)
     addRowBlocks({ itemIds: orderedIds, columns, keyPrefix: `row:cluster:${header.title}`, out })
@@ -735,45 +751,109 @@ function isMorphospeciesHeader(params: { name: string; ids: string[]; rank: stri
   return morphospecies === name
 }
 
-function orderPatchIds(params: { patches: PatchEntity[]; detections: Record<string, DetectionEntity>; smallestFirst?: boolean }) {
-  const { patches, detections, smallestFirst = false } = params
-  if (!Array.isArray(patches) || patches.length === 0) return [] as string[]
-  // Size sort direction: largest-first by default, smallest-first when toggled.
-  const bySize = (a: number, b: number) => (smallestFirst ? a - b : b - a)
-  const withSortKey = patches.map((p) => {
-    const det = detections?.[p.id]
-    const clusterId = typeof (det as any)?.clusterId === 'number' ? (det as any)?.clusterId : undefined
-    // Width (not area) so unclustered patches of a similar shape sit together.
-    const width = computeDetectionWidth({ detection: det })
-    return { id: p.id, name: p.name, clusterId, width }
-  })
-  withSortKey.sort((a, b) => {
-    const aClusterId = a.clusterId
-    const bClusterId = b.clusterId
-    const aIsValid = typeof aClusterId === 'number' && aClusterId >= 0
-    const bIsValid = typeof bClusterId === 'number' && bClusterId >= 0
-    const aIsUnclustered = aClusterId === -1
-    const bIsUnclustered = bClusterId === -1
+type PatchSortKey = {
+  id: string
+  name: string
+  clusterId: number | undefined
+  /** Top-level cluster (3.1 and 3.2 both belong to 3), or undefined when unclustered. */
+  topCluster: number | undefined
+  width: number
+  /** Size the item sorts by: its cluster's representative size, else its own. */
+  groupSize: number
+}
 
-    if (aIsValid && bIsValid) return aClusterId - bClusterId
-    if (aIsValid && bIsUnclustered) return -1
-    if (aIsValid && bClusterId === undefined) return -1
-    if (aIsUnclustered && bIsValid) return 1
-    if (aIsUnclustered && bIsUnclustered) {
-      if (b.width !== a.width) return bySize(a.width, b.width)
-      return (a?.name || '').localeCompare(b?.name || '')
-    }
-    if (aIsUnclustered && bClusterId === undefined) return -1
-    if (aClusterId === undefined && bIsValid) return 1
-    if (aClusterId === undefined && bIsUnclustered) return 1
-    if (aClusterId === undefined && bClusterId === undefined) {
-      if (b.width !== a.width) return bySize(a.width, b.width)
-      return (a?.name || '').localeCompare(b?.name || '')
-    }
-    return 0
+/**
+ * Orders patches for the grid.
+ *
+ * The default is a layered organization, each layer independently toggleable:
+ *  1. every clustered patch comes before every unclustered one (`clusteredFirst`)
+ *  2. cluster members stay contiguous (`groupByClusters`)
+ *  3. clusters are ordered by the size of their largest member, so a cluster
+ *     sits where its representative would (`sortBySize`)
+ *  4. `reversed` flips whatever order the above produced
+ *
+ * Taxonomic grouping is the outermost level but is applied later, by
+ * `buildGridBlocks`, which re-groups this ordering into per-taxon blocks.
+ */
+export function orderPatchIds(params: {
+  patches: PatchEntity[]
+  detections: Record<string, DetectionEntity>
+  clusteredFirst?: boolean
+  groupByClusters?: boolean
+  sortBySize?: boolean
+  reversed?: boolean
+}) {
+  const {
+    patches,
+    detections,
+    clusteredFirst = true,
+    groupByClusters = true,
+    sortBySize = true,
+    reversed = false,
+  } = params
+  if (!Array.isArray(patches) || patches.length === 0) return [] as string[]
+
+  const items: PatchSortKey[] = patches.map((p) => {
+    const det = detections?.[p.id]
+    const rawCluster = typeof (det as any)?.clusterId === 'number' ? ((det as any).clusterId as number) : undefined
+    const clusterId = rawCluster
+    const topCluster = typeof rawCluster === 'number' && rawCluster >= 0 ? Math.trunc(rawCluster) : undefined
+    // Width (not area) so patches of a similar shape sit together.
+    const width = computeDetectionWidth({ detection: det })
+    return { id: p.id, name: p.name, clusterId, topCluster, width, groupSize: width }
   })
-  const ids = withSortKey.map((x) => x.id)
-  return ids
+
+  // A cluster's representative size is its largest member, so the whole cluster
+  // sorts where that representative would sit among the ungrouped patches.
+  if (groupByClusters) {
+    const representative = new Map<number, number>()
+    for (const item of items) {
+      if (item.topCluster === undefined) continue
+      const current = representative.get(item.topCluster) ?? -Infinity
+      if (item.width > current) representative.set(item.topCluster, item.width)
+    }
+    for (const item of items) {
+      if (item.topCluster === undefined) continue
+      item.groupSize = representative.get(item.topCluster) ?? item.width
+    }
+  }
+
+  const byName = (a: PatchSortKey, b: PatchSortKey) => (a.name || '').localeCompare(b.name || '')
+
+  items.sort((a, b) => {
+    // Clustered patches form one block ahead of every unclustered patch, each
+    // block still ordered by size below. Off ⇒ loners interleave by their own
+    // size, as if each were a cluster of one.
+    if (clusteredFirst) {
+      const aClustered = a.topCluster !== undefined
+      const bClustered = b.topCluster !== undefined
+      if (aClustered !== bClustered) return aClustered ? -1 : 1
+    }
+
+    if (groupByClusters) {
+      const sameCluster = a.topCluster !== undefined && a.topCluster === b.topCluster
+      if (!sameCluster) {
+        // Order the groups. Unclustered patches count as groups of one, so they
+        // interleave with clusters by size rather than being exiled to the end.
+        if (sortBySize && a.groupSize !== b.groupSize) return b.groupSize - a.groupSize
+        if (a.topCluster !== b.topCluster) {
+          // Keeps ordering deterministic when sizes tie or size sort is off.
+          if (a.topCluster === undefined) return 1
+          if (b.topCluster === undefined) return -1
+          return a.topCluster - b.topCluster
+        }
+      } else if (a.clusterId !== b.clusterId) {
+        // Same cluster, different sub-cluster — keep sub-clusters in order.
+        return (a.clusterId as number) - (b.clusterId as number)
+      }
+    }
+
+    if (sortBySize && a.width !== b.width) return b.width - a.width
+    return byName(a, b)
+  })
+
+  const ids = items.map((x) => x.id)
+  return reversed ? ids.reverse() : ids
 }
 
 function estimateBlockSize(params: {

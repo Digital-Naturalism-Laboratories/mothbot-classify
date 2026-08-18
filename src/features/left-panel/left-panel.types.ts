@@ -22,12 +22,18 @@ export type LeafGroupLeftPanelProps = {
   totalIdentified?: number
   sizeThreshold: number
   sizeThresholdMax: number
-  sortByClusters: boolean
-  smallestFirst: boolean
+  groupByTaxon: boolean
+  clusteredFirst: boolean
+  groupByClusters: boolean
+  sortBySize: boolean
+  reversed: boolean
   clustersCollapsed: boolean
   onSizeThresholdChange: (value: number) => void
-  onSortByClustersChange: (enabled: boolean) => void
-  onSmallestFirstChange: (enabled: boolean) => void
+  onGroupByTaxonChange: (enabled: boolean) => void
+  onClusteredFirstChange: (enabled: boolean) => void
+  onGroupByClustersChange: (enabled: boolean) => void
+  onSortBySizeChange: (enabled: boolean) => void
+  onReversedChange: (enabled: boolean) => void
   onClustersCollapsedChange: (enabled: boolean) => void
   availableDetectorIds?: string[]
   selectedDetectorId?: string

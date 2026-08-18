@@ -58,9 +58,36 @@ export type PackGeomResult = {
 }
 
 // Radial/shape candidate-spiral knobs (mirror the Python tool).
-const CAND_CAP = 200_000
+//
+// Candidate spacing (`step`) is what sets packing density: it should track the
+// silhouette size, so a wider canvas simply holds proportionally more items.
+// Capping the candidate *count* instead makes `step` grow with the canvas —
+// which is why a 16000px export placed exactly as many insects as a 6000px one
+// and merely spread them further apart. The cap exists solely to bound memory,
+// so it must be loose enough never to bind at realistic sizes.
+const CAND_CAP_MAX = 8_000_000
 const CAND_WINDOW = 1500
-const CAND_MAX_PROBE = 6000
+/**
+ * Failed placement attempts before an item is given up on.
+ *
+ * At 6000 this was the real ceiling on a big night: once the disc got dense,
+ * every remaining item burned its whole budget and was dropped, so placement
+ * plateaued at the same count no matter how wide the canvas was. Raising it is
+ * also *faster* overall — items succeed instead of exhausting the budget first.
+ */
+const CAND_MAX_PROBE = 40_000
+
+/**
+ * Candidate points the spiral will actually retain — those landing inside the
+ * canvas, roughly one per `step²` of area.
+ *
+ * The old estimate used `π·(diagonal/step)²`, which counts the circumscribed
+ * disc and overstates the real count by ~6×, forcing a far coarser step than
+ * the memory budget required.
+ */
+function estimateCandidates(W: number, H: number, step: number): number {
+  return (W * H) / (step * step)
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Deterministic RNG (mulberry32) so renders are reproducible per seed.
@@ -170,10 +197,12 @@ function packCanvas(items: PreparedItem[], opts: PackGeomOptions): PackGeomResul
   }
 
   // Candidate spiral step ~ half the median silhouette, bounded so the list stays small.
+  // Density comes from the silhouette size and stays fixed regardless of canvas
+  // size; `step` only grows if the candidate arrays would get too big to hold.
   const med = medianMinDim(items)
   let step = Math.max(3, Math.floor(med / 2))
   const maxR = Math.hypot(W, H)
-  while (Math.PI * (maxR / step) ** 2 > CAND_CAP) step++
+  while (estimateCandidates(W, H, step) > CAND_CAP_MAX) step++
   const { ys, xs } = spiralPoints(cx, cy, maxR, step, W, H, base)
   const nCand = ys.length
   const dead = new Uint8Array(nCand)
@@ -266,23 +295,49 @@ function medianMinDim(items: PreparedItem[]): number {
   return dims[dims.length >> 1] || 40
 }
 
-/** Centre-outward Archimedean spiral of in-bounds (and optionally in-mask) points. */
+/**
+ * Centre-outward Archimedean spiral of in-bounds (and optionally in-mask) points.
+ *
+ * Dedupes through a W×H visited bitmap rather than a Set — at the candidate
+ * counts a large night needs (~1M+), a Set of boxed keys costs far more memory
+ * and time than one byte per pixel. Results grow into typed arrays for the same
+ * reason.
+ */
 function spiralPoints(
   cx: number, cy: number, maxR: number, step: number,
   W: number, H: number, base: Uint8Array | null,
 ): { ys: Int32Array; xs: Int32Array } {
-  const ys: number[] = [], xs: number[] = []
-  const seen = new Set<number>()
+  const visited = new Uint8Array(W * H)
+  let capacity = 1 << 16
+  let ys = new Int32Array(capacity)
+  let xs = new Int32Array(capacity)
+  let n = 0
+
   let r = 0, theta = 0
   while (r <= maxR) {
     const y = Math.round(cy + r * Math.sin(theta))
     const x = Math.round(cx + r * Math.cos(theta))
     if (y >= 0 && y < H && x >= 0 && x < W) {
       const key = y * W + x
-      if (!seen.has(key) && (!base || base[key])) { seen.add(key); ys.push(y); xs.push(x) }
+      if (!visited[key] && (!base || base[key])) {
+        visited[key] = 1
+        if (n === capacity) {
+          capacity *= 2
+          const nextYs = new Int32Array(capacity)
+          const nextXs = new Int32Array(capacity)
+          nextYs.set(ys)
+          nextXs.set(xs)
+          ys = nextYs
+          xs = nextXs
+        }
+        ys[n] = y
+        xs[n] = x
+        n++
+      }
     }
     theta += step / Math.max(r, step)
     r = (step * theta) / (2 * Math.PI)
   }
-  return { ys: Int32Array.from(ys), xs: Int32Array.from(xs) }
+
+  return { ys: ys.subarray(0, n), xs: xs.subarray(0, n) }
 }

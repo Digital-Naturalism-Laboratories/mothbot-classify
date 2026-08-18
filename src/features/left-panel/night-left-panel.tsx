@@ -39,12 +39,18 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     totalIdentified = 0,
     sizeThreshold,
     sizeThresholdMax,
-    sortByClusters,
-    smallestFirst,
+    groupByTaxon,
+    clusteredFirst,
+    groupByClusters,
+    sortBySize,
+    reversed,
     clustersCollapsed,
     onSizeThresholdChange,
-    onSortByClustersChange,
-    onSmallestFirstChange,
+    onGroupByTaxonChange,
+    onClusteredFirstChange,
+    onGroupByClustersChange,
+    onSortBySizeChange,
+    onReversedChange,
     onClustersCollapsedChange,
     availableDetectorIds,
     selectedDetectorId,
@@ -114,15 +120,31 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
       >
         <PatchSizeControl compact />
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
+        <div className='pt-2 text-11 font-medium uppercase tracking-wide text-neutral-500'>Organize by</div>
         <LabeledCheckboxControl
-          label='Smallest first'
-          checked={smallestFirst}
-          onChange={onSmallestFirstChange}
+          label='Taxonomic groups'
+          checked={groupByTaxon}
+          onChange={onGroupByTaxonChange}
         />
         <LabeledCheckboxControl
-          label='Sort by clusters'
-          checked={sortByClusters}
-          onChange={onSortByClustersChange}
+          label='Clustered items first'
+          checked={clusteredFirst}
+          onChange={onClusteredFirstChange}
+        />
+        <LabeledCheckboxControl
+          label='Clusters'
+          checked={groupByClusters}
+          onChange={onGroupByClustersChange}
+        />
+        <LabeledCheckboxControl
+          label='Size'
+          checked={sortBySize}
+          onChange={onSortBySizeChange}
+        />
+        <LabeledCheckboxControl
+          label='Reverse order'
+          checked={reversed}
+          onChange={onReversedChange}
         />
         <LabeledCheckboxControl
           label='Collapse all clusters'

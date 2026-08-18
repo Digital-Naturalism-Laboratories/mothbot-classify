@@ -52,8 +52,13 @@ export function NightView(props: { leafGroupId: string }) {
   const [identifyOpen, setIdentifyOpen] = useState(false)
   const [selectedBucket, setSelectedBucket] = useState<'auto' | 'user' | undefined>('auto')
   const [sizeThreshold, setSizeThreshold] = useState(0)
-  const [sortByClusters, setSortByClusters] = useState(false)
-  const [smallestFirst, setSmallestFirst] = useState(false)
+  // Defaults: organize by taxon, then cluster, then size of each cluster's
+  // representative. Each level is independently toggleable below.
+  const [groupByTaxon, setGroupByTaxon] = useState(true)
+  const [clusteredFirst, setClusteredFirst] = useState(true)
+  const [groupByClusters, setGroupByClusters] = useState(true)
+  const [sortBySize, setSortBySize] = useState(true)
+  const [reversed, setReversed] = useState(false)
   const [clustersCollapsed, setClustersCollapsed] = useState(false)
   const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
   const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
@@ -492,12 +497,18 @@ export function NightView(props: { leafGroupId: string }) {
         sizeThreshold={clampedSizeThreshold}
         sizeThresholdMax={sizeThresholdMax}
         warnings={leafGroupWarnings}
-        sortByClusters={sortByClusters}
-        smallestFirst={smallestFirst}
+        groupByTaxon={groupByTaxon}
+        clusteredFirst={clusteredFirst}
+        groupByClusters={groupByClusters}
+        sortBySize={sortBySize}
+        reversed={reversed}
         clustersCollapsed={clustersCollapsed}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
-        onSortByClustersChange={setSortByClusters}
-        onSmallestFirstChange={setSmallestFirst}
+        onGroupByTaxonChange={setGroupByTaxon}
+        onClusteredFirstChange={setClusteredFirst}
+        onGroupByClustersChange={setGroupByClusters}
+        onSortBySizeChange={setSortBySize}
+        onReversedChange={setReversed}
         onClustersCollapsedChange={(v) => { setClustersCollapsed(v); setClusterOverrides(new Set()) }}
         availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
         selectedDetectorId={selectedDetectorId}
@@ -522,8 +533,11 @@ export function NightView(props: { leafGroupId: string }) {
           onOpenPatchDetail={onOpenPatchDetail}
           selectedTaxon={selectedTaxon as any}
           selectedBucket={selectedBucket}
-          sortByClusters={sortByClusters}
-          smallestFirst={smallestFirst}
+          groupByTaxon={groupByTaxon}
+          clusteredFirst={clusteredFirst}
+          groupByClusters={groupByClusters}
+          sortBySize={sortBySize}
+          reversed={reversed}
           hasMachineIdentification={hasMachineIdentification}
           collapsedClusterSet={collapsedClusterSet.size > 0 ? collapsedClusterSet : undefined}
           onClusterCollapseToggle={onClusterCollapseToggle}

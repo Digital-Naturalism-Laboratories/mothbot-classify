@@ -157,7 +157,22 @@ export function VisualizationDialog(props: Props) {
         // interaction with the toast's action button outside it.
         setLastExportPath(result.fullPath)
         setCopied(false)
-        toast.success('Mosaic exported')
+        // Report against the number of detections selected, not the number that
+        // survived image loading — otherwise a load failure reads as success.
+        const noImage = result.selected - result.loaded
+        const noFit = result.loaded - result.placed
+        if (noImage > 0 || noFit > 0) {
+          const reasons = [
+            noImage > 0 ? `${noImage.toLocaleString()} had no readable patch image` : '',
+            noFit > 0 ? `${noFit.toLocaleString()} didn't fit on the canvas` : '',
+          ].filter(Boolean)
+          toast.warning(`Exported ${result.placed.toLocaleString()} of ${result.selected.toLocaleString()}`, {
+            description: `${reasons.join('; ')}. ${noFit > 0 ? 'Increase Width or lower Scale to fit more. ' : ''}See the console for the full breakdown.`,
+            duration: 12000,
+          })
+        } else {
+          toast.success(`Mosaic exported — all ${result.placed.toLocaleString()} placed`)
+        }
       } else {
         toast.error('Nothing to export — check your scope/selection')
       }

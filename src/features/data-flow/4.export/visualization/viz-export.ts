@@ -10,7 +10,19 @@ import { loadPatchImages } from './viz-images'
 import { renderMosaicFromDetections } from './viz-renderer'
 import type { VizConfig } from './viz-types'
 
-export type VizExportResult = { folderPath: string; filePath: string; fullPath: string } | null
+export type VizExportResult =
+  | {
+      folderPath: string
+      filePath: string
+      fullPath: string
+      /** Detections chosen by the current scope/filters. */
+      selected: number
+      /** Of those, how many had a usable image. */
+      loaded: number
+      /** Of those, how many actually landed on the canvas. */
+      placed: number
+    }
+  | null
 
 export async function exportVisualization(
   config: VizConfig,
@@ -29,12 +41,13 @@ export async function exportVisualization(
   const { detections } = buildVizDetections(config)
   if (!detections.length) return null
 
-  const { images } = await loadPatchImages(detections, {
+  const { images, misses } = await loadPatchImages(detections, {
     preferNobg: config.preferNobg,
     requireNobg: config.requireNobg,
   })
 
-  const { canvas } = await renderMosaicFromDetections(detections, config, images, baseMask)
+  const imageCount = images.size
+  const { canvas, stats } = await renderMosaicFromDetections(detections, config, images, baseMask)
   const blob = await canvas.convertToBlob({ type: 'image/png' })
   const bytes = new Uint8Array(await blob.arrayBuffer())
 
@@ -53,7 +66,15 @@ export async function exportVisualization(
   // read it from the folder handle, but it's captured for terminal commands).
   const diskRoot = loadTerminalFolderPaths().datasetsRootPath.trim().replace(/[/\\]+$/, '')
   const fullPath = diskRoot ? `${diskRoot}/${filePath}` : filePath
-  return { folderPath, filePath, fullPath }
+  console.log('🌀 viz export funnel', {
+    selected: detections.length,
+    loaded: images.size,
+    placed: stats.placed,
+    noFit: stats.noFit,
+    ...misses,
+  })
+
+  return { folderPath, filePath, fullPath, selected: detections.length, loaded: imageCount, placed: stats.placed }
 }
 
 function resolveExportFolderPath(config: VizConfig): string {
