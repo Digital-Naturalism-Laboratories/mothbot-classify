@@ -150,24 +150,40 @@ export function VisualizationDialog(props: Props) {
   const handleExport = useCallback(async () => {
     setExporting(true)
     try {
-      const result = await exportVisualization(config, baseMask)
+      const result = await exportVisualization(config, baseMask).catch((err) => {
+        // Canvas-size and allocation failures arrive here; show the reason
+        // rather than an unhandled rejection in the console.
+        toast.error('Export failed', {
+          description: err instanceof Error ? err.message : String(err),
+          duration: 12000,
+        })
+        return undefined
+      })
+      if (result === undefined) return
       if (result) {
         // Stay in the dialog so you can tweak and export more variants. The path
         // is shown in-dialog with a Copy button, because a modal dialog blocks
         // interaction with the toast's action button outside it.
         setLastExportPath(result.fullPath)
         setCopied(false)
-        // Report against the number of detections selected, not the number that
-        // survived image loading — otherwise a load failure reads as success.
+        // Report against the detections selected, and name the actual reason for
+        // each loss — only `noFit` is fixed by a bigger canvas.
         const noImage = result.selected - result.loaded
-        const noFit = result.loaded - result.placed
-        if (noImage > 0 || noFit > 0) {
-          const reasons = [
-            noImage > 0 ? `${noImage.toLocaleString()} had no readable patch image` : '',
-            noFit > 0 ? `${noFit.toLocaleString()} didn't fit on the canvas` : '',
-          ].filter(Boolean)
+        const reasons = [
+          noImage > 0 ? `${noImage.toLocaleString()} had no readable patch image` : '',
+          result.tooTransparent > 0
+            ? `${result.tooTransparent.toLocaleString()} skipped as near-transparent (blurry or empty crops)`
+            : '',
+          result.filtered > 0 ? `${result.filtered.toLocaleString()} removed by the quality sliders` : '',
+          result.noFit > 0 ? `${result.noFit.toLocaleString()} didn't fit on the canvas` : '',
+        ].filter(Boolean)
+
+        if (reasons.length) {
+          // Only a genuine fit failure is solved by a bigger canvas — the other
+          // reasons are intentional exclusions and need no action.
+          const advice = result.noFit > 0 ? ' Increase Width or lower Scale to fit more.' : ''
           toast.warning(`Exported ${result.placed.toLocaleString()} of ${result.selected.toLocaleString()}`, {
-            description: `${reasons.join('; ')}. ${noFit > 0 ? 'Increase Width or lower Scale to fit more. ' : ''}See the console for the full breakdown.`,
+            description: `${reasons.join('; ')}.${advice}`,
             duration: 12000,
           })
         } else {

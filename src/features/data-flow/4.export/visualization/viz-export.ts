@@ -21,6 +21,12 @@ export type VizExportResult =
       loaded: number
       /** Of those, how many actually landed on the canvas. */
       placed: number
+      /** Excluded as near-fully-transparent — blurry or empty crops. */
+      tooTransparent: number
+      /** Removed by the blur / opacity quality sliders. */
+      filtered: number
+      /** Ran out of room on the canvas. */
+      noFit: number
     }
   | null
 
@@ -70,11 +76,23 @@ export async function exportVisualization(
     selected: detections.length,
     loaded: images.size,
     placed: stats.placed,
+    tooTransparent: stats.tooTransparent,
+    filtered: stats.filtered,
     noFit: stats.noFit,
     ...misses,
   })
 
-  return { folderPath, filePath, fullPath, selected: detections.length, loaded: imageCount, placed: stats.placed }
+  return {
+    folderPath,
+    filePath,
+    fullPath,
+    selected: detections.length,
+    loaded: imageCount,
+    placed: stats.placed,
+    tooTransparent: stats.tooTransparent,
+    filtered: stats.filtered,
+    noFit: stats.noFit,
+  }
 }
 
 function resolveExportFolderPath(config: VizConfig): string {

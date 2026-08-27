@@ -12,6 +12,9 @@ import {
   type PreparedItem,
 } from './viz-pack'
 
+/** Chrome/Safari cap canvas sides at 16384px; beyond it allocation silently fails. */
+export const MAX_CANVAS_SIDE = 16384
+
 export type MosaicItem = { id: string; bitmap: ImageBitmap }
 
 export type MosaicOptions = {
@@ -29,7 +32,12 @@ export type MosaicOptions = {
 
 export type MosaicResult = {
   canvas: OffscreenCanvas
-  stats: PackStats & { filtered: number }
+  stats: PackStats & {
+    /** Dropped by the blur/opacity quality filters. */
+    filtered: number
+    /** Excluded as near-fully-transparent — blurry or empty crops. */
+    tooTransparent: number
+  }
   /** radial/shape: packed-disc radius (px in the mosaic canvas). 0 for bar. */
   contentRadius: number
   center: { x: number; y: number }
@@ -57,7 +65,9 @@ function prepareItem(id: string, bitmap: ImageBitmap, scale: number, padding: nu
       }
     }
   }
-  if (r1 < 0) return null // fully transparent
+  // Nothing clears the alpha threshold — a near-empty or badly blurred crop.
+  // Deliberately excluded: it would contribute nothing but haze to the mosaic.
+  if (r1 < 0) return null
 
   const m = Math.max(0, Math.floor(padding))
   const er0 = Math.max(0, r0 - m), ec0 = Math.max(0, c0 - m)
@@ -182,9 +192,11 @@ export async function renderMosaic(items: MosaicItem[], opts: MosaicOptions): Pr
 
   const prepared: PreparedItem[] = []
   const bitmaps: ImageBitmap[] = []
+  let tooTransparent = 0
   for (let i = 0; i < items.length; i++) {
     const p = prepareItem(items[i]!.id, items[i]!.bitmap, scale, padding)
     if (p) { prepared.push(p); bitmaps.push(items[i]!.bitmap) }
+    else tooTransparent++
     if (report && (i % 50 === 0 || i === items.length - 1)) report((i + 1) / items.length, `preparing ${i + 1}/${items.length}`)
   }
 
@@ -197,8 +209,20 @@ export async function renderMosaic(items: MosaicItem[], opts: MosaicOptions): Pr
     seed: opts.seed ?? 42,
   })
 
+  // Browsers cap canvas dimensions (Chrome: 16384px per side, plus a total-area
+  // limit). Past it the canvas silently comes back zero-sized and only blows up
+  // later in convertToBlob, so fail here with something actionable.
+  if (geom.width > MAX_CANVAS_SIDE || geom.height > MAX_CANVAS_SIDE) {
+    throw new Error(
+      `Canvas ${geom.width}×${geom.height}px exceeds the ${MAX_CANVAS_SIDE}px browser limit. Lower the Width.`,
+    )
+  }
+
   const canvas = new OffscreenCanvas(geom.width, geom.height)
-  const ctx = canvas.getContext('2d')!
+  const ctx = canvas.getContext('2d')
+  if (!ctx || canvas.width === 0 || canvas.height === 0) {
+    throw new Error(`Could not allocate a ${geom.width}×${geom.height}px canvas. Lower the Width.`)
+  }
   if (opts.background) {
     ctx.fillStyle = `rgb(${opts.background[0]},${opts.background[1]},${opts.background[2]})`
     ctx.fillRect(0, 0, geom.width, geom.height)
@@ -210,7 +234,7 @@ export async function renderMosaic(items: MosaicItem[], opts: MosaicOptions): Pr
 
   return {
     canvas,
-    stats: { ...geom.stats, filtered: q.filtered },
+    stats: { ...geom.stats, filtered: q.filtered, tooTransparent },
     contentRadius: geom.contentRadius,
     center: geom.center,
   }
