@@ -228,13 +228,23 @@ export function PatchGrid(props: PatchGridProps) {
     rowVirtualizer.scrollToOffset(0)
   }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, groupByTaxon, clusteredFirst, groupByClusters, sortBySize, reversed])
 
+  // Reset to top only when the user actually changes the column slider.
+  // `columns`/`rowHeight` also change whenever the container width changes
+  // (window resize, sidebar toggle, a classic scrollbar appearing). Resetting
+  // on those threw users back to the top mid-scroll, and on macOS with
+  // non-overlay scrollbars (mouse plugged in / "Always show") it could loop:
+  // scrollbar toggles -> width changes -> scroll to top -> layout shifts ->
+  // scrollbar toggles again, which shows up as jitter that won't let you scroll.
+  const lastDesiredColumnsRef = useRef<number>(desiredColumns)
   useEffect(() => {
+    if (lastDesiredColumnsRef.current === desiredColumns) return
+    lastDesiredColumnsRef.current = desiredColumns
     const el = containerRef.current
     if (el) el.scrollTo({ top: 0 })
     setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [desiredColumns, rowVirtualizer, columns, rowHeight])
+  }, [desiredColumns, rowVirtualizer])
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -481,6 +491,11 @@ const GridContainer = React.forwardRef<HTMLDivElement, GridContainerProps>(funct
       onMouseLeave={onMouseLeave}
       onScroll={onScroll}
       className={cn('relative overflow-y-auto px-8 pb-8 pt-0 outline-none', className)}
+      // Always reserve space for the vertical scrollbar. On platforms with
+      // classic (non-overlay) scrollbars this stops the scrollbar's appearance
+      // from changing clientWidth, which would re-derive item sizes and
+      // re-layout the whole grid mid-scroll. No-op for overlay scrollbars.
+      style={{ scrollbarGutter: 'stable' }}
     >
       {children}
     </div>
