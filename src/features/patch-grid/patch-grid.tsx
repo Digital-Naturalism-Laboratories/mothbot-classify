@@ -193,11 +193,15 @@ export function PatchGrid(props: PatchGridProps) {
     measureElement: (el) => {
       const node = el as HTMLElement | null
       const r = node?.getBoundingClientRect?.()
-      const base = Math.ceil(r?.height || rowHeight)
       const idxAttr = node?.getAttribute('data-block-index')
       const idx = idxAttr != null ? Number(idxAttr) : -1
       const nextIsHeader = idx >= 0 && blocks[idx + 1]?.kind === 'header'
       const kind = node?.getAttribute('data-kind')
+      const measured = r ? Math.ceil(r.height) : 0
+      // Only a row falls back to the row estimate when it measures empty. A
+      // header must report its real size — `r.height || rowHeight` used to turn
+      // a 0px header into a ~300px one and throw the scroll position off.
+      const base = measured > 0 ? measured : kind === 'row' ? rowHeight : HEADER_BASE_HEIGHT
       const rowGapExtra = kind === 'row' ? gapPx : 0
       const extra = (nextIsHeader ? HEADER_TOP_MARGIN : 0) + rowGapExtra
       return base + extra
@@ -442,9 +446,19 @@ export function PatchGrid(props: PatchGridProps) {
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${stripe.start}px)` }}
             >
               {block?.kind === 'header' ? (
-                activeHeaderBlockIndex === stripe.index ? null : (
-                  <GroupHeader title={block.title} rank={block.rank} count={block.count} className='px-8 py-6' />
-                )
+                // Always render the in-flow header so this block's height never
+                // changes. Rendering `null` while it's the active sticky header
+                // collapsed the block to 0px; the virtualizer saw that as a size
+                // change on an item above the viewport and shifted the scroll
+                // position to compensate, which flipped the active header back and
+                // forth and produced the "jitters and jumps to the top of the
+                // section" loop on sections short enough to still be mounted.
+                <GroupHeader
+                  title={block.title}
+                  rank={block.rank}
+                  count={block.count}
+                  className={cn('px-8 py-6', activeHeaderBlockIndex === stripe.index && 'invisible')}
+                />
               ) : block?.kind === 'row' ? (
                 <RowGrid
                   itemIds={block.itemIds}
