@@ -38,6 +38,8 @@ export type LeafGroupLeftPanelProps = {
   availableDetectorIds?: string[]
   selectedDetectorId?: string
   onDetectorChange?: (detectorId: string) => void
+  /** User-flagged errors for the night, scoped to the visible detector run. */
+  errorCount?: number
   availableBotAlgorithms?: string[]
   selectedBotAlgorithm?: string
   onBotAlgorithmChange?: (algorithm: string) => void

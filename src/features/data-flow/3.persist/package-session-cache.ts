@@ -34,7 +34,10 @@ export type IndexedFileMeta = {
 
 // v6: ingest now overlays x-anylabeling human detections as a 'HumanDetection'
 // detector — invalidate older caches so they re-ingest and pick them up.
-export const PACKAGE_SESSION_CACHE_VERSION = 6
+// v7: detector switching used to filter `detectionsStore` in place, and a save
+// then cached that truncated store — dropping the other run's IDs/clusters on
+// every later load. Bump so those caches are discarded and rebuilt from records.
+export const PACKAGE_SESSION_CACHE_VERSION = 7
 
 export type PackageSessionCacheEntry = {
   cacheVersion: number

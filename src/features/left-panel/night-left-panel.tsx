@@ -70,9 +70,13 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
   const selectedCount = selectedPatchIds?.size ?? 0
   const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(true)
   const [vizDialogOpen, setVizDialogOpen] = useState(false)
-  const errorCountForNight = Object.values(detections ?? {}).filter(
-    (d) => (d as any)?.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
-  ).length
+  // The store holds every detector run; the parent passes a count scoped to the
+  // visible run. Fall back to the unscoped store only if no count was given.
+  const errorCountForNight =
+    props.errorCount ??
+    Object.values(detections ?? {}).filter(
+      (d) => (d as any)?.leafGroupId === leafGroupId && (d as any)?.detectedBy === 'user' && (d as any)?.isError === true,
+    ).length
 
   return (
     <Column className={cn('bg-sidebar pl-14 pr-16 py-20 pt-12', className)}>

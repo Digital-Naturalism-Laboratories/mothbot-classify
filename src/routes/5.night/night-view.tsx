@@ -33,6 +33,7 @@ import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
 import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
 import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
+import { newestDetectorId, sortDetectorRunsNewestFirst } from '~/features/mothbox-next/detector-runs'
 import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
@@ -63,7 +64,6 @@ export function NightView(props: { leafGroupId: string }) {
   const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
   const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
   const [selectedDetectorId, setSelectedDetectorId] = useState<string | undefined>(undefined)
-  const allDetectionsRef = useRef<Record<string, DetectionEntity>>({})
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
   const hasAppliedDefaultFallbackRef = useRef(false)
@@ -110,27 +110,26 @@ export function NightView(props: { leafGroupId: string }) {
     setSelectedBotAlgorithm(marked ?? realFallback ?? anyFallback)
   }, [activePackage])
 
-  // Detector versions — derived from unique detectorId values across all loaded patches.
+  // Detector runs present in the loaded patches, newest model first (version-aware:
+  // MBD-x-y ranks numerically and beats the legacy dated yolo model; see detector-runs.ts).
   const availableDetectorIds = useMemo(() => {
     const ids = new Set<string>()
     for (const patch of Object.values(patches)) {
       if (patch.detectorId) ids.add(patch.detectorId)
     }
-    return [...ids].sort()
-  }, [activePackage, patches])
+    return sortDetectorRunsNewestFirst([...ids])
+  }, [patches])
 
-  // When the package loads, snapshot all detections so detector switching can
-  // restore them without a full reload. Also set the default detector (prefer
-  // bot runs over human).
+  // Default to the newest bot run when nothing is selected or the current
+  // choice no longer exists. Never clobber a valid selection: saves refresh the
+  // package object, and resetting here would snap the user back to a different
+  // run every time they accepted a detection.
   useEffect(() => {
-    allDetectionsRef.current = { ...(detectionsStore.get() || {}) }
-    if (availableDetectorIds.length > 1) {
-      const defaultDetector = availableDetectorIds.find((id) => id !== 'HumanDetection') ?? availableDetectorIds[0]
-      setSelectedDetectorId(defaultDetector)
-    } else {
-      setSelectedDetectorId(availableDetectorIds[0])
-    }
-  }, [activePackage])
+    setSelectedDetectorId((prev) => {
+      if (prev && availableDetectorIds.includes(prev)) return prev
+      return newestDetectorId(availableDetectorIds)
+    })
+  }, [availableDetectorIds])
   const routeContext = useMemo(
     () => ({
       folderName,
@@ -240,8 +239,8 @@ export function NightView(props: { leafGroupId: string }) {
     })
   }, [])
 
+  const multiDetector = availableDetectorIds.length > 1
   const list = useMemo(() => {
-    const multiDetector = availableDetectorIds.length > 1
     return Object.values(patches).filter((patch) => {
       if (!activeNightIds.has(patch.leafGroupId)) return false
       // When multiple detectors are loaded, only show patches for the active
@@ -249,9 +248,36 @@ export function NightView(props: { leafGroupId: string }) {
       if (multiDetector && selectedDetectorId) return patch.detectorId === selectedDetectorId
       return true
     })
-  }, [patches, activeNightIds, availableDetectorIds, selectedDetectorId])
-  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'auto' }), [detections, activeNightIds])
-  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections, leafGroupIds: activeNightIds, bucket: 'user' }), [detections, activeNightIds])
+  }, [patches, activeNightIds, multiDetector, selectedDetectorId])
+
+  // Detections scoped to the active detector. `detectionsStore` always holds
+  // every run's detections — switching runs is a view filter, never a store
+  // mutation. (Filtering the store in place used to get persisted into the
+  // session cache on the next save, silently dropping the other run's IDs and
+  // clusters until the cache was rebuilt.)
+  const visibleDetections = useMemo(() => {
+    if (!multiDetector || !selectedDetectorId) return detections
+    const out: typeof detections = {}
+    for (const [id, detection] of Object.entries(detections)) {
+      if (patches[id]?.detectorId === selectedDetectorId) out[id] = detection
+    }
+    return out
+  }, [detections, patches, multiDetector, selectedDetectorId])
+
+  // Night counts / progress are derived from the visible run, like the grid.
+  useEffect(() => {
+    rebuildLeafGroupSummariesFromDetections(visibleDetections)
+  }, [visibleDetections])
+
+  const visibleErrorCount = useMemo(
+    () =>
+      Object.values(visibleDetections).filter(
+        (d) => activeNightIds.has(d.leafGroupId) && d.detectedBy === 'user' && d.isError === true,
+      ).length,
+    [visibleDetections, activeNightIds],
+  )
+  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections: visibleDetections, leafGroupIds: activeNightIds, bucket: 'auto' }), [visibleDetections, activeNightIds])
+  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections: visibleDetections, leafGroupIds: activeNightIds, bucket: 'user' }), [visibleDetections, activeNightIds])
   const totalDetections = useMemo(
     () => Array.from(activeNightIds).reduce((sum, id) => sum + (leafGroupSummaries[id]?.totalDetections ?? 0), 0),
     [leafGroupSummaries, activeNightIds],
@@ -261,13 +287,13 @@ export function NightView(props: { leafGroupId: string }) {
     [leafGroupSummaries, activeNightIds],
   )
   const sizeThresholdMax = useMemo(() => {
-    return getMaxDetectionLongestDimension({ patches: list, detections })
-  }, [list, detections])
+    return getMaxDetectionLongestDimension({ patches: list, detections: visibleDetections })
+  }, [list, visibleDetections])
   const clampedSizeThreshold = clampSizeThreshold({ value: sizeThreshold, max: sizeThresholdMax })
 
   const filtered = useMemo(
-    () => filterPatches({ patches: list, detections, selectedTaxon, selectedBucket, sizeThreshold: clampedSizeThreshold }),
-    [list, detections, selectedTaxon, selectedBucket, clampedSizeThreshold],
+    () => filterPatches({ patches: list, detections: visibleDetections, selectedTaxon, selectedBucket, sizeThreshold: clampedSizeThreshold }),
+    [list, visibleDetections, selectedTaxon, selectedBucket, clampedSizeThreshold],
   )
   const totalPatches = list.length
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
@@ -401,16 +427,10 @@ export function NightView(props: { leafGroupId: string }) {
     }
 
     detectionsStore.set(updatedDetections)
-    rebuildLeafGroupSummariesFromDetections(updatedDetections)
   }
 
   function onDetectorChange(detectorId: string) {
-    const allDetections = allDetectionsRef.current
-    const currentPatches = Object.values(patchesStore.get())
-    const detectorPatchIds = new Set(currentPatches.filter((p) => p.detectorId === detectorId).map((p) => p.id))
-    const filtered = Object.fromEntries(Object.entries(allDetections).filter(([id]) => detectorPatchIds.has(id)))
-    detectionsStore.set(filtered)
-    rebuildLeafGroupSummariesFromDetections(filtered)
+    // Pure view state — the store keeps every run; `visibleDetections` does the filtering.
     setSelectedDetectorId(detectorId)
     setSelectedBotAlgorithm(undefined)
   }
@@ -476,7 +496,6 @@ export function NightView(props: { leafGroupId: string }) {
       const { prevDetections, leafGroupIds } = snapshot
       const updated = { ...current, ...prevDetections }
       detectionsStore.set(updated)
-      rebuildLeafGroupSummariesFromDetections(updated)
       for (const lgId of leafGroupIds) scheduleSaveForLeafGroup(lgId)
     }
   }, [])
@@ -513,6 +532,7 @@ export function NightView(props: { leafGroupId: string }) {
         availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
         selectedDetectorId={selectedDetectorId}
         onDetectorChange={onDetectorChange}
+        errorCount={visibleErrorCount}
         availableBotAlgorithms={availableBotAlgorithms.length > 0 ? availableBotAlgorithms : undefined}
         selectedBotAlgorithm={selectedBotAlgorithm}
         onBotAlgorithmChange={onBotAlgorithmChange}
