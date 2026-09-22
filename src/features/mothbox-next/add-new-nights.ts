@@ -15,7 +15,10 @@ import type { PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-
 import {
   appendNdjsonRows,
   appendNdjsonRowsByKey,
+  dirnameOf,
+  findFoldersWithNewDetectorRuns,
   findUningestedNightFolders,
+  groupPathsByFolder,
   isBotDetectionFileName,
   isPathInFolders,
   parseNdjson,
@@ -31,9 +34,24 @@ const RECORDS = {
 } as const
 
 export type NewNightsDetection = {
-  /** Night folders present on disk but absent from the records. */
+  /** Every folder the merge should process: new nights plus nights with a new run. */
   folders: string[]
+  /** Night folders present on disk but absent from the records. */
+  newNightFolders: string[]
+  /**
+   * Nights already in the records whose current detections on disk come from a
+   * detector the records don't have — Process re-ran them with a new model.
+   */
+  newRunFolders: Array<{ folder: string; newDetectors: string[] }>
 }
+
+/**
+ * How many current `_botdetection.json` files to read per ingested night to learn
+ * its on-disk detector. A Process re-run rewrites every file in the folder with
+ * the same `version`, so a small sample is enough and keeps the check cheap — it
+ * runs on every dataset open, not just Refresh.
+ */
+const DETECTOR_SAMPLE_PER_FOLDER = 3
 
 export type AddNewNightsResult = {
   folders: string[]
@@ -55,15 +73,48 @@ async function readTextSafe(io: DinalabAdapterIO, relativePath: string): Promise
  * Read-only — makes no writes.
  */
 export async function detectNewNightFolders(io: DinalabAdapterIO): Promise<NewNightsDetection> {
+  const empty: NewNightsDetection = { folders: [], newNightFolders: [], newRunFolders: [] }
   const botDetectionPaths = await io.source.findFiles(isBotDetectionFileName)
-  if (!botDetectionPaths.length) return { folders: [] }
+  if (!botDetectionPaths.length) return empty
 
   const patchesText = await readTextSafe(io, RECORDS.patches)
-  const existingAssetPaths = parseNdjson<{ asset_path?: string }>(patchesText)
+  const patchRows = parseNdjson<{ asset_path?: string; detector_id?: string }>(patchesText)
+  const existingAssetPaths = patchRows
     .map((row) => row?.asset_path)
     .filter((path): path is string => typeof path === 'string' && !!path)
 
-  return { folders: findUningestedNightFolders({ botDetectionPaths, existingAssetPaths }) }
+  const newNightFolders = findUningestedNightFolders({ botDetectionPaths, existingAssetPaths })
+
+  // Which detectors the records already hold, per ingested night folder.
+  const knownDetectorsByFolder = new Map<string, Set<string>>()
+  for (const row of patchRows) {
+    const folder = typeof row?.asset_path === 'string' ? dirnameOf(row.asset_path) : ''
+    if (!folder) continue
+    let set = knownDetectorsByFolder.get(folder)
+    if (!set) knownDetectorsByFolder.set(folder, (set = new Set()))
+    if (typeof row.detector_id === 'string' && row.detector_id) set.add(row.detector_id)
+  }
+
+  // Sample the current detections of each ingested night to learn its detector.
+  const onDiskDetectorsByFolder = new Map<string, Set<string>>()
+  for (const [folder, paths] of groupPathsByFolder(botDetectionPaths)) {
+    if (!knownDetectorsByFolder.has(folder)) continue // a brand-new night; handled above
+    const detectors = new Set<string>()
+    for (const path of paths.slice(0, DETECTOR_SAMPLE_PER_FOLDER)) {
+      try {
+        const parsed = JSON.parse(await io.source.readText(path)) as { version?: unknown }
+        if (typeof parsed?.version === 'string' && parsed.version.trim()) detectors.add(parsed.version.trim())
+      } catch {
+        // unreadable/malformed file — skip; other samples still count
+      }
+    }
+    if (detectors.size) onDiskDetectorsByFolder.set(folder, detectors)
+  }
+
+  const newRunFolders = findFoldersWithNewDetectorRuns({ onDiskDetectorsByFolder, knownDetectorsByFolder })
+
+  const folders = [...new Set([...newNightFolders, ...newRunFolders.map((entry) => entry.folder)])].sort()
+  return { folders, newNightFolders, newRunFolders }
 }
 
 /** Wraps the source IO so `findFiles` only sees files inside `folders`. */

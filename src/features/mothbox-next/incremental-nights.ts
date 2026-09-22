@@ -126,3 +126,43 @@ export function appendNdjsonRows<T>(params: { existingText: string; additions: T
   const base = existingText.length && !existingText.endsWith('\n') ? `${existingText}\n` : existingText
   return { text: `${base}${lines.join('\n')}\n`, addedCount: lines.length }
 }
+
+/** Groups source-relative paths by their night folder (`dirnameOf`). */
+export function groupPathsByFolder(paths: string[]): Map<string, string[]> {
+  const byFolder = new Map<string, string[]>()
+  for (const path of paths) {
+    const folder = dirnameOf(path)
+    if (!folder) continue
+    const list = byFolder.get(folder)
+    if (list) list.push(path)
+    else byFolder.set(folder, [path])
+  }
+  for (const list of byFolder.values()) list.sort()
+  return byFolder
+}
+
+/**
+ * Night folders already in the records whose *current* `_botdetection.json`
+ * files on disk carry a detector the records don't know for that folder — i.e.
+ * Mothbot Process re-ran detection on an existing night with a new model.
+ *
+ * The old run stays in the records untouched; the merge only appends the new
+ * run's patches (their ids embed the model name, so they never collide).
+ * Uningested folders are not reported here — see `findUningestedNightFolders`.
+ */
+export function findFoldersWithNewDetectorRuns(params: {
+  /** Detector versions read from current `_botdetection.json` files, per folder. */
+  onDiskDetectorsByFolder: Map<string, Set<string>>
+  /** `detector_id` values already in `patches.ndjson`, per folder of `asset_path`. */
+  knownDetectorsByFolder: Map<string, Set<string>>
+}): Array<{ folder: string; newDetectors: string[] }> {
+  const { onDiskDetectorsByFolder, knownDetectorsByFolder } = params
+  const found: Array<{ folder: string; newDetectors: string[] }> = []
+  for (const [folder, onDisk] of onDiskDetectorsByFolder) {
+    const known = knownDetectorsByFolder.get(folder)
+    if (!known) continue // never ingested — handled as a new night, not a new run
+    const newDetectors = [...onDisk].filter((detector) => !known.has(detector)).sort()
+    if (newDetectors.length) found.push({ folder, newDetectors })
+  }
+  return found.sort((a, b) => a.folder.localeCompare(b.folder))
+}

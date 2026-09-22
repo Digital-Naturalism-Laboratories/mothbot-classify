@@ -37,6 +37,37 @@ async function resolveDirectory(
   return dir ?? null
 }
 
+function nightName(folder: string): string {
+  return folder.split('/').pop() || folder
+}
+
+function previewList(names: string[]): string {
+  return names.slice(0, 3).join(', ') + (names.length > 3 ? `, +${names.length - 3} more` : '')
+}
+
+/** Toast title/description for what Process left on disk: new nights, new runs, or both. */
+function describeDetection(detection: Awaited<ReturnType<typeof detectNewNightFolders>>): {
+  title: string
+  description: string
+} {
+  const nights = detection.newNightFolders.length
+  const runs = detection.newRunFolders.length
+  const parts: string[] = []
+  if (nights) parts.push(`${nights} new night${nights === 1 ? '' : 's'}`)
+  if (runs) parts.push(`${runs} night${runs === 1 ? '' : 's'} with a new detection run`)
+  const title = `${parts.join(' and ')} found on disk`
+
+  const descriptions: string[] = []
+  if (nights) descriptions.push(`${previewList(detection.newNightFolders.map(nightName))} — not yet in this dataset.`)
+  if (runs) {
+    const detectors = [...new Set(detection.newRunFolders.flatMap((entry) => entry.newDetectors))]
+    descriptions.push(
+      `${previewList(detection.newRunFolders.map((entry) => nightName(entry.folder)))} re-run with ${detectors.join(', ')} — the earlier run stays.`,
+    )
+  }
+  return { title, description: descriptions.join(' ') }
+}
+
 /**
  * Looks for night folders that Mothbot Process wrote into the open package but
  * which aren't in its records yet, and offers to add them.
@@ -99,12 +130,11 @@ export async function checkForNewNightsInOpenPackage(): Promise<number> {
   if (!detection.folders.length) return 0
 
   const count = detection.folders.length
-  const names = detection.folders.map((folder) => folder.split('/').pop() || folder)
-  const preview = names.slice(0, 3).join(', ') + (names.length > 3 ? `, +${names.length - 3} more` : '')
+  const { title, description } = describeDetection(detection)
 
-  toast.info(`${count} new night${count === 1 ? '' : 's'} found on disk`, {
+  toast.info(title, {
     id: NEW_NIGHTS_TOAST_ID,
-    description: `${preview} — not yet in this dataset. Existing identifications are kept.`,
+    description: `${description} Existing identifications are kept.`,
     duration: Infinity,
     action: {
       label: 'Add',
@@ -135,9 +165,9 @@ async function runAddNewNights(params: {
   const { io, packageDir, folders, datasetId, sourcePrefix, folderName } = params
   const humanClassifierId = (userSessionStore.get()?.initials || 'user').trim().toLowerCase() || 'user'
 
-  toast.loading('Adding new nights…', {
+  toast.loading('Adding to dataset…', {
     id: NEW_NIGHTS_TOAST_ID,
-    description: `Building records for ${folders.length} night${folders.length === 1 ? '' : 's'}.`,
+    description: `Building records for ${folders.length} night folder${folders.length === 1 ? '' : 's'}.`,
     duration: Infinity,
     action: undefined,
   })
@@ -179,9 +209,13 @@ async function runAddNewNights(params: {
     // fingerprint covers 02_records/ and 03_classifications/).
     await openDatasetByFolderName({ folderName, showSuccessToast: false })
 
+    const merged: string[] = []
+    if (result.cameraDaysAdded) merged.push(`${result.cameraDaysAdded} new night${result.cameraDaysAdded === 1 ? '' : 's'}`)
+    const runFolders = folders.length - result.cameraDaysAdded
+    if (runFolders > 0) merged.push(`a new detection run on ${runFolders} night${runFolders === 1 ? '' : 's'}`)
     toast.success(`Added ${result.patchesAdded.toLocaleString()} patches`, {
       id: NEW_NIGHTS_TOAST_ID,
-      description: `${result.cameraDaysAdded} new night${result.cameraDaysAdded === 1 ? '' : 's'} merged into this dataset.`,
+      description: `${merged.join(' and ') || 'Records'} merged into this dataset. Pick the run from the Detection run menu.`,
       duration: 6000,
       action: undefined,
     })

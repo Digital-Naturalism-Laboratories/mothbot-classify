@@ -3,7 +3,9 @@ import {
   appendNdjsonRows,
   appendNdjsonRowsByKey,
   dirnameOf,
+  findFoldersWithNewDetectorRuns,
   findUningestedNightFolders,
+  groupPathsByFolder,
   isPathInFolders,
   parseNdjson,
 } from '../incremental-nights'
@@ -153,5 +155,58 @@ describe('path helpers', () => {
     expect(isPathInFolders('Cactus/night2', folders)).toBe(true)
     expect(isPathInFolders('Cactus/night20/a.jpg', folders)).toBe(false)
     expect(isPathInFolders('Cactus/night1/a.jpg', folders)).toBe(false)
+  })
+})
+
+describe('findFoldersWithNewDetectorRuns', () => {
+  const known = (entries: Array<[string, string[]]>) => new Map(entries.map(([f, d]) => [f, new Set(d)]))
+
+  it('flags an ingested night whose current detections come from a new model', () => {
+    const found = findFoldersWithNewDetectorRuns({
+      onDiskDetectorsByFolder: known([['bowedBarbo_2026-06-22', ['Mothbot_MBD-1-1.pt']]]),
+      knownDetectorsByFolder: known([['bowedBarbo_2026-06-22', ['Mothbot_MBD-0-2.pt']]]),
+    })
+    expect(found).toEqual([{ folder: 'bowedBarbo_2026-06-22', newDetectors: ['Mothbot_MBD-1-1.pt'] }])
+  })
+
+  it('returns nothing when the on-disk detector is already in the records', () => {
+    const found = findFoldersWithNewDetectorRuns({
+      onDiskDetectorsByFolder: known([['n1', ['Mothbot_MBD-0-2.pt']]]),
+      knownDetectorsByFolder: known([['n1', ['Mothbot_MBD-0-2.pt', 'HumanDetection']]]),
+    })
+    expect(found).toEqual([])
+  })
+
+  it('ignores folders the records have never ingested (those are new nights, not new runs)', () => {
+    const found = findFoldersWithNewDetectorRuns({
+      onDiskDetectorsByFolder: known([['brand-new-night', ['Mothbot_MBD-1-1.pt']]]),
+      knownDetectorsByFolder: known([['other', ['Mothbot_MBD-0-2.pt']]]),
+    })
+    expect(found).toEqual([])
+  })
+
+  it('reports multiple nights sorted, listing only the unknown detectors', () => {
+    const found = findFoldersWithNewDetectorRuns({
+      onDiskDetectorsByFolder: known([
+        ['b', ['Mothbot_MBD-1-1.pt', 'Mothbot_MBD-0-2.pt']],
+        ['a', ['Mothbot_MBD-1-1.pt']],
+      ]),
+      knownDetectorsByFolder: known([
+        ['a', ['Mothbot_MBD-0-2.pt']],
+        ['b', ['Mothbot_MBD-0-2.pt']],
+      ]),
+    })
+    expect(found).toEqual([
+      { folder: 'a', newDetectors: ['Mothbot_MBD-1-1.pt'] },
+      { folder: 'b', newDetectors: ['Mothbot_MBD-1-1.pt'] },
+    ])
+  })
+})
+
+describe('groupPathsByFolder', () => {
+  it('groups by night folder and sorts paths within each group', () => {
+    const grouped = groupPathsByFolder(['n2/b_botdetection.json', 'n1/z_botdetection.json', 'n1/a_botdetection.json'])
+    expect([...grouped.keys()].sort()).toEqual(['n1', 'n2'])
+    expect(grouped.get('n1')).toEqual(['n1/a_botdetection.json', 'n1/z_botdetection.json'])
   })
 })
