@@ -14,9 +14,13 @@
  * bar, so a later refresh doesn't keep re-requesting the same dataset.
  */
 export type RequestedDatasetHandoff = {
-  /** Dataset folder name inside the datasets root (never a path). */
-  folderName: string
-  /** Parent folder the user should choose as Classify's datasets folder (display only). */
+  /**
+   * Dataset folder name inside the datasets root (never a path). Null when
+   * Process couldn't tell which dataset was meant — the root still lets us
+   * check that Classify is pointed at the right folder.
+   */
+  folderName: string | null
+  /** The folder to use as Classify's datasets folder (display only, never touched). */
   rootPath: string | null
 }
 
@@ -36,8 +40,8 @@ export function getRequestedDatasetHandoff(): RequestedDatasetHandoff | null {
     const url = new URL(window.location.href)
     const name = url.searchParams.get(DATASET_PARAM)?.trim() ?? ''
     const root = url.searchParams.get(ROOT_PARAM)?.trim() ?? ''
-    if (isSafeFolderName(name)) {
-      cached = { folderName: name, rootPath: root || null }
+    if (isSafeFolderName(name) || root) {
+      cached = { folderName: isSafeFolderName(name) ? name : null, rootPath: root || null }
     }
     if (url.searchParams.has(DATASET_PARAM) || url.searchParams.has(ROOT_PARAM)) {
       url.searchParams.delete(DATASET_PARAM)
@@ -52,4 +56,12 @@ export function getRequestedDatasetHandoff(): RequestedDatasetHandoff | null {
 
 export function getRequestedDatasetFolderName(): string | null {
   return getRequestedDatasetHandoff()?.folderName ?? null
+}
+
+/** Last path segment of the handed-off root, for comparing against the open datasets folder. */
+export function requestedRootFolderName(): string | null {
+  const root = getRequestedDatasetHandoff()?.rootPath
+  if (!root) return null
+  const segments = root.replace(/\\/g, '/').split('/').filter(Boolean)
+  return segments.length ? segments[segments.length - 1] : null
 }

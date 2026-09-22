@@ -11,6 +11,7 @@ import { Row } from '~/styles'
 import { HomeDatasetsPanel } from './home-datasets-panel'
 import { ProjectsSection } from './projects-section'
 import { ProcessHandoffPrompt } from './process-handoff-prompt'
+import { UnsupportedBrowserBanner } from './unsupported-browser-banner'
 
 export function Home() {
   const { isBlockingLoading, isOpeningDataset } = useAppLoading()
@@ -30,6 +31,7 @@ export function Home() {
         <HomeDatasetsPanel />
       </div>
       <div className='min-h-0 flex-1'>
+        <UnsupportedBrowserBanner />
         {pickerError ? (
           <div className='mb-12 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 text-pretty'>{pickerError}</div>
         ) : null}

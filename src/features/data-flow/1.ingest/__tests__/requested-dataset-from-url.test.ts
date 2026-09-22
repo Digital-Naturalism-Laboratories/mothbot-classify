@@ -58,8 +58,25 @@ describe('getRequestedDatasetHandoff (root path for the prompt)', () => {
     expect(mod.getRequestedDatasetHandoff()).toEqual({ folderName: 'Maine', rootPath: null })
   })
 
-  it('ignores root when the dataset name is unsafe', async () => {
+  it('drops an unsafe dataset name but keeps the root (root alone is a valid handoff)', async () => {
     const mod = await loadFresh('?dataset=..&root=%2Ftmp')
-    expect(mod.getRequestedDatasetHandoff()).toBeNull()
+    expect(mod.getRequestedDatasetHandoff()).toEqual({ folderName: null, rootPath: '/tmp' })
+    expect(mod.getRequestedDatasetFolderName()).toBeNull()
+  })
+
+  it('accepts a root-only handoff (Process could not tell which dataset was meant)', async () => {
+    const mod = await loadFresh('?root=%2FUsers%2Fme%2FMB%20Projects%2FKrkCreate')
+    expect(mod.getRequestedDatasetHandoff()).toEqual({
+      folderName: null,
+      rootPath: '/Users/me/MB Projects/KrkCreate',
+    })
+    expect(mod.requestedRootFolderName()).toBe('KrkCreate')
+  })
+
+  it('requestedRootFolderName returns the last segment, and null without a root', async () => {
+    const withRoot = await loadFresh('?dataset=Maine&root=%2FUsers%2Fme%2FMB%20Projects')
+    expect(withRoot.requestedRootFolderName()).toBe('MB Projects')
+    const withoutRoot = await loadFresh('?dataset=Maine')
+    expect(withoutRoot.requestedRootFolderName()).toBeNull()
   })
 })

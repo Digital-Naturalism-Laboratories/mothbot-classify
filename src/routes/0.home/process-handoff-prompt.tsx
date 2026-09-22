@@ -14,8 +14,10 @@ import { useRestoreDirectoryQuery } from '~/features/data-flow/1.ingest/files-qu
 import { openDatasetByFolderName } from '~/features/data-flow/1.ingest/open-dataset-by-folder'
 import {
   getRequestedDatasetHandoff,
+  requestedRootFolderName,
   type RequestedDatasetHandoff,
 } from '~/features/data-flow/1.ingest/requested-dataset-from-url'
+import { isDirectoryPickerAvailable } from '~/features/data-flow/1.ingest/directory-picker'
 import { loadDatasetsDirectory } from '~/features/data-flow/3.persist/files.persistence'
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
 import { datasetsRegistryStore } from '~/stores/datasets-registry'
@@ -45,7 +47,12 @@ export function ProcessHandoffPrompt() {
     const handoff = getRequestedDatasetHandoff()
     if (!handoff) return
     if (isMothboxNextPackageOpen()) return
-    if (isRequestedDatasetInRegistry(handoff.folderName)) return // startup auto-open handles it
+    // The named dataset is already here — startup auto-open handles it.
+    if (handoff.folderName && isRequestedDatasetInRegistry(handoff.folderName)) return
+    // No dataset named, but Classify is already pointed at the handed-off
+    // folder — nothing to fix, the user just picks from the list.
+    const rootName = requestedRootFolderName()
+    if (!handoff.folderName && rootName && workspace?.folderName === rootName) return
 
     prompted.current = true
     void loadDatasetsDirectory().then((saved) => {
@@ -76,11 +83,15 @@ function ProcessHandoffDialog(props: {
   const { handoff, hasSavedRoot, currentRootName } = props
   const [busy, setBusy] = useState<Busy>(null)
   const name = handoff.folderName
+  const target = name ?? handoff.rootPath?.split('/').filter(Boolean).pop() ?? 'your dataset'
+  const pickerUnsupported = !isDirectoryPickerAvailable()
 
   const explanation = !hasSavedRoot
     ? 'Classify hasn’t been pointed at your datasets folder on this computer yet.'
     : currentRootName
-      ? `Classify’s datasets folder is currently “${currentRootName}”, which doesn’t contain “${name}” — or its access needs re-granting.`
+      ? name
+        ? `Classify’s datasets folder is currently “${currentRootName}”, which doesn’t contain “${name}” — or its access needs re-granting.`
+        : `Classify’s datasets folder is currently “${currentRootName}”, not the folder you chose in Process.`
       : 'Classify needs access to your datasets folder again.'
 
   async function copyPath() {
@@ -94,6 +105,11 @@ function ProcessHandoffDialog(props: {
   }
 
   async function openIfPresent(): Promise<boolean> {
+    // With no dataset named, setting the right folder is the whole job.
+    if (!name) {
+      closeGlobalDialog()
+      return true
+    }
     if (!isRequestedDatasetInRegistry(name)) return false
     const opened = await openDatasetByFolderName({ folderName: name })
     if (opened) closeGlobalDialog()
@@ -109,7 +125,7 @@ function ProcessHandoffDialog(props: {
         await hydrateDatasetsWorkspaceFromDisk()
         if (await openIfPresent()) return
       }
-      toast.error(`“${name}” isn’t in the saved folder.`, {
+      toast.error(`“${target}” isn’t in the saved folder.`, {
         description: handoff.rootPath ? `Choose ${handoff.rootPath} instead.` : 'Choose the folder that contains it.',
       })
     } finally {
@@ -127,10 +143,10 @@ function ProcessHandoffDialog(props: {
       if (!ok) return
       if (await openIfPresent()) return
       const picked = (handle as { name?: string }).name ?? 'that folder'
-      toast.error(`“${name}” isn’t inside “${picked}”.`, {
+      toast.error(`“${target}” isn’t inside “${picked}”.`, {
         description: handoff.rootPath
-          ? `Pick ${handoff.rootPath} — the folder that contains “${name}”.`
-          : `Pick the folder that contains “${name}”.`,
+          ? `Pick ${handoff.rootPath} — the folder Process was pointed at.`
+          : `Pick the folder that contains “${target}”.`,
         duration: 10000,
       })
     } finally {
@@ -141,13 +157,23 @@ function ProcessHandoffDialog(props: {
   return (
     <div>
       <DialogHeader>
-        <DialogTitle>Open “{name}” from Mothbot Process</DialogTitle>
+        <DialogTitle>Open “{target}” from Mothbot Process</DialogTitle>
       </DialogHeader>
 
       <p className='mt-12 text-13 text-neutral-700 text-pretty'>{explanation}</p>
 
+      {pickerUnsupported ? (
+        <p className='mt-8 rounded bg-amber-50 px-10 py-8 text-13 text-amber-900 text-pretty'>
+          <b>This browser can’t open folders.</b> Classify needs the File System Access API, which only
+          Chrome, Edge, and other Chromium browsers support. Copy this page’s address into Chrome to
+          continue.
+        </p>
+      ) : null}
+
       <p className='mt-8 text-13 text-neutral-700 text-pretty'>
-        Point Classify’s datasets folder at the folder that <b>contains</b> “{name}”:
+        Point Classify’s datasets folder at{name ? ' the folder that ' : ' '}
+        {name ? <b>contains</b> : null}
+        {name ? ` “${name}”:` : 'this folder:'}
       </p>
       {handoff.rootPath ? (
         <div className='mt-6 flex items-center gap-6'>
@@ -181,7 +207,7 @@ function ProcessHandoffDialog(props: {
             )}
           </Button>
         ) : null}
-        <Button type='button' variant='primary' disabled={busy !== null} onClick={() => void chooseFolder()}>
+        <Button type='button' variant='primary' disabled={busy !== null || pickerUnsupported} onClick={() => void chooseFolder()}>
           {busy === 'pick' ? (
             <span className='inline-flex items-center gap-6'>
               <Loader size={14} />
