@@ -15,6 +15,12 @@ import {
 import { isMothboxNextPackageOpen } from '~/features/mothbox-next/active-package'
 import { openDatasetByFolderName } from './open-dataset-by-folder'
 import { resolveDefaultDatasetFolderName } from './resolve-default-dataset-folder'
+import { getRequestedDatasetFolderName } from './requested-dataset-from-url'
+
+/** Prefer a dataset handed off from Mothbot Process (`?dataset=`) over the last-used one. */
+function preferredDatasetFolderName(): string | null {
+  return getRequestedDatasetFolderName() ?? loadLastActiveDatasetFolderName()
+}
 
 /** Highlights last-used dataset in the registry without loading package data from disk. */
 export function rememberDefaultDatasetSelection(): boolean {
@@ -22,7 +28,7 @@ export function rememberDefaultDatasetSelection(): boolean {
 
   const folderName = resolveDefaultDatasetFolderName({
     entries: datasetsRegistryStore.get(),
-    lastUsedFolderName: loadLastActiveDatasetFolderName(),
+    lastUsedFolderName: preferredDatasetFolderName(),
   })
   if (!folderName) return false
 
@@ -35,7 +41,7 @@ export async function ensureDefaultDatasetOpen(): Promise<boolean> {
 
   const folderName = resolveDefaultDatasetFolderName({
     entries: datasetsRegistryStore.get(),
-    lastUsedFolderName: loadLastActiveDatasetFolderName(),
+    lastUsedFolderName: preferredDatasetFolderName(),
   })
   if (!folderName) return false
 
@@ -70,7 +76,7 @@ export async function warmDefaultDatasetInBackground(): Promise<boolean> {
 
     const folderName = resolveDefaultDatasetFolderName({
       entries: datasetsRegistryStore.get(),
-      lastUsedFolderName: loadLastActiveDatasetFolderName(),
+      lastUsedFolderName: preferredDatasetFolderName(),
     })
     if (!folderName) return false
 
