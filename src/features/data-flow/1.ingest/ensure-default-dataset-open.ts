@@ -17,19 +17,28 @@ import { openDatasetByFolderName } from './open-dataset-by-folder'
 import { resolveDefaultDatasetFolderName } from './resolve-default-dataset-folder'
 import { getRequestedDatasetFolderName } from './requested-dataset-from-url'
 
-/** Prefer a dataset handed off from Mothbot Process (`?dataset=`) over the last-used one. */
-function preferredDatasetFolderName(): string | null {
-  return getRequestedDatasetFolderName() ?? loadLastActiveDatasetFolderName()
+/**
+ * Which dataset startup should open.
+ *
+ * A handoff from Mothbot Process (`?dataset=`) names a specific dataset: open it
+ * if it's in the registry, but NEVER fall back to a different dataset — the home
+ * screen prompts the user to point Classify at the right folder instead.
+ * Without a handoff, use the normal last-used / first-alphabetical default.
+ */
+function resolveStartupDatasetFolderName(): string | null {
+  const entries = datasetsRegistryStore.get()
+  const requested = getRequestedDatasetFolderName()
+  if (requested) {
+    return entries.some((entry) => entry.folderName === requested) ? requested : null
+  }
+  return resolveDefaultDatasetFolderName({ entries, lastUsedFolderName: loadLastActiveDatasetFolderName() })
 }
 
 /** Highlights last-used dataset in the registry without loading package data from disk. */
 export function rememberDefaultDatasetSelection(): boolean {
   if (activeDatasetFolderNameStore.get()) return false
 
-  const folderName = resolveDefaultDatasetFolderName({
-    entries: datasetsRegistryStore.get(),
-    lastUsedFolderName: preferredDatasetFolderName(),
-  })
+  const folderName = resolveStartupDatasetFolderName()
   if (!folderName) return false
 
   setActiveDatasetFolderName(folderName)
@@ -39,10 +48,7 @@ export function rememberDefaultDatasetSelection(): boolean {
 export async function ensureDefaultDatasetOpen(): Promise<boolean> {
   if (isMothboxNextPackageOpen()) return false
 
-  const folderName = resolveDefaultDatasetFolderName({
-    entries: datasetsRegistryStore.get(),
-    lastUsedFolderName: preferredDatasetFolderName(),
-  })
+  const folderName = resolveStartupDatasetFolderName()
   if (!folderName) return false
 
   return openDatasetByFolderName({ folderName })
@@ -74,10 +80,7 @@ export async function warmDefaultDatasetInBackground(): Promise<boolean> {
       return false
     }
 
-    const folderName = resolveDefaultDatasetFolderName({
-      entries: datasetsRegistryStore.get(),
-      lastUsedFolderName: preferredDatasetFolderName(),
-    })
+    const folderName = resolveStartupDatasetFolderName()
     if (!folderName) return false
 
     setDatasetAutoLoadInFlight(folderName)

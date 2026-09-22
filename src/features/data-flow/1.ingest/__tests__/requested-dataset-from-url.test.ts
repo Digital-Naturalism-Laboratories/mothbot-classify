@@ -41,3 +41,25 @@ describe('getRequestedDatasetFolderName (Process → Classify handoff)', () => {
     }
   })
 })
+
+describe('getRequestedDatasetHandoff (root path for the prompt)', () => {
+  afterEach(() => {
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('carries the decoded root path and strips both params', async () => {
+    const mod = await loadFresh('?dataset=Maine&root=%2FUsers%2Fme%2FMB%20Projects')
+    expect(mod.getRequestedDatasetHandoff()).toEqual({ folderName: 'Maine', rootPath: '/Users/me/MB Projects' })
+    expect(window.location.search).toBe('')
+  })
+
+  it('rootPath is null when only dataset is given', async () => {
+    const mod = await loadFresh('?dataset=Maine')
+    expect(mod.getRequestedDatasetHandoff()).toEqual({ folderName: 'Maine', rootPath: null })
+  })
+
+  it('ignores root when the dataset name is unsafe', async () => {
+    const mod = await loadFresh('?dataset=..&root=%2Ftmp')
+    expect(mod.getRequestedDatasetHandoff()).toBeNull()
+  })
+})

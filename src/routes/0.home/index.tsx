@@ -10,6 +10,7 @@ import { useAppLoading } from '~/features/data-flow/1.ingest/files-queries'
 import { Row } from '~/styles'
 import { HomeDatasetsPanel } from './home-datasets-panel'
 import { ProjectsSection } from './projects-section'
+import { ProcessHandoffPrompt } from './process-handoff-prompt'
 
 export function Home() {
   const { isBlockingLoading, isOpeningDataset } = useAppLoading()
@@ -24,6 +25,7 @@ export function Home() {
 
   return (
     <Row className='p-20 pt-12 h-full min-h-0 items-start gap-16 overflow-y-auto'>
+      <ProcessHandoffPrompt />
       <div className='flex w-[240px] shrink-0 self-stretch min-h-0 flex-col'>
         <HomeDatasetsPanel />
       </div>
