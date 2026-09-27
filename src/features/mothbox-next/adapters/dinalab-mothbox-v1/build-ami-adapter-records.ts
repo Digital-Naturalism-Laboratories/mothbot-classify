@@ -296,7 +296,7 @@ async function readAmiMetadataRows(params: {
     })
 
     const rows = await readAmiParquetMetadataRows({ source, metadataPath, cropIds })
-    parquetRows.push(...rows)
+    for (const row of rows) parquetRows.push(row)
   }
 
   const parquetDetectionIds = new Set(parquetRows.map((row) => row.detectionid))
@@ -324,11 +324,12 @@ async function readAmiMetadataRows(params: {
       description: `Reading AMI CSV metadata ${metadataPath}...`,
     })
 
-    csvRows.push(...readAmiCsvMetadataRows({
+    const rows = readAmiCsvMetadataRows({
       text: await source.readText(metadataPath),
       metadataPath,
       cropIds,
-    }))
+    })
+    for (const row of rows) csvRows.push(row)
   }
 
   return mergeAmiPrimaryAndSupplementalRows({
@@ -550,19 +551,16 @@ function selectDatasetAlgorithm(allRows: AmiMetadataRow[]): string {
   const ranked = [...byAlgorithm.entries()]
     .map(([algorithm, rows]) => {
       const ranks = [...new Set(rows.map((row) => normalizeTaxonLevel(row.taxonlevel)))]
-      const deepestRankIndex = Math.max(
-        ...ranks.map((rank) => TAXON_RANK_ORDER.indexOf(rank as (typeof TAXON_RANK_ORDER)[number])),
+      const deepestRankIndex = maxOf(ranks.map((rank) => TAXON_RANK_ORDER.indexOf(rank as (typeof TAXON_RANK_ORDER)[number])),
       )
       const deepestRank = TAXON_RANK_ORDER[deepestRankIndex]
       const bestScore = deepestRank
-        ? Math.max(
-            ...rows
+        ? maxOf(rows
               .filter((row) => normalizeTaxonLevel(row.taxonlevel) === deepestRank)
               .map((row) => row.score ?? Number.NEGATIVE_INFINITY),
           )
         : Number.NEGATIVE_INFINITY
-      const maxTimestamp = Math.max(
-        ...rows.map((row) => {
+      const maxTimestamp = maxOf(rows.map((row) => {
           const ts = row.timestamp
           if (typeof ts === 'bigint') return Number(ts)
           return (ts as number | null | undefined) ?? Number.NEGATIVE_INFINITY
@@ -681,17 +679,15 @@ function selectAmiClassifierRows(rows: AmiMetadataRow[]) {
   const ranked = [...byAlgorithm.entries()]
     .map(([algorithm, algorithmRows]) => {
       const ranks = uniqueStrings(algorithmRows.map((row) => normalizeTaxonLevel(row.taxonlevel)))
-      const deepestRankIndex = Math.max(...ranks.map((rank) => TAXON_RANK_ORDER.indexOf(rank as (typeof TAXON_RANK_ORDER)[number])))
+      const deepestRankIndex = maxOf(ranks.map((rank) => TAXON_RANK_ORDER.indexOf(rank as (typeof TAXON_RANK_ORDER)[number])))
       const deepestRank = TAXON_RANK_ORDER[deepestRankIndex]
       const primaryScore = deepestRank
-        ? Math.max(
-            ...algorithmRows
+        ? maxOf(algorithmRows
               .filter((row) => normalizeTaxonLevel(row.taxonlevel) === deepestRank)
               .map((row) => row.score ?? Number.NEGATIVE_INFINITY),
           )
         : Number.NEGATIVE_INFINITY
-      const maxTimestamp = Math.max(
-        ...algorithmRows.map((row) => {
+      const maxTimestamp = maxOf(algorithmRows.map((row) => {
           const ts = row.timestamp
           if (typeof ts === 'bigint') return Number(ts)
           return (ts as number | null | undefined) ?? Number.NEGATIVE_INFINITY
@@ -985,4 +981,15 @@ function deduplicateTaggedByFileName<T extends { metadataPath: string }>(entries
     seen.add(base)
     return true
   })
+}
+
+/**
+ * Largest value, or -Infinity for none. A loop rather than `Math.max(...values)`:
+ * spreading passes every element as a call argument, and Chrome's V8 overflows
+ * the stack past ~110k arguments — dataset-wide row lists get that big.
+ */
+function maxOf(values: Iterable<number>): number {
+  let max = Number.NEGATIVE_INFINITY
+  for (const value of values) if (value > max) max = value
+  return max
 }

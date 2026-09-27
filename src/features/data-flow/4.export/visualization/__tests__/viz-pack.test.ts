@@ -37,7 +37,7 @@ describe('computePlacements — bar', () => {
     expect(res.height).toBeGreaterThan(0)
     assertNoOverlap(items, res)
     // Cropped so content starts at the top.
-    expect(Math.min(...res.placements.map((p) => p.dy))).toBe(0)
+    expect(res.placements.reduce((min, p) => Math.min(min, p.dy), Number.POSITIVE_INFINITY)).toBe(0)
   })
 
   it('skips items wider than the canvas rather than overlapping', () => {

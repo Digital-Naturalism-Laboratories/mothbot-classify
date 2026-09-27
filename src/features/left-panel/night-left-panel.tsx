@@ -22,6 +22,7 @@ import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control
 import { PatchSizeControl } from '~/components/atomic/patch-size-control'
 import type { LeafGroupLeftPanelProps } from './left-panel.types'
 import { WarningsBox } from './warnings-box'
+import { NightPartsSection } from './night-parts-section'
 import { TaxonomySection } from './taxonomy-section'
 import { NightSelectorSection } from './night-selector'
 import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
@@ -62,6 +63,10 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     selectedBucket,
     onSelectTaxon,
     warnings,
+    nightParts,
+    nightPartsTotal = 0,
+    selectedNightPart = 0,
+    onNightPartChange,
     className,
   } = props
 
@@ -86,6 +91,15 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           detectorIds={availableDetectorIds}
           selectedDetectorId={selectedDetectorId}
           onDetectorChange={onDetectorChange}
+          className='mb-16'
+        />
+      ) : null}
+      {nightParts && nightParts.length > 1 && onNightPartChange ? (
+        <NightPartsSection
+          parts={nightParts}
+          total={nightPartsTotal}
+          selected={selectedNightPart}
+          onChange={onNightPartChange}
           className='mb-16'
         />
       ) : null}

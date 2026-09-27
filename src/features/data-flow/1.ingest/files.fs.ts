@@ -288,7 +288,7 @@ export function normalizePathsToRoot(params: { files: IndexedPickedFile[] }): No
   const validCandidates = candidateStripCounts.filter((stripCount) => stripCount >= 0)
   if (validCandidates.length === 0) {
     const levelsNeeded = candidateStripCounts.filter((n) => n < 0).map((n) => Math.abs(n))
-    const levelsUp = Math.max(1, ...levelsNeeded)
+    const levelsUp = levelsNeeded.reduce((a, b) => Math.max(a, b), 1)
     return { ok: false, levelsUp }
   }
 

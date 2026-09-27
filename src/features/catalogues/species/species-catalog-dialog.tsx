@@ -43,6 +43,10 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
   const nights = useStore(leafGroupsStore)
 
   const catalogView = useMemo(() => {
+    // This dialog stays mounted in the nav bar and on home rows. Building the
+    // view scans every detection, so while closed build from empty inputs
+    // (cheap, same shape) instead of re-scanning after every label/accept.
+    if (!open) return buildSpeciesCatalogView({ summaries: {}, detections: {}, nights: {}, usageScope, scope: {} })
     return buildSpeciesCatalogView({
       summaries,
       detections,
@@ -50,7 +54,7 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
       usageScope,
       scope: { projectId, siteId, deploymentId, leafGroupId },
     })
-  }, [summaries, detections, nights, usageScope, projectId, siteId, deploymentId, leafGroupId])
+  }, [open, summaries, detections, nights, usageScope, projectId, siteId, deploymentId, leafGroupId])
 
   const { scopeCounts, list, taxonomyByName, allowedLeafGroupIds } = catalogView
 

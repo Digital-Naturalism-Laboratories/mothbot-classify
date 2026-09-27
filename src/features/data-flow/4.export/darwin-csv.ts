@@ -496,8 +496,8 @@ function derivePatchDimensionsFromPoints(params: { points?: number[][] }) {
     return { width: '', height: '', area: '' }
   }
 
-  const width = Math.round(Math.min(...edgeLengths))
-  const height = Math.round(Math.max(...edgeLengths))
+  const width = Math.round(edgeLengths.reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY))
+  const height = Math.round(edgeLengths.reduce((a, b) => Math.max(a, b), Number.NEGATIVE_INFINITY))
   const area = width * height
 
   return {

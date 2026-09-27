@@ -84,9 +84,13 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     return limited
   }, [speciesOptions])
 
+  // Both option lists scan every detection. The dialog stays mounted while
+  // closed (night view, catalogs), so only build them while it's open instead
+  // of after every accept/label.
   const recentOptions = useMemo(() => {
+    if (!open) return []
     return getRecentOptions({ detections, datasetId, leafGroups })
-  }, [detections, datasetId, leafGroups])
+  }, [open, detections, datasetId, leafGroups])
 
   const filteredRecentOptions = useMemo(() => {
     const q = (query ?? '').trim().toLowerCase()
@@ -95,8 +99,9 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   }, [recentOptions, query])
 
   const morphoOptions = useMemo(() => {
+    if (!open) return []
     return getMorphoOptions({ detections, datasetId, leafGroups, query })
-  }, [detections, datasetId, leafGroups, query])
+  }, [open, detections, datasetId, leafGroups, query])
 
   const morphoOptionsLimited = useMemo(() => {
     return limitOptions(morphoOptions || [])

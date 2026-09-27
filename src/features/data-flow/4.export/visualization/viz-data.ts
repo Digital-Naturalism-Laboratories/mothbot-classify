@@ -52,7 +52,13 @@ function resolveScopeDetections(config: VizConfig): DetectionEntity[] {
     // Nothing selected → fall through to the night scope.
   }
   const out: DetectionEntity[] = []
-  for (const id of config.selectedLeafGroupIds) out.push(...getDetectionsForLeafGroup(id))
+  // Plain loop, not `out.push(...dets)`: spreading passes every element as a
+  // call argument, and Chrome's V8 overflows the stack somewhere past ~110k
+  // arguments ("Maximum call stack size exceeded") — a single 160k-detection
+  // night crashed the whole app here.
+  for (const id of config.selectedLeafGroupIds) {
+    for (const det of getDetectionsForLeafGroup(id)) out.push(det)
+  }
   return out
 }
 

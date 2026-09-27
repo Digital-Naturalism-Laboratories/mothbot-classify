@@ -43,17 +43,24 @@ export async function ingestMothboxNextPackageFromIndexedFiles(params: {
     })
 
     return { ok: true as const, patchCount: loaded.patches.length }
-  } catch {
-    const detail = await describeInvalidManifest(manifestEntry)
-    return { ok: false as const, message: `Invalid mothbox-next dataset.json (${detail}).` }
+  } catch (err) {
+    console.error('🚨 ingestMothboxNextPackage: load failed', err)
+    // Only blame dataset.json when it really is invalid. Everything else (out of
+    // memory, unreadable records, a bug) used to be reported as "Invalid
+    // dataset.json (load failed)", which sent people hunting in the wrong place.
+    const manifestProblem = await describeInvalidManifest(manifestEntry)
+    if (manifestProblem) return { ok: false as const, message: `Invalid mothbox-next dataset.json (${manifestProblem}).` }
+    const reason = err instanceof Error ? err.message : String(err)
+    return { ok: false as const, message: `Could not load this dataset: ${reason}` }
   }
 }
 
-async function describeInvalidManifest(manifestEntry: IndexedFile): Promise<string> {
+/** Why dataset.json is invalid, or null when it parses as a valid manifest. */
+async function describeInvalidManifest(manifestEntry: IndexedFile): Promise<string | null> {
   try {
     const raw = JSON.parse(await readIndexedEntryText(manifestEntry))
     if (!parseDatasetManifest(raw)) return `format=${String((raw as { format?: string }).format)}`
-    return 'load failed'
+    return null
   } catch (err) {
     return String(err)
   }

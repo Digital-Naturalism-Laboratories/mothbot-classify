@@ -34,7 +34,19 @@ const NOBG_MODES = {
 } as const
 type NobgMode = keyof typeof NOBG_MODES
 
+/**
+ * Renders nothing while closed. The dialog is mounted in the night sidebar and
+ * on every home-page row, so an always-mounted body would subscribe to every
+ * detection/selection change and scan the whole night at mount even though the
+ * user never opened it. The body resets its config on each open anyway, so
+ * unmounting while closed loses nothing.
+ */
 export function VisualizationDialog(props: Props) {
+  if (!props.open) return null
+  return <VisualizationDialogBody {...props} />
+}
+
+function VisualizationDialogBody(props: Props) {
   const { open, onClose, initialLeafGroupIds } = props
 
   const leafGroups = useStore(leafGroupsStore)

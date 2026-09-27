@@ -15,7 +15,11 @@ export function nightHasMachineIdentification(params: {
     if (photo?.botDetectionFile) return true
   }
 
-  for (const detection of Object.values(detections ?? {})) {
+  // for…in, not Object.values(): this runs after every detection change and
+  // usually exits on an early match, so don't allocate an array of every
+  // detection first (177k entries on a swarm night).
+  for (const id in detections ?? {}) {
+    const detection = detections[id]
     if (detection?.leafGroupId !== leafGroupId) continue
     if (detection?.detectedBy === 'user') continue
     if (autoDetectionHasMachineTaxonomy(detection)) return true

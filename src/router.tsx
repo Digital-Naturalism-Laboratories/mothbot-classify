@@ -4,6 +4,7 @@ import { TestIdentification } from './routes/test-identification'
 import { DesignSystemColors } from './routes/ad/ds'
 import { DesignSystemTaxonTree } from './routes/ad/ds/taxon-tree'
 import { RootLayout } from '~/root-layout'
+import { AppErrorScreen } from '~/components/app-error-screen'
 import { Home } from '~/routes/0.home'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { leafGroupsStore } from '~/stores/entities/leaf-groups'
@@ -105,6 +106,7 @@ export const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   basepath: '/',
+  defaultErrorComponent: AppErrorScreen,
 })
 
 declare module '@tanstack/react-router' {

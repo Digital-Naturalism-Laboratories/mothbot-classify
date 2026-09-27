@@ -71,6 +71,9 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
   })
 
   const catalogView = useMemo(() => {
+    // Mounted in the nav bar and on home rows; skip the full detection scan
+    // while closed (see SpeciesCatalogDialog).
+    if (!open) return buildMorphoCatalogView({ summaries: {}, detections: {}, nights: {}, usageScope, scope: {} })
     return buildMorphoCatalogView({
       summaries,
       detections,
@@ -83,6 +86,7 @@ export function MorphoCatalogDialog(props: MorphoCatalogDialogProps) {
       },
     })
   }, [
+    open,
     summaries,
     detections,
     nights,

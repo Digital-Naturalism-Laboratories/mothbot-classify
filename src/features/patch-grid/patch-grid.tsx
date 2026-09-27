@@ -72,6 +72,8 @@ export type PatchGridProps = {
   /** Flip whatever order the options above produce. */
   reversed?: boolean
   hasMachineIdentification?: boolean
+  /** Changing this resets scroll/selection anchors like any other view change (e.g. a large night's part). */
+  viewKey?: string
   collapsedClusterSet?: Set<number>
   onClusterCollapseToggle?: (topClusterId: number) => void
 }
@@ -92,6 +94,7 @@ export function PatchGrid(props: PatchGridProps) {
     sortBySize = true,
     reversed = false,
     hasMachineIdentification = true,
+    viewKey = '',
     collapsedClusterSet,
     onClusterCollapseToggle,
   } = props
@@ -211,10 +214,10 @@ export function PatchGrid(props: PatchGridProps) {
   // Preserve scroll position on minor list changes (e.g., identifying items)
   // Only reset scroll when the viewing context changes (night, bucket, or selected taxon)
   const lastContextRef = useRef<string>(
-    `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${groupByTaxon}|${clusteredFirst}|${groupByClusters}|${sortBySize}|${reversed}`,
+    `${leafGroupId}|${viewKey}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${groupByTaxon}|${clusteredFirst}|${groupByClusters}|${sortBySize}|${reversed}`,
   )
   useEffect(() => {
-    const currentContext = `${leafGroupId}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${groupByTaxon}|${clusteredFirst}|${groupByClusters}|${sortBySize}|${reversed}`
+    const currentContext = `${leafGroupId}|${viewKey}|${selectedBucket || ''}|${selectedTaxon?.rank || ''}:${selectedTaxon?.name || ''}|${groupByTaxon}|${clusteredFirst}|${groupByClusters}|${sortBySize}|${reversed}`
     const contextChanged = currentContext !== lastContextRef.current
     lastContextRef.current = currentContext
 
@@ -230,7 +233,7 @@ export function PatchGrid(props: PatchGridProps) {
     setActiveHeaderBlockIndex(-1)
     rowVirtualizer.scrollToIndex(0, { align: 'start' })
     rowVirtualizer.scrollToOffset(0)
-  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, groupByTaxon, clusteredFirst, groupByClusters, sortBySize, reversed])
+  }, [displayIds.length, rowVirtualizer, columns, rowHeight, leafGroupId, viewKey, selectedBucket, selectedTaxon?.rank, selectedTaxon?.name, groupByTaxon, clusteredFirst, groupByClusters, sortBySize, reversed])
 
   // Reset to top only when the user actually changes the column slider.
   // `columns`/`rowHeight` also change whenever the container width changes

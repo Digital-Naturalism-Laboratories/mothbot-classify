@@ -35,6 +35,8 @@ import { detectionFromClassification } from '~/features/mothbox-next/classificat
 import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
 import { newestDetectorId, sortDetectorRunsNewestFirst } from '~/features/mothbox-next/detector-runs'
 import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
+import { buildNightParts, formatNightPartTimeRange } from '~/features/night-parts/night-parts'
+import { toast } from 'sonner'
 
 type TaxonSelection = { rank: 'class' | 'order' | 'family' | 'genus' | 'species'; name: string } | undefined
 
@@ -203,8 +205,8 @@ export function NightView(props: { leafGroupId: string }) {
 
     if (selectedBucket !== 'auto') return
     if (selectedTaxon) return
-    if (fallbackSnapshot.autoDetectionsCount > 0) return
-    if (fallbackSnapshot.userDetectionsCount === 0) return
+    if (fallbackSnapshot.hasAutoDetections) return
+    if (!fallbackSnapshot.hasUserDetections) return
 
     hasAppliedDefaultFallbackRef.current = true
 
@@ -213,22 +215,6 @@ export function NightView(props: { leafGroupId: string }) {
     setSelectedTaxon(fallbackTaxon)
     navigateToTaxonSelection({ router, routeContext, taxon: fallbackTaxon, bucket: 'user', singleLeafDataset })
   }, [fallbackSnapshot, search, selectedBucket, selectedTaxon, router, routeContext, singleLeafDataset])
-
-  const collapsedClusterSet = useMemo(() => {
-    if (!clustersCollapsed && clusterOverrides.size === 0) return new Set<number>()
-    const allTopIds = new Set<number>()
-    for (const det of Object.values(detections)) {
-      if (activeNightIds.has((det as any).leafGroupId) && typeof (det as any).clusterId === 'number' && (det as any).clusterId >= 0) {
-        allTopIds.add(Math.trunc((det as any).clusterId as number))
-      }
-    }
-    const result = new Set<number>()
-    for (const topId of allTopIds) {
-      const overridden = clusterOverrides.has(topId)
-      if (overridden ? !clustersCollapsed : clustersCollapsed) result.add(topId)
-    }
-    return result
-  }, [clustersCollapsed, clusterOverrides, detections, activeNightIds])
 
   const onClusterCollapseToggle = useCallback((topClusterId: number) => {
     setClusterOverrides((prev) => {
@@ -269,15 +255,74 @@ export function NightView(props: { leafGroupId: string }) {
     rebuildLeafGroupSummariesFromDetections(visibleDetections)
   }, [visibleDetections])
 
+  // Oversized nights (swarms: 50k–160k+ patches) are viewed one capture-time
+  // part at a time so every interaction stays responsive. This is a view filter
+  // layered on `list` / `visibleDetections`, exactly like the detector-run
+  // filter above: ids, leafGroupIds, saves, cluster overrides, exports, and the
+  // night summaries (built just above) all still see one whole night.
+  const nightParts = useMemo(() => buildNightParts({ patches: list }), [list])
+  const [nightPartChoice, setNightPartChoice] = useState<number | 'all'>(0)
+  // Reset only on night change — `list` also changes when saves relink patch
+  // images, and snapping back to part 1 then would lose the user's place.
+  useEffect(() => {
+    setNightPartChoice(0)
+  }, [leafGroupId])
+  const activeNightPart =
+    nightParts.length > 1 && nightPartChoice !== 'all'
+      ? nightParts[Math.min(nightPartChoice, nightParts.length - 1)]
+      : undefined
+  const partList = useMemo(
+    () => (activeNightPart ? list.filter((patch) => activeNightPart.patchIds.has(patch.id)) : list),
+    [list, activeNightPart],
+  )
+  // Built from the part's ids (O(part)), not by scanning every detection.
+  const partDetections = useMemo(() => {
+    if (!activeNightPart) return visibleDetections
+    const out: typeof visibleDetections = {}
+    for (const id of activeNightPart.patchIds) {
+      const detection = visibleDetections[id]
+      if (detection) out[id] = detection
+    }
+    return out
+  }, [visibleDetections, activeNightPart])
+  const nightPartOptions = useMemo(
+    () =>
+      nightParts.map((part) => ({
+        label: formatNightPartTimeRange(part, { withDate: activeNightIds.size > 1 }),
+        count: part.count,
+      })),
+    [nightParts, activeNightIds],
+  )
+  useEffect(() => {
+    if (nightParts.length < 2) return
+    notifyNightSplitOnce({ key: `${leafGroupId}|${Array.from(activeNightIds).join(',')}`, total: list.length, parts: nightParts.length })
+  }, [nightParts.length, leafGroupId, activeNightIds, list.length])
+
+  const collapsedClusterSet = useMemo(() => {
+    if (!clustersCollapsed && clusterOverrides.size === 0) return new Set<number>()
+    const allTopIds = new Set<number>()
+    for (const det of Object.values(partDetections)) {
+      if (activeNightIds.has((det as any).leafGroupId) && typeof (det as any).clusterId === 'number' && (det as any).clusterId >= 0) {
+        allTopIds.add(Math.trunc((det as any).clusterId as number))
+      }
+    }
+    const result = new Set<number>()
+    for (const topId of allTopIds) {
+      const overridden = clusterOverrides.has(topId)
+      if (overridden ? !clustersCollapsed : clustersCollapsed) result.add(topId)
+    }
+    return result
+  }, [clustersCollapsed, clusterOverrides, partDetections, activeNightIds])
+
   const visibleErrorCount = useMemo(
     () =>
-      Object.values(visibleDetections).filter(
+      Object.values(partDetections).filter(
         (d) => activeNightIds.has(d.leafGroupId) && d.detectedBy === 'user' && d.isError === true,
       ).length,
-    [visibleDetections, activeNightIds],
+    [partDetections, activeNightIds],
   )
-  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections: visibleDetections, leafGroupIds: activeNightIds, bucket: 'auto' }), [visibleDetections, activeNightIds])
-  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections: visibleDetections, leafGroupIds: activeNightIds, bucket: 'user' }), [visibleDetections, activeNightIds])
+  const taxonomyAuto = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections: partDetections, leafGroupIds: activeNightIds, bucket: 'auto' }), [partDetections, activeNightIds])
+  const taxonomyUser = useMemo(() => buildTaxonomyTreeForLeafGroup({ detections: partDetections, leafGroupIds: activeNightIds, bucket: 'user' }), [partDetections, activeNightIds])
   const totalDetections = useMemo(
     () => Array.from(activeNightIds).reduce((sum, id) => sum + (leafGroupSummaries[id]?.totalDetections ?? 0), 0),
     [leafGroupSummaries, activeNightIds],
@@ -287,13 +332,13 @@ export function NightView(props: { leafGroupId: string }) {
     [leafGroupSummaries, activeNightIds],
   )
   const sizeThresholdMax = useMemo(() => {
-    return getMaxDetectionLongestDimension({ patches: list, detections: visibleDetections })
-  }, [list, visibleDetections])
+    return getMaxDetectionLongestDimension({ patches: partList, detections: partDetections })
+  }, [partList, partDetections])
   const clampedSizeThreshold = clampSizeThreshold({ value: sizeThreshold, max: sizeThresholdMax })
 
   const filtered = useMemo(
-    () => filterPatches({ patches: list, detections: visibleDetections, selectedTaxon, selectedBucket, sizeThreshold: clampedSizeThreshold }),
-    [list, visibleDetections, selectedTaxon, selectedBucket, clampedSizeThreshold],
+    () => filterPatches({ patches: partList, detections: partDetections, selectedTaxon, selectedBucket, sizeThreshold: clampedSizeThreshold }),
+    [partList, partDetections, selectedTaxon, selectedBucket, clampedSizeThreshold],
   )
   const totalPatches = list.length
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
@@ -324,17 +369,21 @@ export function NightView(props: { leafGroupId: string }) {
     return false
   }, [selected, detections])
 
+  // Warnings only depend on which detections exist and whether their patch
+  // has an image — never on labels. Detections and patches are hydrated
+  // together, so recompute when patches/photos change rather than after every
+  // accept/label (a full scan per click on large nights).
   const leafGroupWarnings = useMemo(
-    () => computeLeafGroupWarnings({ photos, detections, patches, leafGroupId }),
-    [photos, detections, patches, leafGroupId],
+    () => computeLeafGroupWarnings({ photos, detections: detectionsStore.get() ?? {}, patches, leafGroupId }),
+    [photos, patches, leafGroupId],
   )
   const hasMachineIdentification = useMemo(
     () => Array.from(activeNightIds).some((id) => nightHasMachineIdentification({ photos, detections, leafGroupId: id })),
     [photos, detections, activeNightIds],
   )
   const unassignedCount = useMemo(
-    () => Array.from(activeNightIds).reduce((sum, id) => sum + countUnassignedDetectionsForNight({ detections, leafGroupId: id }), 0),
-    [detections, activeNightIds],
+    () => Array.from(activeNightIds).reduce((sum, id) => sum + countUnassignedDetectionsForNight({ detections: partDetections, leafGroupId: id }), 0),
+    [partDetections, activeNightIds],
   )
 
   function onIdentify() {
@@ -533,6 +582,13 @@ export function NightView(props: { leafGroupId: string }) {
         selectedDetectorId={selectedDetectorId}
         onDetectorChange={onDetectorChange}
         errorCount={visibleErrorCount}
+        nightParts={nightPartOptions.length > 1 ? nightPartOptions : undefined}
+        nightPartsTotal={list.length}
+        selectedNightPart={nightPartChoice === 'all' ? 'all' : Math.min(nightPartChoice, Math.max(0, nightPartOptions.length - 1))}
+        onNightPartChange={(choice) => {
+          clearPatchSelection()
+          setNightPartChoice(choice)
+        }}
         availableBotAlgorithms={availableBotAlgorithms.length > 0 ? availableBotAlgorithms : undefined}
         selectedBotAlgorithm={selectedBotAlgorithm}
         onBotAlgorithmChange={onBotAlgorithmChange}
@@ -549,6 +605,7 @@ export function NightView(props: { leafGroupId: string }) {
         <PatchGrid
           patches={filtered}
           leafGroupId={leafGroupId}
+          viewKey={activeNightPart ? `part:${activeNightPart.index}` : 'all'}
           className='h-full'
           onOpenPatchDetail={onOpenPatchDetail}
           selectedTaxon={selectedTaxon as any}
@@ -928,19 +985,34 @@ function buildDefaultFallbackSnapshot(params: {
   leafGroupId: string
 }) {
   const { detections, leafGroupId } = params
-  let autoDetectionsCount = 0
-  let userDetectionsCount = 0
+  let hasUserDetections = false
   let hasUserInsecta = false
 
-  for (const detection of Object.values(detections ?? {})) {
+  // Recomputed after every detection change. The fallback only applies when
+  // the night has *no* auto detections, so stop at the first one found — and
+  // iterate with for…in so nothing proportional to the store is allocated.
+  // The user-side answers are only read when no auto detection exists, in
+  // which case the scan runs to completion and they're exact.
+  for (const id in detections ?? {}) {
+    const detection = detections[id]
     if (detection?.leafGroupId !== leafGroupId) continue
-    if (detection?.detectedBy === 'user') {
-      userDetectionsCount++
-      if (detection?.taxon?.class === 'Insecta') hasUserInsecta = true
-      continue
-    }
-    autoDetectionsCount++
+    if (detection?.detectedBy !== 'user') return { hasAutoDetections: true, hasUserDetections, hasUserInsecta }
+    hasUserDetections = true
+    if (detection?.taxon?.class === 'Insecta') hasUserInsecta = true
   }
 
-  return { autoDetectionsCount, userDetectionsCount, hasUserInsecta }
+  return { hasAutoDetections: false, hasUserDetections, hasUserInsecta }
+}
+
+const notifiedNightSplits = new Set<string>()
+
+/** One toast per night (per session) explaining why the night is in parts. */
+function notifyNightSplitOnce(params: { key: string; total: number; parts: number }) {
+  const { key, total, parts } = params
+  if (notifiedNightSplits.has(key)) return
+  notifiedNightSplits.add(key)
+  toast.info(`Large night: ${total.toLocaleString()} patches`, {
+    description: `Showing it in ${parts} parts by capture time so Classify stays responsive. Switch parts in the left panel.`,
+    duration: 8000,
+  })
 }

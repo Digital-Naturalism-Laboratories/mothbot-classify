@@ -40,6 +40,12 @@ export type LeafGroupLeftPanelProps = {
   onDetectorChange?: (detectorId: string) => void
   /** User-flagged errors for the night, scoped to the visible detector run. */
   errorCount?: number
+  /** Present only when the night is too large to show at once (see night-parts.ts). */
+  nightParts?: Array<{ label: string; count: number }>
+  /** Patches in the whole night, for the large-night notice. */
+  nightPartsTotal?: number
+  selectedNightPart?: number | 'all'
+  onNightPartChange?: (choice: number | 'all') => void
   availableBotAlgorithms?: string[]
   selectedBotAlgorithm?: string
   onBotAlgorithmChange?: (algorithm: string) => void
