@@ -15,6 +15,7 @@ import {
 import { serializeNdjsonLines } from './parse-ndjson'
 import { parseMorphoCoverRecords } from './parse-package-records'
 import type { MorphoCoverRecord } from './records'
+import { patchIdFromImageFileName } from './adapters/dinalab-mothbox-v1/adapter-patch-assets'
 
 /** Lives beside morpho-links.ndjson, so it travels with the shareable package. */
 export const PACKAGE_MORPHO_COVERS_RECORD = '02_records/morpho-covers.ndjson'
@@ -47,9 +48,9 @@ export function morphoCoverRecordsToMap(rows: MorphoCoverRecord[]): Record<strin
  */
 export async function syncMorphoCoversWithPackage(params: {
   packageHandle: FileSystemDirectoryHandleLike
-  hasPatch: (patchId: string) => boolean
+  findPatch: (patchId: string) => { leafGroupId: string } | undefined
 }): Promise<{ source: 'package' | 'seeded' | 'none'; count: number }> {
-  const { packageHandle, hasPatch } = params
+  const { packageHandle, findPatch } = params
 
   if (await fileExistsAt(packageHandle, PACKAGE_MORPHO_COVERS_RECORD).catch(() => false)) {
     const covers = morphoCoverRecordsToMap(
@@ -61,7 +62,8 @@ export async function syncMorphoCoversWithPackage(params: {
 
   const seeded: Record<string, MorphoCover> = {}
   for (const [key, cover] of Object.entries(await readLegacyMorphoCoversFromIdb())) {
-    if (hasPatch(cover.patchId)) seeded[key] = cover
+    const match = matchLegacyCoverPatch({ patchId: cover.patchId, findPatch })
+    if (match) seeded[key] = match
   }
   replaceMorphoCovers(seeded)
 
@@ -75,6 +77,24 @@ export async function syncMorphoCoversWithPackage(params: {
     console.warn('🚨 syncMorphoCoversWithPackage: could not write seeded covers', err)
   }
   return { source: 'seeded', count }
+}
+
+/**
+ * Finds a browser-stored cover's patch in this package. Old Classify keyed
+ * patches by crop file name (`…_Mothbot_yolo1.pt.jpg`) and used its own night
+ * ids; packages drop the image extension, so try that id too, and take the
+ * night from the package's patch so the cover opens the right night.
+ */
+function matchLegacyCoverPatch(params: {
+  patchId: string
+  findPatch: (patchId: string) => { leafGroupId: string } | undefined
+}): MorphoCover | null {
+  const { patchId, findPatch } = params
+  for (const candidate of new Set([patchId, patchIdFromImageFileName(patchId)])) {
+    const patch = findPatch(candidate)
+    if (patch?.leafGroupId) return { leafGroupId: patch.leafGroupId, patchId: candidate }
+  }
+  return null
 }
 
 export async function writeMorphoCoversToOpenPackage(covers: Record<string, MorphoCover>) {

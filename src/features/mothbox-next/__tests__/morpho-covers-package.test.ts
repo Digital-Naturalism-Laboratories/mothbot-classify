@@ -40,7 +40,7 @@ describe('morpho-covers-package', () => {
       [PACKAGE_MORPHO_COVERS_RECORD]: serializeNdjsonLines([{ morpho_key: 'moth a', leaf_group_id: NIGHT, patch_id: 'p1' }]),
     })
 
-    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, hasPatch: () => true })
+    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, findPatch: () => ({ leafGroupId: NIGHT }) })
 
     expect(result).toEqual({ source: 'package', count: 1 })
     expect(morphoCoversStore.get()).toEqual({ 'moth a': { leafGroupId: NIGHT, patchId: 'p1' } })
@@ -53,7 +53,7 @@ describe('morpho-covers-package', () => {
     })
     const handle = createInMemoryHandle({})
 
-    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, hasPatch: (id) => id === 'mine' })
+    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, findPatch: (id) => (id === 'mine' ? { leafGroupId: NIGHT } : undefined) })
 
     expect(result).toEqual({ source: 'seeded', count: 1 })
     expect(morphoCoversStore.get()).toEqual({ 'moth a': { leafGroupId: NIGHT, patchId: 'mine' } })
@@ -64,12 +64,27 @@ describe('morpho-covers-package', () => {
     expect(mocks.idbPutMock).not.toHaveBeenCalled()
   })
 
+  it('matches old Classify covers keyed by crop file name and old night ids', async () => {
+    mocks.idbGetMock.mockResolvedValue({
+      'moth a': { leafGroupId: 'Hoya/168m/Hoya_168m_doubleParina_2025-01-26/2025-01-26', patchId: 'dp_HDR0_0_Mothbot_yolo1.pt.jpg' },
+    })
+    const handle = createInMemoryHandle({})
+    const packagePatches: Record<string, { leafGroupId: string }> = { 'dp_HDR0_0_Mothbot_yolo1.pt': { leafGroupId: 'package-night' } }
+
+    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, findPatch: (id) => packagePatches[id] })
+
+    expect(result).toEqual({ source: 'seeded', count: 1 })
+    expect(morphoCoversStore.get()).toEqual({
+      'moth a': { leafGroupId: 'package-night', patchId: 'dp_HDR0_0_Mothbot_yolo1.pt' },
+    })
+  })
+
   it('clears covers left from another dataset when this one has none', async () => {
     morphoCoversStore.set({ stale: { leafGroupId: NIGHT, patchId: 'from-previous-dataset' } })
     mocks.idbGetMock.mockResolvedValue(null)
     const handle = createInMemoryHandle({})
 
-    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, hasPatch: () => false })
+    const result = await syncMorphoCoversWithPackage({ packageHandle: handle, findPatch: () => undefined })
 
     expect(result).toEqual({ source: 'none', count: 0 })
     expect(morphoCoversStore.get()).toEqual({})

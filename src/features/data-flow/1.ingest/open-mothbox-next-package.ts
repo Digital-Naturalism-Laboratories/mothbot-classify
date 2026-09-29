@@ -193,7 +193,7 @@ export async function openMothboxNextPackageFromHandle(
 async function syncMorphoCoversForOpenedPackage(handle: FileSystemDirectoryHandleLike) {
   try {
     const patches = patchesStore.get()
-    const covers = await syncMorphoCoversWithPackage({ packageHandle: handle, hasPatch: (patchId) => patchId in patches })
+    const covers = await syncMorphoCoversWithPackage({ packageHandle: handle, findPatch: (patchId) => patches[patchId] })
     if (covers.source === 'seeded') console.log('✅ openPackage: moved morpho covers into the dataset', covers)
   } catch (err) {
     console.warn('🚨 openPackage: could not load morpho covers', err)
