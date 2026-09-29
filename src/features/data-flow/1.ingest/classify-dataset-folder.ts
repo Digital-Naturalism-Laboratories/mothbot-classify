@@ -1,5 +1,5 @@
 import { directoryHasDatasetManifest } from './dataset-manifest'
-import { findRelativeFilesUnderDirectory } from './fs-find-files'
+import { findFirstRelativeFileIncludingDateDirs, findRelativeFilesUnderDirectory } from './fs-find-files'
 import { normalizeIngestRelativePath, PACKAGE_ARCHIVE_DIR } from './reserved-paths'
 import type { FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 
@@ -70,7 +70,13 @@ export async function classifyDatasetFolder(params: {
   }
 
   if (!botPaths.length) {
-    return 'skip'
+    // The scan above skips date-named folders, which is exactly where legacy
+    // projects (Project/Deployment_YYYY-MM-DD/YYYY-MM-DD/) keep their JSON.
+    const legacyBotPath = await findFirstRelativeFileIncludingDateDirs(directory, (name) =>
+      name.endsWith('_botdetection.json'),
+    )
+    if (!legacyBotPath) return 'skip'
+    return isUnderPackageSource(legacyBotPath) ? 'source-only' : 'legacy-root'
   }
 
   const rootBotPaths = botPaths.filter((path) => !isUnderPackageSource(path))

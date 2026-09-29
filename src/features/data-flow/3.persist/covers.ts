@@ -35,6 +35,29 @@ export async function loadMorphoCovers() {
   }
 }
 
+/**
+ * The covers every dataset shared before covers moved into packages. Kept
+ * untouched once a package is open: it seeds each package's covers file the
+ * first time that package opens.
+ */
+export async function readLegacyMorphoCoversFromIdb(): Promise<Record<string, MorphoCover>> {
+  try {
+    if (!idbGet) {
+      const mod = await import('~/utils/index-db')
+      idbGet = mod.idbGet
+    }
+    const saved = (await idbGet?.(DB_NAME, IDB_STORE, 'covers')) as Record<string, MorphoCover> | null
+    return saved && typeof saved === 'object' ? normalizeMorphoCovers(saved) : {}
+  } catch {
+    console.error('Error loading morpho covers')
+    return {}
+  }
+}
+
+export function replaceMorphoCovers(covers: Record<string, MorphoCover>) {
+  morphoCoversStore.set(normalizeMorphoCovers(covers))
+}
+
 export async function setMorphoCover(params: { morphoKey?: string; label?: string; leafGroupId?: string; patchId?: string }) {
   const { leafGroupId, patchId } = params
 
@@ -47,6 +70,8 @@ export async function setMorphoCover(params: { morphoKey?: string; label?: strin
   const current = morphoCoversStore.get() || {}
   const next = { ...current, [morphoKey]: { leafGroupId: normalizeLegacyNightId(leafGroupId), patchId } }
   morphoCoversStore.set(next)
+
+  if (await saveMorphoCoversToOpenPackage(next)) return
 
   try {
     if (!idbPut) {
@@ -74,6 +99,8 @@ export async function clearMorphoCover(params: { morphoKey?: string; label?: str
   delete next[morphoKey]
   morphoCoversStore.set(next)
 
+  if (await saveMorphoCoversToOpenPackage(next)) return
+
   try {
     if (!idbPut) {
       const mod = await import('~/utils/index-db')
@@ -85,6 +112,25 @@ export async function clearMorphoCover(params: { morphoKey?: string; label?: str
   } catch {
     console.error('Error clearing morpho cover')
   }
+}
+
+/**
+ * With a dataset package open, covers are saved into its `02_records/` (so they
+ * travel with the shareable `_processed` side) instead of the browser-wide IDB
+ * map. Returns false when no package is open, so callers fall back to IDB.
+ */
+async function saveMorphoCoversToOpenPackage(covers: Record<string, MorphoCover>): Promise<boolean> {
+  // Dynamic import: the package module imports this store.
+  const { isMothboxNextPackageOpen } = await import('~/features/mothbox-next/active-package')
+  if (!isMothboxNextPackageOpen()) return false
+
+  try {
+    const { writeMorphoCoversToOpenPackage } = await import('~/features/mothbox-next/morpho-covers-package')
+    await writeMorphoCoversToOpenPackage(covers)
+  } catch {
+    console.error('Error saving morpho covers to the dataset')
+  }
+  return true
 }
 
 function normalizeMorphoCovers(covers: Record<string, MorphoCover>) {

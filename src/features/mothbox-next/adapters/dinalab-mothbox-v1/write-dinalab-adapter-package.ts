@@ -5,6 +5,7 @@ import type { PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-
 import { PACKAGE_ARCHIVE_DIR } from '~/features/data-flow/1.ingest/reserved-paths'
 import { hierarchyForDinalabWriter } from '~/features/mothbox-next/hierarchy-manifest'
 import type { DatasetFolderKind } from '~/features/data-flow/1.ingest/classify-dataset-folder'
+import { groupHumanRowsByClassifierFile, humanClassifierFilePath } from '~/features/mothbox-next/human-classifier-files'
 
 export async function writeDinalabMothboxV1Package(params: {
   datasetId: string
@@ -29,12 +30,10 @@ export async function writeDinalabMothboxV1Package(params: {
     folderKind,
   } = params
 
-  const humanClassifierPath = `03_classifications/${humanClassifierId}.ndjson`
-
-  await writeBuiltPackageRecordFiles({
+  const humanClassifierPaths = await writeBuiltPackageRecordFiles({
     io,
     built,
-    humanClassifierPath,
+    humanClassifierId,
     clearPreviousGeneratedHumanClassifierFiles: true,
   })
 
@@ -94,7 +93,7 @@ export async function writeDinalabMothboxV1Package(params: {
     },
     classification_sources: [
       '03_classifications/_bot.ndjson',
-      humanClassifierPath,
+      ...humanClassifierPaths,
     ],
   }
 
@@ -132,12 +131,11 @@ export async function writeMergedPackageRecords(params: {
   patchCount: number
 }): Promise<void> {
   const { io, built, humanClassifierId, patchCount } = params
-  const humanClassifierPath = `03_classifications/${humanClassifierId}.ndjson`
 
   await writeBuiltPackageRecordFiles({
     io,
     built,
-    humanClassifierPath,
+    humanClassifierId,
     clearPreviousGeneratedHumanClassifierFiles: false,
   })
 
@@ -157,16 +155,26 @@ export async function writeMergedPackageRecords(params: {
   )
 }
 
+/**
+ * Writes the record files plus one human classifier file per person in
+ * `built.humanRows` (legacy IDs keep the initials of whoever made them), and
+ * always the running user's file. Returns the human classifier paths written.
+ */
 async function writeBuiltPackageRecordFiles(params: {
   io: DinalabAdapterIO
   built: BuiltDinalabAdapterRecords
-  humanClassifierPath: string
+  humanClassifierId: string
   clearPreviousGeneratedHumanClassifierFiles: boolean
-}) {
-  const { io, built, clearPreviousGeneratedHumanClassifierFiles, humanClassifierPath } = params
+}): Promise<string[]> {
+  const { io, built, clearPreviousGeneratedHumanClassifierFiles, humanClassifierId } = params
+
+  const humanFiles = groupHumanRowsByClassifierFile({ rows: built.humanRows, fallbackClassifierId: humanClassifierId })
+  const ownPath = humanClassifierFilePath(humanClassifierId)
+  if (!humanFiles.some((file) => file.path === ownPath)) humanFiles.push({ path: ownPath, rows: [] })
+  const humanClassifierPaths = humanFiles.map((file) => file.path)
 
   if (clearPreviousGeneratedHumanClassifierFiles) {
-    await clearPreviousGeneratedHumanClassifierFilesFromManifest({ io, humanClassifierPath })
+    await clearPreviousGeneratedHumanClassifierFilesFromManifest({ io, keepPaths: humanClassifierPaths })
   }
 
   await io.package.writeText('02_records/patches.ndjson', serializeNdjsonLines(built.patches))
@@ -174,22 +182,25 @@ async function writeBuiltPackageRecordFiles(params: {
   await io.package.writeText('02_records/deployments.ndjson', serializeNdjsonLines(built.deployments))
   await io.package.writeText('02_records/camera-days.ndjson', serializeNdjsonLines(built.cameraDays))
   await io.package.writeText('03_classifications/_bot.ndjson', serializeNdjsonLines(built.botRows))
-  await io.package.writeText(humanClassifierPath, serializeNdjsonLines(built.humanRows))
+  for (const file of humanFiles) {
+    await io.package.writeText(file.path, serializeNdjsonLines(file.rows))
+  }
 
   await io.package.writeText(
     '02_records/current-classifications.ndjson',
     serializeNdjsonLines(built.resolvedClassifications),
   )
+
+  return humanClassifierPaths
 }
 
 async function clearPreviousGeneratedHumanClassifierFilesFromManifest(params: {
   io: DinalabAdapterIO
-  humanClassifierPath: string
+  keepPaths: string[]
 }) {
-  const { io, humanClassifierPath } = params
-  const stalePaths = (await readPreviousGeneratedHumanClassifierPaths(io)).filter(
-    (path) => path !== normalizeClassificationPath(humanClassifierPath),
-  )
+  const { io } = params
+  const keepPaths = new Set(params.keepPaths.map(normalizeClassificationPath))
+  const stalePaths = (await readPreviousGeneratedHumanClassifierPaths(io)).filter((path) => !keepPaths.has(path))
 
   for (const path of stalePaths) {
     await io.package.writeText(path, '')

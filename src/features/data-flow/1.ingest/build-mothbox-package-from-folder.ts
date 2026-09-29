@@ -21,9 +21,11 @@ export async function buildMothboxPackageFromFolder(params: {
   processedMirrorHandle?: FileSystemDirectoryHandleLike | null
   /** Datasets root directory, used as a fallback metadata source for AMI datasets whose parquet/CSV files sit at the root level rather than inside the project folder. */
   rootMetadataHandle?: FileSystemDirectoryHandleLike | null
+  /** Datasets root. Old Classify kept one shared `morpho_links.json` there; setup imports it into each dataset. */
+  datasetsRootHandle?: FileSystemDirectoryHandleLike | null
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<{ datasetId: string; patchCount: number }> {
-  const { packageHandle, folderName, processedMirrorHandle, rootMetadataHandle, onProgress } = params
+  const { packageHandle, folderName, processedMirrorHandle, rootMetadataHandle, datasetsRootHandle, onProgress } = params
   const kind = params.kind ?? (await resolveDatasetSetupKind({ directory: packageHandle, folderName }))
   const datasetId = sanitizeDatasetFolderName(folderName)
   const humanClassifierId = (userSessionStore.get()?.initials || 'user').trim().toLowerCase() || 'user'
@@ -75,7 +77,12 @@ export async function buildMothboxPackageFromFolder(params: {
     reportProgress.flush()
   }
 
-  const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle: effectivePackageHandle })
+  const morphoLinks = await migrateLegacyMorphoLinksInPackage({
+    packageHandle: effectivePackageHandle,
+    sharedLegacyLinksHandle: datasetsRootHandle,
+    // Setup runs while another dataset may be open; the links load when this one opens.
+    applyToActiveDataset: false,
+  })
   if (morphoLinks.importedCount > 0) {
     console.log('✅ setup: migrated morpho links', morphoLinks)
   }

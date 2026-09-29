@@ -55,6 +55,13 @@ export type MorphoLinkRecord = {
   url: string
 }
 
+/** The patch chosen as the representative image for a morphospecies. */
+export type MorphoCoverRecord = {
+  morpho_key: string
+  leaf_group_id: string
+  patch_id: string
+}
+
 export type ClassificationRecord = {
   patch_id: string
   classifier_id: string

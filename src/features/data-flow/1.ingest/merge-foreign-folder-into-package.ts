@@ -4,6 +4,7 @@ import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRe
 import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
 import { buildDinalabMothboxV1Records } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/build-dinalab-adapter-records'
 import { writeMergedPackageRecords } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/write-dinalab-adapter-package'
+import { groupHumanRowsByClassifierFile } from '~/features/mothbox-next/human-classifier-files'
 import { userSessionStore } from '~/stores/ui'
 import { createBrowserDinalabAdapterIO } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import type { DinalabAdapterProgressCallback } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/adapter-io'
@@ -45,8 +46,15 @@ export async function mergeForeignFolderIntoPackage(params: {
   const existingDeployments = await readNdjsonFile<DeploymentRecord>(packageDir, '02_records/deployments.ndjson')
   const existingCameraDays = await readNdjsonFile<CameraDayRecord>(packageDir, '02_records/camera-days.ndjson')
   const existingBotRows = await readNdjsonFile<ClassificationRecord>(packageDir, '03_classifications/_bot.ndjson')
-  const humanClassifierPath = `03_classifications/${humanClassifierId}.ndjson`
-  const existingHumanRows = await readNdjsonFile<ClassificationRecord>(packageDir, humanClassifierPath)
+  // Every person's file, not just the running user's: the writer rewrites one
+  // file per classifier, so any file left out here would lose its rows.
+  const existingHumanRows: ClassificationRecord[] = []
+  for (const fileName of await listClassificationFiles(packageDir)) {
+    if (fileName === '_bot.ndjson') continue
+    for (const row of await readNdjsonFile<ClassificationRecord>(packageDir, `03_classifications/${fileName}`)) {
+      existingHumanRows.push(row)
+    }
+  }
 
   const built = await buildDinalabMothboxV1Records({
     datasetId,
@@ -109,7 +117,6 @@ function mergeRecordsByPatchId(params: {
   incoming: Awaited<ReturnType<typeof buildDinalabMothboxV1Records>>
 }) {
   const { existing, incoming, humanClassifierId } = params
-  const humanClassifierPath = `03_classifications/${humanClassifierId}.ndjson`
   const knownPatchIds = new Set(existing.patches.map((row) => row.patch_id))
 
   const newPatches = incoming.patches.filter((row) => !knownPatchIds.has(row.patch_id))
@@ -129,7 +136,7 @@ function mergeRecordsByPatchId(params: {
     rows: flattenClassificationFiles({
       files: [
         { path: '03_classifications/_bot.ndjson', rows: botRows },
-        ...(humanRows.length ? [{ path: humanClassifierPath, rows: humanRows }] : []),
+        ...groupHumanRowsByClassifierFile({ rows: humanRows, fallbackClassifierId: humanClassifierId }),
       ],
     }),
   })

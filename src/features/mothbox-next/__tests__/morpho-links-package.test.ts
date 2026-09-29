@@ -80,6 +80,46 @@ describe('morpho-links-package', () => {
 
       await expect(readTextFile(handle, LEGACY_PACKAGE_MORPHO_LINKS_JSON)).rejects.toThrow()
     })
+
+    it('imports old Classify’s shared projects-root links without removing them, package links winning', async () => {
+      const sharedRoot = createInMemoryPackageHandle({
+        [LEGACY_PACKAGE_MORPHO_LINKS_JSON]: JSON.stringify({
+          'Moth A': 'https://example.com/shared-a',
+          'Moth B': 'https://example.com/shared-b',
+        }),
+      })
+      const handle = createInMemoryPackageHandle({
+        [LEGACY_PACKAGE_MORPHO_LINKS_JSON]: JSON.stringify({ 'Moth A': 'https://example.com/package-a' }),
+      })
+
+      const result = await migrateLegacyMorphoLinksInPackage({ packageHandle: handle, sharedLegacyLinksHandle: sharedRoot })
+
+      expect(result.importedCount).toBe(2)
+      expect(parseMorphoLinksNdjson(await readTextFile(handle, PACKAGE_MORPHO_LINKS_RECORD))).toEqual({
+        'moth a': 'https://example.com/package-a',
+        'moth b': 'https://example.com/shared-b',
+      })
+      await expect(readTextFile(sharedRoot, LEGACY_PACKAGE_MORPHO_LINKS_JSON)).resolves.toContain('shared-b')
+    })
+
+    it('leaves the open dataset’s links alone when setting up another package', async () => {
+      morphoLinksStore.set({ open: 'https://example.com/open' })
+      const sharedRoot = createInMemoryPackageHandle({
+        [LEGACY_PACKAGE_MORPHO_LINKS_JSON]: JSON.stringify({ other: 'https://example.com/other' }),
+      })
+      const handle = createInMemoryPackageHandle({})
+
+      await migrateLegacyMorphoLinksInPackage({
+        packageHandle: handle,
+        sharedLegacyLinksHandle: sharedRoot,
+        applyToActiveDataset: false,
+      })
+
+      expect(morphoLinksStore.get()).toEqual({ open: 'https://example.com/open' })
+      expect(parseMorphoLinksNdjson(await readTextFile(handle, PACKAGE_MORPHO_LINKS_RECORD))).toEqual({
+        other: 'https://example.com/other',
+      })
+    })
   })
 })
 

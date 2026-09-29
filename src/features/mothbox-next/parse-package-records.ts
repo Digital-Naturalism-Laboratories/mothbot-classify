@@ -2,6 +2,7 @@ import type {
   CameraDayRecord,
   ClassificationRecord,
   DeploymentRecord,
+  MorphoCoverRecord,
   MorphoLinkRecord,
   PatchRecord,
   PatchSourceRecord,
@@ -69,6 +70,13 @@ export function parseMorphoLinkRecords(text: string): MorphoLinkRecord[] {
   })
 }
 
+export function parseMorphoCoverRecords(text: string): MorphoCoverRecord[] {
+  return parseNdjsonObjectLines({
+    text,
+    parseLine: parseMorphoCoverRecordLine,
+  })
+}
+
 function parsePatchRecordLine(value: unknown): PatchRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const row = value as PatchRecord
@@ -116,4 +124,13 @@ function parseMorphoLinkRecordLine(value: unknown): MorphoLinkRecord | null {
   if (typeof row.morpho_key !== 'string' || !row.morpho_key.trim()) return null
   if (typeof row.url !== 'string' || !row.url.trim()) return null
   return { morpho_key: row.morpho_key, url: row.url }
+}
+
+function parseMorphoCoverRecordLine(value: unknown): MorphoCoverRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const row = value as MorphoCoverRecord
+  if (typeof row.morpho_key !== 'string' || !row.morpho_key.trim()) return null
+  if (typeof row.leaf_group_id !== 'string' || !row.leaf_group_id.trim()) return null
+  if (typeof row.patch_id !== 'string' || !row.patch_id.trim()) return null
+  return { morpho_key: row.morpho_key, leaf_group_id: row.leaf_group_id, patch_id: row.patch_id }
 }

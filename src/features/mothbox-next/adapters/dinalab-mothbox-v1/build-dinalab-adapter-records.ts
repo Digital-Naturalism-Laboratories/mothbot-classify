@@ -3,6 +3,7 @@ import { classificationFromBotShape, classificationFromIdentifiedShape, NO_MACHI
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
 import { extractPatchFilename } from '../../patch-path'
 import { readLegacyDetectionShapes, type LegacyDetectionShape } from '../../legacy-detection-file'
+import { classifierIdFromIdentifierHuman, groupHumanRowsByClassifierFile } from '../../human-classifier-files'
 import type { DinalabAdapterIO, DinalabAdapterProgressCallback } from './adapter-io'
 import { imageMediaTypeFromPath } from './adapter-media-type'
 import { formatProgressFraction } from './adapter-progress'
@@ -220,10 +221,14 @@ export async function buildDinalabMothboxV1Records(params: {
         if (!patchFileName) continue
         const patchId = patchIdByPatchFileName.get(patchFileName)
         if (!patchId) continue
+        const identifiedAt = Number((shape as { timestamp_ID_human?: unknown }).timestamp_ID_human)
         const row = classificationFromIdentifiedShape({
           shape,
           patchId,
-          classifierId: humanClassifierId,
+          // Credit the person who made the ID; fall back to whoever runs setup.
+          classifierId: classifierIdFromIdentifierHuman(shape.identifier_human) ?? humanClassifierId,
+          // Keep when the ID was actually made, not when the dataset was set up.
+          classifiedAt: Number.isFinite(identifiedAt) && identifiedAt > 0 ? identifiedAt : undefined,
         })
         if (row) humanRows.push(row)
       }
@@ -245,13 +250,11 @@ export async function buildDinalabMothboxV1Records(params: {
   })
 
   const { deployments, cameraDays } = buildDeploymentAndCameraDayRecords({ datasetId, patches })
-  const humanClassifierPath = `03_classifications/${humanClassifierId}.ndjson`
-
   const resolved = resolveCurrentClassifications({
     rows: flattenClassificationFiles({
       files: [
         { path: '03_classifications/_bot.ndjson', rows: botRows },
-        ...(humanRows.length ? [{ path: humanClassifierPath, rows: humanRows }] : []),
+        ...groupHumanRowsByClassifierFile({ rows: humanRows, fallbackClassifierId: humanClassifierId }),
       ],
     }),
   })

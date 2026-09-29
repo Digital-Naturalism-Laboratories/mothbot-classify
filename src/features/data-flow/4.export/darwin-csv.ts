@@ -15,6 +15,7 @@ import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos, getPhotoBaseFromPhotoId } from '~/utils/paths'
 import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getProjectExportPath } from './export-utils'
 import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classification'
+import { currentHumanClassifierId } from '~/features/mothbox-next/human-classifier-id'
 
 const DARWIN_COLUMNS = [
   // Taxonomy columns
@@ -319,8 +320,7 @@ export function buildDarwinShapeFromDetection(params: {
     ? botAlgorithmLabel(detection.botClassifierId)
     : extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
   const detection_confidence = detection?.score != null ? String(detection.score) : ''
-  const userInitials = userSessionStore.get()?.initials || ''
-  const identifiedBy = detection?.detectedBy === 'user' ? userInitials : ''
+  const identifiedBy = detection?.detectedBy === 'user' ? identifiedByForDetection(detection) : ''
   const ID_confidence = ''
   const geometryFields = buildGeometryExportFields({ detection })
 
@@ -453,6 +453,18 @@ function extractDetectionByFromPatchId(params: { patchId: string; photoBase: str
 
   if (idx >= 0) name = name.slice(idx + 1)
   return name
+}
+
+/**
+ * Credits whoever made the ID. The current user gets their initials as typed;
+ * anyone else (e.g. IDs imported from old `_identified.json` files) gets their
+ * lower-cased classifier id shown upper-case, the way initials were entered.
+ */
+function identifiedByForDetection(detection: DetectionEntity): string {
+  const userInitials = userSessionStore.get()?.initials || ''
+  const classifierId = detection.humanClassifierId?.trim()
+  if (!classifierId || classifierId === currentHumanClassifierId()) return userInitials
+  return classifierId.toUpperCase()
 }
 
 function buildGeometryExportFields(params: { detection: DetectionEntity }) {

@@ -70,6 +70,37 @@ describe('classifyDatasetFolder', () => {
 
     await expect(classifyDatasetFolder({ directory, folderName: 'images' })).resolves.toBe('patch-images-only')
   })
+
+  it('finds legacy projects whose detection JSON sits in date-named deployment/night folders', async () => {
+    const directory = createDirectoryHandle([
+      'exports/Hoya_export.csv',
+      'Hoya_1004m_accionSauro_2025-01-26/logs/Scheduler_log.txt',
+      'Hoya_1004m_accionSauro_2025-01-26/2025-01-26/accionSauro_2025_01_26__19_01_25_HDR0.jpg',
+      'Hoya_1004m_accionSauro_2025-01-26/2025-01-26/accionSauro_2025_01_26__19_01_25_HDR0_botdetection.json',
+      'Hoya_1004m_accionSauro_2025-01-26/2025-01-26/accionSauro_2025_01_26__19_01_25_HDR0_identified.json',
+      'Hoya_1004m_accionSauro_2025-01-26/2025-01-26/patches/accionSauro_2025_01_26__19_01_25_HDR0_0_Mothbot_yolo1.pt.jpg',
+    ])
+
+    await expect(classifyDatasetFolder({ directory, folderName: 'Cerro_Hoya_Expedition' })).resolves.toBe('legacy-root')
+  })
+
+  it('finds legacy projects with undated deployment folders and dated night folders', async () => {
+    const directory = createDirectoryHandle([
+      'bothDeer (DIY)/2026-03-14/bothDeer_2026_03_14__19_01_23_HDR0_botdetection.json',
+      'bothDeer (DIY)/2026-03-14/patches/bothDeer_2026_03_14__19_01_23_HDR0_0_Mothbot_yolo1.pt.jpg',
+    ])
+
+    await expect(classifyDatasetFolder({ directory, folderName: 'AltosCampana' })).resolves.toBe('legacy-root')
+  })
+
+  it('still skips folders of raw photos in date-named folders', async () => {
+    const directory = createDirectoryHandle([
+      'deployment_2026-03-14/2026-03-14/photo_2026_03_14__19_01_23_HDR0.jpg',
+      'deployment_2026-03-14/2026-03-14/patches/not_really_a_botdetection.json.jpg',
+    ])
+
+    await expect(classifyDatasetFolder({ directory, folderName: 'raw' })).resolves.toBe('skip')
+  })
 })
 
 type MemoryDirectoryHandle = FileSystemDirectoryHandleLike & {

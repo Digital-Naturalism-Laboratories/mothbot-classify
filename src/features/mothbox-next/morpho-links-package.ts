@@ -129,9 +129,30 @@ async function packageFileExists(params: {
 
 export async function migrateLegacyMorphoLinksInPackage(params: {
   packageHandle: FileSystemDirectoryHandleLike
+  /**
+   * Folder holding old Classify's single, shared `morpho_links.json` (the
+   * "projects" folder it was pointed at — now the datasets root). Read as the
+   * lowest-priority source and never removed, since every project shares it.
+   */
+  sharedLegacyLinksHandle?: FileSystemDirectoryHandleLike | null
+  /**
+   * False when the package isn't the open dataset (e.g. setting up folders in
+   * the background): write only its record file, leaving the open dataset's
+   * in-memory links and IDB copy alone.
+   */
+  applyToActiveDataset?: boolean
 }): Promise<{ importedCount: number; removedLegacyFile: boolean }> {
-  const { packageHandle } = params
+  const { packageHandle, sharedLegacyLinksHandle } = params
+  const applyToActiveDataset = params.applyToActiveDataset !== false
   let merged: MorphoLinksMap = {}
+
+  if (sharedLegacyLinksHandle) {
+    const fromSharedLegacy = await readMorphoLinksJsonFile({
+      packageHandle: sharedLegacyLinksHandle,
+      relativePath: LEGACY_PACKAGE_MORPHO_LINKS_JSON,
+    })
+    if (fromSharedLegacy) merged = { ...merged, ...fromSharedLegacy }
+  }
 
   const fromRecords = await readMorphoLinksNdjsonFile({
     packageHandle,
@@ -155,8 +176,8 @@ export async function migrateLegacyMorphoLinksInPackage(params: {
     return { importedCount: 0, removedLegacyFile: false }
   }
 
-  const linksToPersist = setMorphoLinksForActiveDataset({ links: merged, mode: 'replace' })
-  await saveMorphoLinksToIdb(linksToPersist)
+  const linksToPersist = applyToActiveDataset ? setMorphoLinksForActiveDataset({ links: merged, mode: 'replace' }) : merged
+  if (applyToActiveDataset) await saveMorphoLinksToIdb(linksToPersist)
 
   const rows = morphoLinksMapToRecords(linksToPersist)
   await writeTextFile(packageHandle, PACKAGE_MORPHO_LINKS_RECORD, serializeNdjsonLines(rows))

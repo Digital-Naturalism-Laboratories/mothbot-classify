@@ -9,6 +9,8 @@ import { singlePassIngest } from './files.single-pass'
 import { overlayHumanDetections } from './overlay-human-detections'
 import { formatFilesystemError } from '~/utils/fs-error'
 import { migrateLegacyMorphoLinksInPackage } from '~/features/mothbox-next/morpho-links-package'
+import { syncMorphoCoversWithPackage } from '~/features/mothbox-next/morpho-covers-package'
+import { patchesStore } from '~/stores/entities/5.patches'
 import { migratePackageSourceToArchiveIfNeeded } from '~/features/mothbox-next/migrate-package-source-to-archive'
 import { normalizeIndexedPathsToPackageRoot } from '~/features/mothbox-next/package-indexed-access'
 import { tryRestorePackageFromSessionCache } from '~/features/data-flow/3.persist/restore-package-session-cache'
@@ -112,6 +114,7 @@ export async function openMothboxNextPackageFromHandle(
       // those (their parentDir navigators point back into the night folders).
       await overlayHumanDetections()
 
+      await syncMorphoCoversForOpenedPackage(handle)
       const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle: handle })
       if (morphoLinks.importedCount > 0) {
         console.log('✅ openPackage: migrated morpho links', morphoLinks)
@@ -157,6 +160,7 @@ export async function openMothboxNextPackageFromHandle(
     pickerErrorStore.set(null)
     setActiveDatasetFolderName(folderName)
 
+    await syncMorphoCoversForOpenedPackage(handle)
     const morphoLinks = await migrateLegacyMorphoLinksInPackage({ packageHandle: handle })
     if (morphoLinks.importedCount > 0) {
       console.log('✅ openPackage: migrated morpho links', morphoLinks)
@@ -182,6 +186,17 @@ export async function openMothboxNextPackageFromHandle(
     pickerErrorStore.set(message)
     toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
     return { ok: false, message }
+  }
+}
+
+/** Loads the package's morpho covers (seeding them once from the old browser-wide covers). Never fails the open. */
+async function syncMorphoCoversForOpenedPackage(handle: FileSystemDirectoryHandleLike) {
+  try {
+    const patches = patchesStore.get()
+    const covers = await syncMorphoCoversWithPackage({ packageHandle: handle, hasPatch: (patchId) => patchId in patches })
+    if (covers.source === 'seeded') console.log('✅ openPackage: moved morpho covers into the dataset', covers)
+  } catch (err) {
+    console.warn('🚨 openPackage: could not load morpho covers', err)
   }
 }
 

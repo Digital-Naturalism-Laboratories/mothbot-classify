@@ -79,6 +79,7 @@ export async function migratePendingDatasetFolders(
           // For AMI datasets, parquet/CSV may sit at the datasets root level
           // (sibling to the project folder) rather than inside it.
           rootMetadataHandle: item.kind === 'ami' ? root : undefined,
+          datasetsRootHandle: root,
           onProgress: reportProgress,
         })
         migrated.push({
