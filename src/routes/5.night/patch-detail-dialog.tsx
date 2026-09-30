@@ -210,6 +210,9 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
   const finestTaxonLevel = detection ? deriveTaxonNameFromDetection({ detection }) : undefined
   const patchAlt = finestTaxonLevel ?? patch?.name ?? 'patch'
   const originalDownloadName = resolvePatchOriginalDownloadName(patch)
+  const fileMeta = usePatchFileMeta(patch)
+  const [pixelSize, setPixelSize] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => setPixelSize(null), [patch?.id])
 
   return (
     <div className='space-y-8'>
@@ -221,7 +224,12 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
       >
         <div className='w-full'>
           {patchUrl ? (
-            <img src={patchUrl} alt={patchAlt} className='w-full max-h-[300px] object-contain rounded-md border border-black/10' />
+            <img
+              src={patchUrl}
+              alt={patchAlt}
+              className='w-full max-h-[300px] object-contain rounded-md border border-black/10'
+              onLoad={(e) => setPixelSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            />
           ) : (
             <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50' />
           )}
@@ -247,6 +255,80 @@ function PatchDetails(props: { patch?: PatchEntity; detection?: DetectionEntity 
       <div className='text-12 text-neutral-700 break-all'>
         <span className='font-medium'>Patch ID:</span> {patch?.id}
       </div>
+
+      <PatchFileDetails patch={patch} detection={detection} fileMeta={fileMeta} pixelSize={pixelSize} />
+    </div>
+  )
+}
+
+type PatchFileMeta = { size: number; type: string; lastModified: number }
+
+/** Size, type and modified date of the patch's image file (loaded from disk if needed). */
+function usePatchFileMeta(patch?: PatchEntity): PatchFileMeta | null {
+  const [meta, setMeta] = useState<PatchFileMeta | null>(null)
+  useEffect(() => {
+    setMeta(null)
+    let cancelled = false
+    const toMeta = (f: File) => ({ size: f.size, type: f.type, lastModified: f.lastModified })
+    if (patch?.imageFile?.file) {
+      setMeta(toMeta(patch.imageFile.file))
+      return
+    }
+    const handle = makeIndexedFileHandle(patch?.imageFile) as { getFile?: () => Promise<File> } | undefined
+    handle?.getFile?.()
+      .then((f) => { if (!cancelled && f) setMeta(toMeta(f)) })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one lookup per patch
+  }, [patch?.id])
+  return meta
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+/** Width x height (px) and rotation of the detection box in the source photo, from its 4 corners. */
+function boxGeometry(points?: number[][]) {
+  if (!Array.isArray(points) || points.length < 4) return null
+  const side = (a: number[], b: number[]) => Math.hypot(b[0] - a[0], b[1] - a[1])
+  const s1 = side(points[0], points[1])
+  const s2 = side(points[1], points[2])
+  const [long, from, to] = s1 >= s2 ? [s1, points[0], points[1]] : [s2, points[1], points[2]]
+  const angle = ((Math.atan2(to[1] - from[1], to[0] - from[0]) * 180) / Math.PI + 180) % 180
+  return { w: Math.round(long), h: Math.round(Math.min(s1, s2)), angle: Math.round(angle) }
+}
+
+function PatchFileDetails(props: {
+  patch?: PatchEntity
+  detection?: DetectionEntity
+  fileMeta: PatchFileMeta | null
+  pixelSize: { w: number; h: number } | null
+}) {
+  const { patch, detection, fileMeta, pixelSize } = props
+  const box = boxGeometry(detection?.points)
+  const rows: Array<[string, string]> = []
+  if (pixelSize) rows.push(['Dimensions', `${pixelSize.w} × ${pixelSize.h} px`])
+  if (fileMeta) {
+    rows.push(['File size', formatBytes(fileMeta.size)])
+    if (fileMeta.type) rows.push(['File type', fileMeta.type.replace('image/', '').toUpperCase()])
+    if (fileMeta.lastModified) rows.push(['File modified', new Date(fileMeta.lastModified).toLocaleString()])
+  }
+  if (patch?.capturedAt) rows.push(['Captured', patch.capturedAt])
+  if (patch?.detectorId) rows.push(['Detector', patch.detectorId])
+  if (box) rows.push(['Box in photo', `${box.w} × ${box.h} px${box.angle ? `, rotated ${box.angle}°` : ''}`])
+  if (typeof detection?.clusterId === 'number') rows.push(['Cluster', String(detection.clusterId)])
+  if (!rows.length) return null
+  return (
+    <div className='mt-8 space-y-2 text-12 text-neutral-700'>
+      <div className='font-medium text-neutral-800'>File details</div>
+      {rows.map(([label, value]) => (
+        <div key={label} className='break-all'>
+          <span className='font-medium'>{label}:</span> {value}
+        </div>
+      ))}
     </div>
   )
 }
