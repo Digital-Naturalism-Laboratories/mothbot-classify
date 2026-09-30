@@ -26,7 +26,7 @@ export type LeafGroupLeftPanelProps = {
   clusteredFirst: boolean
   groupByClusters: boolean
   sortBySize: boolean
-  /** Order sharpest first by blurriness (overrides size). */
+  /** Order blurriest first by blurriness (overrides size). */
   sortByBlur?: boolean
   /** Hide patches blurrier than this (0-100); 100 shows all. */
   blurLimit?: number

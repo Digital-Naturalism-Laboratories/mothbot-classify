@@ -195,19 +195,19 @@ describe('orderPatchIds — sort by blurriness', () => {
     return orderPatchIds({ patches, detections: detections as never, sortByBlur: true, ...options })
   }
 
-  it('orders sharpest first, ignoring size', () => {
+  it('orders blurriest first, ignoring size', () => {
     expect(blurOrder({ big_blurry: { width: 500, blur: 80 }, small_sharp: { width: 10, blur: 5 }, mid: { width: 100, blur: 40 } }, { clusteredFirst: false })).toEqual([
-      'small_sharp',
-      'mid',
       'big_blurry',
+      'mid',
+      'small_sharp',
     ])
   })
 
   it('puts unscored patches last', () => {
-    expect(blurOrder({ unscored: { width: 900 }, a: { width: 10, blur: 50 }, b: { width: 10, blur: 20 } }, { clusteredFirst: false })).toEqual(['b', 'a', 'unscored'])
+    expect(blurOrder({ unscored: { width: 900 }, a: { width: 10, blur: 50 }, b: { width: 10, blur: 20 } }, { clusteredFirst: false })).toEqual(['a', 'b', 'unscored'])
   })
 
-  it('orders clusters by their sharpest member and keeps members contiguous, sharpest first', () => {
+  it('orders clusters by their blurriest member and keeps members contiguous, blurriest first', () => {
     const ids = blurOrder(
       {
         c1_blurry: { width: 10, blur: 90, cluster: 1 },
@@ -217,10 +217,10 @@ describe('orderPatchIds — sort by blurriness', () => {
       },
       { groupByClusters: true },
     )
-    expect(ids).toEqual(['c1_sharp', 'c1_blurry', 'c2_mid', 'c2_blurry'])
+    expect(ids).toEqual(['c1_blurry', 'c1_sharp', 'c2_blurry', 'c2_mid'])
   })
 
-  it('reversed puts the blurriest first', () => {
-    expect(blurOrder({ a: { width: 1, blur: 10 }, b: { width: 1, blur: 60 } }, { clusteredFirst: false, reversed: true })).toEqual(['b', 'a'])
+  it('reversed puts the sharpest first', () => {
+    expect(blurOrder({ a: { width: 1, blur: 10 }, b: { width: 1, blur: 60 } }, { clusteredFirst: false, reversed: true })).toEqual(['a', 'b'])
   })
 })

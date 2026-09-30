@@ -61,7 +61,7 @@ export function NightView(props: { leafGroupId: string }) {
   const [clusteredFirst, setClusteredFirst] = useState(true)
   const [groupByClusters, setGroupByClusters] = useState(true)
   const [sortBySize, setSortBySize] = useState(true)
-  // Blurriness from Mothbot Process: sort sharpest first (instead of by size),
+  // Blurriness from Mothbot Process: sort blurriest first (instead of by size),
   // and optionally hide patches blurrier than a limit (100 = show all).
   const [sortByBlur, setSortByBlur] = useState(false)
   const [blurLimit, setBlurLimit] = useState(100)

@@ -69,7 +69,7 @@ export type PatchGridProps = {
   groupByClusters?: boolean
   /** Order by size (clusters by their representative's size). */
   sortBySize?: boolean
-  /** Order sharpest first (clusters by their sharpest member); overrides size. */
+  /** Order blurriest first (clusters by their blurriest member); overrides size. */
   sortByBlur?: boolean
   /** Flip whatever order the options above produce. */
   reversed?: boolean
@@ -806,7 +806,7 @@ type PatchSortKey = {
  *  2. cluster members stay contiguous (`groupByClusters`)
  *  3. clusters are ordered by the size of their largest member, so a cluster
  *     sits where its representative would (`sortBySize`) — or, with
- *     `sortByBlur`, by their sharpest member, sharpest first
+ *     `sortByBlur`, by their blurriest member, blurriest first
  *  4. `reversed` flips whatever order the above produced
  *
  * Taxonomic grouping is the outermost level but is applied later, by
@@ -818,7 +818,7 @@ export function orderPatchIds(params: {
   clusteredFirst?: boolean
   groupByClusters?: boolean
   sortBySize?: boolean
-  /** Sharpest first (lowest blurriness); overrides size. Unscored patches sort last. */
+  /** Blurriest first (highest blurriness); overrides size. Unscored patches sort last. */
   sortByBlur?: boolean
   reversed?: boolean
 }) {
@@ -839,11 +839,11 @@ export function orderPatchIds(params: {
     const rawCluster = typeof (det as any)?.clusterId === 'number' ? ((det as any).clusterId as number) : undefined
     const clusterId = rawCluster
     const topCluster = typeof rawCluster === 'number' && rawCluster >= 0 ? Math.trunc(rawCluster) : undefined
-    // Width (not area) so patches of a similar shape sit together. For blurriness,
-    // negate so "larger first" means sharpest first; unscored patches sort last.
+    // Width (not area) so patches of a similar shape sit together. Blurriness sorts
+    // "larger first" too, i.e. blurriest first; unscored patches sort last.
     const sortValue = sortByBlur
       ? typeof p.blurScore === 'number'
-        ? -p.blurScore
+        ? p.blurScore
         : -Infinity
       : computeDetectionWidth({ detection: det })
     return { id: p.id, name: p.name, clusterId, topCluster, sortValue, groupSize: sortValue }

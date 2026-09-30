@@ -167,7 +167,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
         />
         {hasBlurData ? (
           <LabeledCheckboxControl
-            label='Blurriness (sharpest first)'
+            label='Blurriness (blurriest first)'
             checked={sortByBlur}
             onChange={(v) => onSortByBlurChange?.(v)}
           />
