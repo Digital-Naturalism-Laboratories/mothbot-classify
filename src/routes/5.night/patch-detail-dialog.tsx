@@ -93,6 +93,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             <div>
               <span className='font-medium'>Points:</span> {Array.isArray(detection?.points) ? detection!.points!.length : 0}
             </div>
+            <BlurDetails blurScore={patch?.blurScore ?? botData?.blurScore} botData={botData} />
 
             {(() => {
               const px = botData?.pixelMassPixels ?? detection?.pixelMassPixels
@@ -354,9 +355,27 @@ function SourcePhoto(props: { photo?: PhotoEntity; detection?: DetectionEntity }
   )
 }
 
+/** Blurriness from Mothbot Process: the imported score, else the one in the detection JSON. */
+function BlurDetails(props: { blurScore?: number; botData?: BotDetectionData | null }) {
+  const { blurScore, botData } = props
+  if (typeof blurScore !== 'number') return null
+  const streak = botData?.motionStreak
+  return (
+    <div title={botData?.blurMethod ? `Method: ${botData.blurMethod}` : undefined}>
+      <span className='font-medium'>Blurriness:</span> {blurScore.toFixed(1)}
+      <span className='text-neutral-500'> / 100</span>
+      {typeof streak === 'number' ? <span className='text-neutral-500'> · motion streak {streak.toFixed(1)}</span> : null}
+    </div>
+  )
+}
+
 type BotDetectionData = {
   pixelMassPixels?: number
   pixelMassMm2?: number
+  blurScore?: number
+  /** Process's motion-streak measure: how much further the patch stays self-similar along one direction than across. */
+  motionStreak?: number
+  blurMethod?: string
   latitude?: string
   longitude?: string
 }
@@ -383,12 +402,22 @@ function useBotDetectionData(patch?: PatchEntity): BotDetectionData | null {
         const json = JSON.parse(text) as {
           latitude?: string
           longitude?: string
-          shapes?: Array<{ patch_path?: string; pixel_mass_pixels?: number; pixel_mass_mm2?: number }>
+          shapes?: Array<{
+            patch_path?: string
+            pixel_mass_pixels?: number
+            pixel_mass_mm2?: number
+            blur_score?: number
+            motion_streak?: number
+            blur_method?: string
+          }>
         }
         const shape = json.shapes?.find((s) => s.patch_path === patchFileName)
         setData({
           pixelMassPixels: shape?.pixel_mass_pixels,
           pixelMassMm2: shape?.pixel_mass_mm2,
+          blurScore: typeof shape?.blur_score === 'number' ? shape.blur_score : undefined,
+          motionStreak: typeof shape?.motion_streak === 'number' ? shape.motion_streak : undefined,
+          blurMethod: typeof shape?.blur_method === 'string' ? shape.blur_method : undefined,
           latitude: json.latitude,
           longitude: json.longitude,
         })
