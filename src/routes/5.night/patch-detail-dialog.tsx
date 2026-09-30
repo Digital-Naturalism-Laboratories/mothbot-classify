@@ -359,12 +359,28 @@ function SourcePhoto(props: { photo?: PhotoEntity; detection?: DetectionEntity }
 function BlurDetails(props: { blurScore?: number; botData?: BotDetectionData | null }) {
   const { blurScore, botData } = props
   if (typeof blurScore !== 'number') return null
-  const streak = botData?.motionStreak
+  const { blurHomogeneous: homogeneous, blurMotion: motion, blurWinner: winner, blurType: type, blurDirectionRatio: ratio } = botData ?? {}
+  const part = (label: string, value: number | undefined, key: string) =>
+    typeof value === 'number' ? (
+      <span className={winner === key ? 'font-medium text-neutral-700' : undefined}>
+        {label} {value.toFixed(1)}
+      </span>
+    ) : null
   return (
     <div title={botData?.blurMethod ? `Method: ${botData.blurMethod}` : undefined}>
-      <span className='font-medium'>Blurriness:</span> {blurScore.toFixed(1)}
-      <span className='text-neutral-500'> / 100</span>
-      {typeof streak === 'number' ? <span className='text-neutral-500'> · motion streak {streak.toFixed(1)}</span> : null}
+      <div>
+        <span className='font-medium'>Blurriness:</span> {blurScore.toFixed(1)}
+        <span className='text-neutral-500'> / 100</span>
+        {type ? <span className='text-neutral-500'> · {type === 'motion' ? 'looks like motion blur' : 'looks like homogeneous blur'}</span> : null}
+      </div>
+      {typeof homogeneous === 'number' || typeof motion === 'number' ? (
+        <div className='text-neutral-500' title='The score is the larger of the two parts (shown in bold). Direction ratio: fine detail in the strongest vs the weakest direction; 3 or more suggests motion.'>
+          {part('homogeneous', homogeneous, 'homogeneous')}
+          {' · '}
+          {part('motion', motion, 'motion')}
+          {typeof ratio === 'number' ? ` · direction ratio ${ratio.toFixed(1)}` : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -373,8 +389,12 @@ type BotDetectionData = {
   pixelMassPixels?: number
   pixelMassMm2?: number
   blurScore?: number
-  /** Process's motion-streak measure: how much further the patch stays self-similar along one direction than across. */
-  motionStreak?: number
+  /** Process's two blur parts (0-100), which one set the score, and the likely kind of blur. */
+  blurHomogeneous?: number
+  blurMotion?: number
+  blurWinner?: string
+  blurType?: string
+  blurDirectionRatio?: number
   blurMethod?: string
   latitude?: string
   longitude?: string
@@ -407,17 +427,27 @@ function useBotDetectionData(patch?: PatchEntity): BotDetectionData | null {
             pixel_mass_pixels?: number
             pixel_mass_mm2?: number
             blur_score?: number
-            motion_streak?: number
+            blur_homogeneous?: number
+            blur_motion?: number
+            blur_winner?: string
+            blur_type?: string
+            blur_direction_ratio?: number
             blur_method?: string
           }>
         }
         const shape = json.shapes?.find((s) => s.patch_path === patchFileName)
+        const num = (v: unknown) => (typeof v === 'number' ? v : undefined)
+        const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
         setData({
           pixelMassPixels: shape?.pixel_mass_pixels,
           pixelMassMm2: shape?.pixel_mass_mm2,
-          blurScore: typeof shape?.blur_score === 'number' ? shape.blur_score : undefined,
-          motionStreak: typeof shape?.motion_streak === 'number' ? shape.motion_streak : undefined,
-          blurMethod: typeof shape?.blur_method === 'string' ? shape.blur_method : undefined,
+          blurScore: num(shape?.blur_score),
+          blurHomogeneous: num(shape?.blur_homogeneous),
+          blurMotion: num(shape?.blur_motion),
+          blurWinner: str(shape?.blur_winner),
+          blurType: str(shape?.blur_type),
+          blurDirectionRatio: num(shape?.blur_direction_ratio),
+          blurMethod: str(shape?.blur_method),
           latitude: json.latitude,
           longitude: json.longitude,
         })
