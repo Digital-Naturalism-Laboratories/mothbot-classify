@@ -4,7 +4,7 @@ import { Progress } from '~/components/ui/progress'
 import { Button } from '~/components/ui/button'
 import { useStore } from '@nanostores/react'
 import { useState, type ReactNode } from 'react'
-import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from 'lucide-react'
+import { ArrowUpDownIcon, ChevronDownIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, ChevronUpIcon, EllipsisIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -172,16 +172,22 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
             onChange={(v) => onSortByBlurChange?.(v)}
           />
         ) : null}
-        <LabeledCheckboxControl
-          label='Reverse order'
-          checked={reversed}
-          onChange={onReversedChange}
-        />
-        <LabeledCheckboxControl
-          label='Collapse all clusters'
-          checked={clustersCollapsed}
-          onChange={onClustersCollapsedChange}
-        />
+        <div className='mt-4 flex gap-8 border-t border-neutral-200 pt-12 dark:border-neutral-700'>
+          <ToggleButton
+            pressed={reversed}
+            onChange={onReversedChange}
+            icon={<ArrowUpDownIcon size={14} />}
+            label='Reverse order'
+            title={reversed ? 'Order is reversed — click to restore' : 'Reverse the order chosen above'}
+          />
+          <ToggleButton
+            pressed={clustersCollapsed}
+            onChange={onClustersCollapsedChange}
+            icon={clustersCollapsed ? <ChevronsUpDownIcon size={14} /> : <ChevronsDownUpIcon size={14} />}
+            label='Collapse clusters'
+            title={clustersCollapsed ? 'Clusters are collapsed — click to expand them' : 'Collapse every cluster to one row'}
+          />
+        </div>
       </LayoutOptionsSection>
 
       {(hasMachineIdentification || (availableBotAlgorithms && availableBotAlgorithms.length > 0)) ? (
@@ -429,5 +435,27 @@ function LabeledCheckboxControl(props: LabeledCheckboxControlProps) {
         className='accent-blue-600 cursor-pointer'
       />
     </label>
+  )
+}
+
+/** A standalone on/off button, set apart from the "Organize by" checkboxes. */
+function ToggleButton(props: { pressed: boolean; onChange: (pressed: boolean) => void; icon: ReactNode; label: string; title: string }) {
+  const { pressed, onChange, icon, label, title } = props
+  return (
+    <button
+      type='button'
+      onClick={() => onChange(!pressed)}
+      aria-pressed={pressed}
+      title={title}
+      className={cn(
+        'flex flex-1 items-center justify-center gap-6 rounded-md border px-8 py-6 text-12 transition-colors',
+        pressed
+          ? 'border-brand bg-brand/10 font-medium text-brand'
+          : 'border-neutral-300 bg-background text-ink-secondary hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
