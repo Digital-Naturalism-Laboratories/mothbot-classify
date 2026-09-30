@@ -44,9 +44,14 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     clusteredFirst,
     groupByClusters,
     sortBySize,
+    sortByBlur = false,
+    blurLimit = 100,
+    hasBlurData = false,
     reversed,
     clustersCollapsed,
     onSizeThresholdChange,
+    onSortByBlurChange,
+    onBlurLimitChange,
     onGroupByTaxonChange,
     onClusteredFirstChange,
     onGroupByClustersChange,
@@ -138,6 +143,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
       >
         <PatchSizeControl compact />
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
+        <BlurLimitControl value={blurLimit} enabled={hasBlurData} onChange={(v) => onBlurLimitChange?.(v)} />
         <div className='pt-2 text-11 font-medium uppercase tracking-wide text-neutral-500'>Organize by</div>
         <LabeledCheckboxControl
           label='Taxonomic groups'
@@ -159,6 +165,13 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           checked={sortBySize}
           onChange={onSortBySizeChange}
         />
+        {hasBlurData ? (
+          <LabeledCheckboxControl
+            label='Blurriness (sharpest first)'
+            checked={sortByBlur}
+            onChange={(v) => onSortByBlurChange?.(v)}
+          />
+        ) : null}
         <LabeledCheckboxControl
           label='Reverse order'
           checked={reversed}
@@ -335,6 +348,26 @@ function LayoutOptionsSection(props: LayoutOptionsSectionProps) {
 
       {!open ? null : <div className='space-y-10 pt-8'>{children}</div>}
     </div>
+  )
+}
+
+/**
+ * Hides patches blurrier than the chosen limit (Mothbot Process's 0-100
+ * blurriness score). Patches without a score are always shown.
+ */
+function BlurLimitControl(props: { value: number; enabled: boolean; onChange: (value: number) => void }) {
+  const { value, enabled, onChange } = props
+  return (
+    <LabeledSliderControl
+      label='Blurriness limit'
+      value={!enabled ? 'No blur data' : value >= 100 ? 'Show all' : `<= ${value}`}
+      sliderValue={value}
+      min={0}
+      max={100}
+      step={1}
+      disabled={!enabled}
+      onChange={onChange}
+    />
   )
 }
 

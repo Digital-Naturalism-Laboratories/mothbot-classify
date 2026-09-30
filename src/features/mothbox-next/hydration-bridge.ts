@@ -188,6 +188,7 @@ export function hydratePackageEntities(params: {
   cameraDays: CameraDayRecord[]
   resolvedClassifications: ClassificationRecord[]
   classificationFiles?: Array<{ path: string; rows: ClassificationRecord[] }>
+  measurements?: import('./patch-measurements').PatchMeasurementsById
   indexedByAssetPath: Record<string, IndexedFile>
   sourceResolutionByPath?: Record<string, IndexedFile>
   packageRoot?: string
@@ -200,6 +201,7 @@ export function hydratePackageEntities(params: {
     patchSources = [],
     resolvedClassifications,
     classificationFiles = [],
+    measurements,
     indexedByAssetPath,
     sourceResolutionByPath = {},
     packageRoot = '',
@@ -315,6 +317,9 @@ export function hydratePackageEntities(params: {
       ...(botDetectionJsonName ? { botDetectionJsonName } : {}),
       ...(botDetectionPath ? { originalBotDetectionPath: botDetectionPath } : {}),
       ...(patch.detector_id ? { detectorId: patch.detector_id } : {}),
+      ...(typeof measurements?.[patch.patch_id]?.blur_score === 'number'
+        ? { blurScore: measurements[patch.patch_id].blur_score }
+        : {}),
     }
 
     const patchDetectionMetadata = detectionMetadataFromPatch({

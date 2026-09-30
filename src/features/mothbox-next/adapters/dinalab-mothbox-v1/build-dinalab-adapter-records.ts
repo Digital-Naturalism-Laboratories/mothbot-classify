@@ -17,6 +17,7 @@ import {
   type PackageSourceLayout,
 } from '~/features/data-flow/1.ingest/resolve-package-source-layout'
 import { dirnameRelative, joinRelative } from './adapter-path-utils'
+import { measurementFromShape, type PatchMeasurementRecord } from '../../patch-measurements'
 import {
   packageSourceLocationLabel,
   disambiguatePatchId,
@@ -28,6 +29,8 @@ import {
 export type BuiltDinalabAdapterRecords = {
   patches: PatchRecord[]
   patchSources: PatchSourceRecord[]
+  /** Per-patch measurements from Process (blurriness), for patch-measurements.ndjson. */
+  measurements: PatchMeasurementRecord[]
   botRows: ClassificationRecord[]
   humanRows: ClassificationRecord[]
   resolvedClassifications: ClassificationRecord[]
@@ -71,6 +74,7 @@ export async function buildDinalabMothboxV1Records(params: {
 
   const patches: PatchRecord[] = []
   const patchSources: PatchSourceRecord[] = []
+  const measurements: PatchMeasurementRecord[] = []
   const botRows: ClassificationRecord[] = []
   const humanRows: ClassificationRecord[] = []
   const usedPatchIds = new Set<string>()
@@ -181,6 +185,9 @@ export async function buildDinalabMothboxV1Records(params: {
         originalSourceExists,
       })
 
+      const measurement = measurementFromShape({ patchId, shape })
+      if (measurement) measurements.push(measurement)
+
       patchSources.push({
         patch_id: patchId,
         source_type: 'crop_from_photo',
@@ -262,6 +269,7 @@ export async function buildDinalabMothboxV1Records(params: {
   return {
     patches,
     patchSources,
+    measurements,
     botRows,
     humanRows,
     resolvedClassifications: resolved,

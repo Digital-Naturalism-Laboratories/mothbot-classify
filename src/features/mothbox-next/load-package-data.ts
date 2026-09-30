@@ -14,7 +14,8 @@ import type {
   PatchRecord,
   PatchSourceRecord,
 } from './records'
-import { resolveManifestPaths } from './package-paths'
+import { joinPackagePath, resolveManifestPaths } from './package-paths'
+import { PATCH_MEASUREMENTS_RECORD, parsePatchMeasurements, type PatchMeasurementsById } from './patch-measurements'
 import { flattenClassificationFiles, resolveCurrentClassifications } from './resolve-classifications'
 import type { CurrentClassificationRecord } from './records'
 
@@ -28,6 +29,8 @@ export type LoadedMothboxNextPackage = {
   cameraDays: CameraDayRecord[]
   classificationFiles: Array<{ path: string; rows: ClassificationRecord[] }>
   resolvedClassifications: CurrentClassificationRecord[]
+  /** Per-patch measurements (blurriness); empty when the package has none yet. */
+  measurements: PatchMeasurementsById
 }
 
 export type PackageDataAccess = {
@@ -82,6 +85,16 @@ export async function loadMothboxNextPackageData(params: {
     classificationFiles.push({ path: filePath, rows })
   }
 
+  // Optional and derived-only: a missing file just means no measurements yet.
+  let measurements: PatchMeasurementsById = {}
+  try {
+    measurements = parsePatchMeasurements(
+      await access.readPackageFile(joinPackagePath(packageRoot, PATCH_MEASUREMENTS_RECORD)),
+    )
+  } catch {
+    // no measurements file
+  }
+
   const flattened = flattenClassificationFiles({ files: classificationFiles })
   const resolvedClassifications = resolveCurrentClassifications({ rows: flattened })
 
@@ -95,6 +108,7 @@ export async function loadMothboxNextPackageData(params: {
     cameraDays,
     classificationFiles,
     resolvedClassifications,
+    measurements,
   }
 }
 

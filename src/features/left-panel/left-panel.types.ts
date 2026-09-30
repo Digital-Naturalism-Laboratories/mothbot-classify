@@ -26,6 +26,12 @@ export type LeafGroupLeftPanelProps = {
   clusteredFirst: boolean
   groupByClusters: boolean
   sortBySize: boolean
+  /** Order sharpest first by blurriness (overrides size). */
+  sortByBlur?: boolean
+  /** Hide patches blurrier than this (0-100); 100 shows all. */
+  blurLimit?: number
+  /** Whether any patch in view has a blurriness score. */
+  hasBlurData?: boolean
   reversed: boolean
   clustersCollapsed: boolean
   onSizeThresholdChange: (value: number) => void
@@ -33,6 +39,8 @@ export type LeafGroupLeftPanelProps = {
   onClusteredFirstChange: (enabled: boolean) => void
   onGroupByClustersChange: (enabled: boolean) => void
   onSortBySizeChange: (enabled: boolean) => void
+  onSortByBlurChange?: (enabled: boolean) => void
+  onBlurLimitChange?: (value: number) => void
   onReversedChange: (enabled: boolean) => void
   onClustersCollapsedChange: (enabled: boolean) => void
   availableDetectorIds?: string[]

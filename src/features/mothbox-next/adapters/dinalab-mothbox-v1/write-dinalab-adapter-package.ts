@@ -1,3 +1,4 @@
+import { PATCH_MEASUREMENTS_RECORD } from '../../patch-measurements'
 import { serializeNdjsonLines } from '../../parse-ndjson'
 import type { DinalabAdapterIO } from './adapter-io'
 import type { BuiltDinalabAdapterRecords } from './build-dinalab-adapter-records'
@@ -179,6 +180,7 @@ async function writeBuiltPackageRecordFiles(params: {
 
   await io.package.writeText('02_records/patches.ndjson', serializeNdjsonLines(built.patches))
   await io.package.writeText('02_records/patch-sources.ndjson', serializeNdjsonLines(built.patchSources))
+  await io.package.writeText(PATCH_MEASUREMENTS_RECORD, serializeNdjsonLines(built.measurements))
   await io.package.writeText('02_records/deployments.ndjson', serializeNdjsonLines(built.deployments))
   await io.package.writeText('02_records/camera-days.ndjson', serializeNdjsonLines(built.cameraDays))
   await io.package.writeText('03_classifications/_bot.ndjson', serializeNdjsonLines(built.botRows))

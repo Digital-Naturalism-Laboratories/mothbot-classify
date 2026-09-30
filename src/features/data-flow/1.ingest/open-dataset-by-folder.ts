@@ -68,6 +68,11 @@ export async function openDatasetByFolderName(params: {
       console.warn('🌀 openDatasetByFolderName: new-night check failed', error)
       return 0
     })
+    const { checkForMeasurementsInOpenPackage } = await import('./check-for-measurements')
+    await checkForMeasurementsInOpenPackage().catch((error) => {
+      console.warn('🌀 openDatasetByFolderName: measurements check failed', error)
+      return 0
+    })
   }
 
   return opened.ok

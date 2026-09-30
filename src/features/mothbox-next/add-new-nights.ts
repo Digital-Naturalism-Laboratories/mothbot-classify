@@ -11,6 +11,7 @@
 
 import type { DinalabAdapterIO, DinalabAdapterSourceIO } from './adapters/dinalab-mothbox-v1/adapter-io'
 import { buildDinalabMothboxV1Records } from './adapters/dinalab-mothbox-v1/build-dinalab-adapter-records'
+import { PATCH_MEASUREMENTS_RECORD } from './patch-measurements'
 import type { PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-package-source-layout'
 import {
   appendNdjsonRows,
@@ -172,6 +173,7 @@ export async function addNewNightsToPackage(params: {
 
   const patches = await appendRecord({ io, path: RECORDS.patches, additions: built.patches, key: 'patch_id' })
   await appendRecord({ io, path: RECORDS.patchSources, additions: built.patchSources, key: 'patch_id' })
+  await appendRecord({ io, path: PATCH_MEASUREMENTS_RECORD, additions: built.measurements, key: 'patch_id' })
   const cameraDays = await appendRecord({
     io,
     path: RECORDS.cameraDays,

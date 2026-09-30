@@ -13,6 +13,8 @@ export type PatchEntity = {
   botDetectionJsonName?: string
   originalBotDetectionPath?: string
   detectorId?: string
+  /** Blurriness 0 (sharpest) .. 100 (blurriest), from Mothbot Process. */
+  blurScore?: number
 }
 
 export const patchesStore = atom<Record<string, PatchEntity>>({})

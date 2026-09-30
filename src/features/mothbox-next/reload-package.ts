@@ -223,6 +223,7 @@ export async function applyLoadedPackageToStores(params: {
     cameraDays: normalized.cameraDays,
     resolvedClassifications: loaded.resolvedClassifications,
     classificationFiles: loaded.classificationFiles,
+    measurements: loaded.measurements,
     indexedByAssetPath,
     sourceResolutionByPath,
     packageRoot: loaded.packageRoot,

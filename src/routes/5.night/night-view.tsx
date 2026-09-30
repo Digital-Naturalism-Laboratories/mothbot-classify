@@ -61,6 +61,10 @@ export function NightView(props: { leafGroupId: string }) {
   const [clusteredFirst, setClusteredFirst] = useState(true)
   const [groupByClusters, setGroupByClusters] = useState(true)
   const [sortBySize, setSortBySize] = useState(true)
+  // Blurriness from Mothbot Process: sort sharpest first (instead of by size),
+  // and optionally hide patches blurrier than a limit (100 = show all).
+  const [sortByBlur, setSortByBlur] = useState(false)
+  const [blurLimit, setBlurLimit] = useState(100)
   const [reversed, setReversed] = useState(false)
   const [clustersCollapsed, setClustersCollapsed] = useState(false)
   const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
@@ -336,9 +340,18 @@ export function NightView(props: { leafGroupId: string }) {
   }, [partList, partDetections])
   const clampedSizeThreshold = clampSizeThreshold({ value: sizeThreshold, max: sizeThresholdMax })
 
+  const hasBlurData = useMemo(() => partList.some((patch) => typeof patch.blurScore === 'number'), [partList])
   const filtered = useMemo(
-    () => filterPatches({ patches: partList, detections: partDetections, selectedTaxon, selectedBucket, sizeThreshold: clampedSizeThreshold }),
-    [partList, partDetections, selectedTaxon, selectedBucket, clampedSizeThreshold],
+    () =>
+      filterPatches({
+        patches: partList,
+        detections: partDetections,
+        selectedTaxon,
+        selectedBucket,
+        sizeThreshold: clampedSizeThreshold,
+        blurLimit: hasBlurData ? blurLimit : 100,
+      }),
+    [partList, partDetections, selectedTaxon, selectedBucket, clampedSizeThreshold, hasBlurData, blurLimit],
   )
   const totalPatches = list.length
   const selectedCount = useMemo(() => Array.from(selected ?? []).filter((id) => !!id).length, [selected])
@@ -569,13 +582,24 @@ export function NightView(props: { leafGroupId: string }) {
         clusteredFirst={clusteredFirst}
         groupByClusters={groupByClusters}
         sortBySize={sortBySize}
+        sortByBlur={sortByBlur}
+        blurLimit={blurLimit}
+        hasBlurData={hasBlurData}
         reversed={reversed}
         clustersCollapsed={clustersCollapsed}
         onSizeThresholdChange={(value) => setSizeThreshold(clampSizeThreshold({ value, max: sizeThresholdMax }))}
         onGroupByTaxonChange={setGroupByTaxon}
         onClusteredFirstChange={setClusteredFirst}
         onGroupByClustersChange={setGroupByClusters}
-        onSortBySizeChange={setSortBySize}
+        onSortBySizeChange={(v) => {
+          setSortBySize(v)
+          if (v) setSortByBlur(false) // one leaf sort at a time
+        }}
+        onSortByBlurChange={(v) => {
+          setSortByBlur(v)
+          if (v) setSortBySize(false)
+        }}
+        onBlurLimitChange={setBlurLimit}
         onReversedChange={setReversed}
         onClustersCollapsedChange={(v) => { setClustersCollapsed(v); setClusterOverrides(new Set()) }}
         availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
@@ -614,6 +638,7 @@ export function NightView(props: { leafGroupId: string }) {
           clusteredFirst={clusteredFirst}
           groupByClusters={groupByClusters}
           sortBySize={sortBySize}
+          sortByBlur={sortByBlur && hasBlurData}
           reversed={reversed}
           hasMachineIdentification={hasMachineIdentification}
           collapsedClusterSet={collapsedClusterSet.size > 0 ? collapsedClusterSet : undefined}
@@ -774,16 +799,22 @@ function filterPatches(params: {
   selectedTaxon: TaxonSelection
   selectedBucket?: 'auto' | 'user'
   sizeThreshold: number
+  /** Hide patches blurrier than this (0-100); 100 = no limit. Unscored patches always show. */
+  blurLimit?: number
 }) {
-  const { patches, detections, selectedTaxon, selectedBucket, sizeThreshold } = params
-  const taxonFilteredPatches = filterPatchesByTaxon({ patches, detections, selectedTaxon, selectedBucket })
-  if (sizeThreshold <= 0) return taxonFilteredPatches
+  const { patches, detections, selectedTaxon, selectedBucket, sizeThreshold, blurLimit = 100 } = params
+  let result = filterPatchesByTaxon({ patches, detections, selectedTaxon, selectedBucket })
 
-  const result = taxonFilteredPatches.filter((patch) => {
-    const detection = detections?.[patch.id]
-    const longestDimension = computeDetectionLongestDimension({ detection })
-    return longestDimension >= sizeThreshold
-  })
+  if (sizeThreshold > 0) {
+    result = result.filter((patch) => {
+      const detection = detections?.[patch.id]
+      const longestDimension = computeDetectionLongestDimension({ detection })
+      return longestDimension >= sizeThreshold
+    })
+  }
+  if (blurLimit < 100) {
+    result = result.filter((patch) => typeof patch.blurScore !== 'number' || patch.blurScore <= blurLimit)
+  }
   return result
 }
 

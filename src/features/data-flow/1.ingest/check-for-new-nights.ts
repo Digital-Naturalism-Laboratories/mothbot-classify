@@ -76,16 +76,24 @@ function describeDetection(detection: Awaited<ReturnType<typeof detectNewNightFo
  * appends records rather than rebuilding the package, so existing
  * identification work is left untouched.
  */
-export async function checkForNewNightsInOpenPackage(): Promise<number> {
-  if (suppressCheck) return 0
+export type OpenPackageIO = {
+  io: ReturnType<typeof createBrowserDinalabAdapterIO>
+  packageDir: FileSystemDirectoryHandleLike
+  active: NonNullable<ReturnType<typeof mothboxNextPackageStore.get>>
+  folderName: string
+  /** Where the source tree sits relative to the package ('' = in place). */
+  sourcePrefix: string
+}
 
+/** Adapter IO for the open package's source + package folders, or null (read access only). */
+export async function resolveOpenPackageIO(): Promise<OpenPackageIO | null> {
   // `packageRoot` is '' for a package opened at its own root, so presence of an
   // active package is the signal here — not a non-empty packageRoot.
   const active = mothboxNextPackageStore.get()
-  if (!active) return 0
+  if (!active) return null
 
   const folderName = activeDatasetFolderNameStore.get()
-  if (!folderName) return 0
+  if (!folderName) return null
 
   // The persisted `projectsRoot` handle IS the package directory (it's what
   // openMothboxNextPackageFromHandle stored), so resolve from there rather than
@@ -95,23 +103,32 @@ export async function checkForNewNightsInOpenPackage(): Promise<number> {
     persistenceConstants.IDB_STORE,
     'projectsRoot',
   )) as FileSystemDirectoryHandleLike | null
-  if (!projectsRoot) return 0
+  if (!projectsRoot) return null
 
   const granted = await ensureReadPermission(projectsRoot as never)
-  if (!granted) return 0
+  if (!granted) return null
 
   const packageDir = active.packageRoot
     ? await resolveDirectory(projectsRoot, active.packageRoot)
     : projectsRoot
-  if (!packageDir) return 0
+  if (!packageDir) return null
 
   // The manifest records where the source tree sits relative to the package.
   const sourcePath = active.manifest?.source?.path ?? './'
   const sourcePrefix = sourcePath === './' || sourcePath === '.' ? '' : sourcePath.replace(/\/+$/, '')
   const sourceDir = sourcePrefix ? await resolveDirectory(packageDir, sourcePrefix) : packageDir
-  if (!sourceDir) return 0
+  if (!sourceDir) return null
 
   const io = createBrowserDinalabAdapterIO({ sourceHandle: sourceDir, packageHandle: packageDir })
+  return { io, packageDir, active, folderName, sourcePrefix }
+}
+
+export async function checkForNewNightsInOpenPackage(): Promise<number> {
+  if (suppressCheck) return 0
+
+  const resolved = await resolveOpenPackageIO()
+  if (!resolved) return 0
+  const { io, packageDir, active, folderName, sourcePrefix } = resolved
 
   let detection: Awaited<ReturnType<typeof detectNewNightFolders>>
   try {
