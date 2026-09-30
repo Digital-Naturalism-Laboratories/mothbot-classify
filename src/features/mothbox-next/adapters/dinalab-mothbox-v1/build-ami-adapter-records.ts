@@ -250,6 +250,7 @@ export async function buildAmiAdapterRecords(params: {
     botRows,
     humanRows: [],
     resolvedClassifications,
+    measurements: [], // AMI data has no Mothbot Process blur scores
     deployments: [...deploymentsById.values()].sort((a, b) => a.deployment_id.localeCompare(b.deployment_id)),
     cameraDays: [...cameraDaysById.values()].sort((a, b) => a.camera_day_id.localeCompare(b.camera_day_id)),
   }

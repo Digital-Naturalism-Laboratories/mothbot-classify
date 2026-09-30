@@ -4,6 +4,7 @@ import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRe
 import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
 import { buildDinalabMothboxV1Records } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/build-dinalab-adapter-records'
 import { writeMergedPackageRecords } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/write-dinalab-adapter-package'
+import { PATCH_MEASUREMENTS_RECORD, type PatchMeasurementRecord } from '~/features/mothbox-next/patch-measurements'
 import { groupHumanRowsByClassifierFile } from '~/features/mothbox-next/human-classifier-files'
 import { userSessionStore } from '~/stores/ui'
 import { createBrowserDinalabAdapterIO } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
@@ -46,6 +47,8 @@ export async function mergeForeignFolderIntoPackage(params: {
   const existingDeployments = await readNdjsonFile<DeploymentRecord>(packageDir, '02_records/deployments.ndjson')
   const existingCameraDays = await readNdjsonFile<CameraDayRecord>(packageDir, '02_records/camera-days.ndjson')
   const existingBotRows = await readNdjsonFile<ClassificationRecord>(packageDir, '03_classifications/_bot.ndjson')
+  // The writer rewrites patch-measurements.ndjson, so carry the existing scores over.
+  const existingMeasurements = await readNdjsonFile<PatchMeasurementRecord>(packageDir, PATCH_MEASUREMENTS_RECORD)
   // Every person's file, not just the running user's: the writer rewrites one
   // file per classifier, so any file left out here would lose its rows.
   const existingHumanRows: ClassificationRecord[] = []
@@ -76,6 +79,7 @@ export async function mergeForeignFolderIntoPackage(params: {
       cameraDays: existingCameraDays,
       botRows: existingBotRows,
       humanRows: existingHumanRows,
+      measurements: existingMeasurements,
     },
     incoming: built,
   })
@@ -113,6 +117,7 @@ function mergeRecordsByPatchId(params: {
     cameraDays: CameraDayRecord[]
     botRows: ClassificationRecord[]
     humanRows: ClassificationRecord[]
+    measurements: PatchMeasurementRecord[]
   }
   incoming: Awaited<ReturnType<typeof buildDinalabMothboxV1Records>>
 }) {
@@ -131,6 +136,11 @@ function mergeRecordsByPatchId(params: {
 
   const botRows = [...existing.botRows, ...incoming.botRows.filter((row) => !knownPatchIds.has(row.patch_id))]
   const humanRows = [...existing.humanRows, ...incoming.humanRows.filter((row) => !knownPatchIds.has(row.patch_id))]
+  const measuredIds = new Set(existing.measurements.map((row) => row.patch_id))
+  const measurements = [
+    ...existing.measurements,
+    ...incoming.measurements.filter((row) => !knownPatchIds.has(row.patch_id) && !measuredIds.has(row.patch_id)),
+  ]
 
   const resolvedClassifications = resolveCurrentClassifications({
     rows: flattenClassificationFiles({
@@ -149,6 +159,7 @@ function mergeRecordsByPatchId(params: {
       botRows,
       humanRows,
       resolvedClassifications,
+      measurements,
       deployments: [...deploymentsById.values()].sort((a, b) => a.deployment_id.localeCompare(b.deployment_id)),
       cameraDays: [...cameraDaysById.values()].sort((a, b) => a.camera_day_id.localeCompare(b.camera_day_id)),
     },
