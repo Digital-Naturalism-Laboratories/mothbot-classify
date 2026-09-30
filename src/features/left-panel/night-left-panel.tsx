@@ -143,7 +143,6 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
       >
         <PatchSizeControl compact />
         <SizeThresholdControl value={sizeThreshold} max={sizeThresholdMax} onChange={onSizeThresholdChange} />
-        <BlurLimitControl value={blurLimit} enabled={hasBlurData} onChange={(v) => onBlurLimitChange?.(v)} />
         <div className='pt-2 text-11 font-medium uppercase tracking-wide text-neutral-500'>Organize by</div>
         <LabeledCheckboxControl
           label='Taxonomic groups'
@@ -166,11 +165,14 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           onChange={onSortBySizeChange}
         />
         {hasBlurData ? (
-          <LabeledCheckboxControl
-            label='Blurriness (blurriest first)'
-            checked={sortByBlur}
-            onChange={(v) => onSortByBlurChange?.(v)}
-          />
+          <>
+            <LabeledCheckboxControl
+              label='Blurriness (blurriest first)'
+              checked={sortByBlur}
+              onChange={(v) => onSortByBlurChange?.(v)}
+            />
+            <BlurLimitControl value={blurLimit} enabled={hasBlurData} onChange={(v) => onBlurLimitChange?.(v)} />
+          </>
         ) : null}
         <div className='mt-4 flex gap-8 border-t border-neutral-200 pt-12 dark:border-neutral-700'>
           <ToggleButton
