@@ -41,6 +41,8 @@ export type DetectionEntity = {
   pixelMassPixels?: number
   pixelMassMm2?: number | null
   pixelMassTimestamp?: string
+  /** How Mothbot Process outlined the insect for pixel mass (a rembg model name, or 'border-colour-mask/v1'). */
+  pixelMassMethod?: string
   detectorId?: string
   /** When Mothbot Process clustered this detection (its raw `timestamp_cluster`), from the package records. */
   clusteredAt?: string

@@ -78,6 +78,8 @@ export type ClassificationRecord = {
   pixel_mass_pixels?: number | null
   pixel_mass_mm2?: number | null
   pixel_mass_timestamp?: string | null
+  /** How Mothbot Process outlined the insect, e.g. 'birefnet-general-lite' or 'border-colour-mask/v1'. */
+  pixel_mass_method?: string | null
 }
 
 export type CurrentClassificationRecord = ClassificationRecord & {

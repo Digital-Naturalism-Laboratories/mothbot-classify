@@ -50,6 +50,7 @@ const DARWIN_COLUMNS = [
   'area',
   'pixel_mass_pixels',
   'pixel_mass_mm2',
+  'pixel_mass_method',
 
   // Date/Time
   'eventDate',
@@ -359,6 +360,7 @@ export function buildDarwinShapeFromDetection(params: {
     image_id,
     pixel_mass_pixels: detection?.pixelMassPixels != null ? String(detection.pixelMassPixels) : '',
     pixel_mass_mm2: detection?.pixelMassMm2 != null ? String(detection.pixelMassMm2) : '',
+    pixel_mass_method: detection?.pixelMassMethod ?? '',
   }
   return row
 }

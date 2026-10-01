@@ -111,6 +111,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
                   {mm2 == null && px != null ? (
                     <div className='text-neutral-500 text-11'>No calibration set — area in mm² unavailable</div>
                   ) : null}
+                  <PixelMassMethod method={botData?.pixelMassMethod ?? detection?.pixelMassMethod} />
                 </div>
               )
             })()}
@@ -470,6 +471,7 @@ function BlurDetails(props: { blurScore?: number; botData?: BotDetectionData | n
 type BotDetectionData = {
   pixelMassPixels?: number
   pixelMassMm2?: number
+  pixelMassMethod?: string
   blurScore?: number
   /** Process's two blur parts (0-100), which one set the score, and the likely kind of blur. */
   blurHomogeneous?: number
@@ -508,6 +510,7 @@ function useBotDetectionData(patch?: PatchEntity): BotDetectionData | null {
             patch_path?: string
             pixel_mass_pixels?: number
             pixel_mass_mm2?: number
+            pixel_mass_method?: string
             blur_score?: number
             blur_homogeneous?: number
             blur_motion?: number
@@ -523,6 +526,7 @@ function useBotDetectionData(patch?: PatchEntity): BotDetectionData | null {
         setData({
           pixelMassPixels: shape?.pixel_mass_pixels,
           pixelMassMm2: shape?.pixel_mass_mm2,
+          pixelMassMethod: str(shape?.pixel_mass_method),
           blurScore: num(shape?.blur_score),
           blurHomogeneous: num(shape?.blur_homogeneous),
           blurMotion: num(shape?.blur_motion),
@@ -624,7 +628,21 @@ function NobgImage(props: { patch?: PatchEntity; detection?: DetectionEntity; bo
         {pixelMassMm2 == null && pixelMassPixels != null ? (
           <div className='text-neutral-500 text-11'>No calibration — mm² unavailable</div>
         ) : null}
+        <PixelMassMethod method={botData?.pixelMassMethod ?? detection?.pixelMassMethod} />
       </div>
+    </div>
+  )
+}
+
+/** Which outline the pixel mass came from; the colour mask is Process's rough no-model option. */
+function PixelMassMethod(props: { method?: string }) {
+  const { method } = props
+  if (!method) return null
+  const colourMask = method.startsWith('border-colour-mask/')
+  return (
+    <div title={method}>
+      <span className='font-medium'>Method:</span>{' '}
+      {colourMask ? 'colour mask (rough, no AI model)' : method}
     </div>
   )
 }

@@ -34,6 +34,7 @@ export function detectionFromClassification(params: {
     ...(typeof row.pixel_mass_pixels === 'number' ? { pixelMassPixels: row.pixel_mass_pixels } : {}),
     ...(row.pixel_mass_mm2 != null ? { pixelMassMm2: row.pixel_mass_mm2 } : {}),
     ...(typeof row.pixel_mass_timestamp === 'string' ? { pixelMassTimestamp: row.pixel_mass_timestamp } : {}),
+    ...(typeof row.pixel_mass_method === 'string' ? { pixelMassMethod: row.pixel_mass_method } : {}),
   }
 }
 
