@@ -8,6 +8,7 @@ import type { DetectionEntity } from '~/models/detection.types'
 import type { IndexedFile } from '~/stores/entities/photos'
 import type { CameraDayRecord, DeploymentRecord, PatchRecord, PatchSourceRecord } from './records'
 import type { ClassificationRecord } from './records'
+import type { PatchMeasurementRecord } from './patch-measurements'
 import { detectionFromClassification } from './classification-to-detection'
 import {
   buildDeploymentAndCameraDayRecords,
@@ -188,7 +189,7 @@ export function hydratePackageEntities(params: {
   cameraDays: CameraDayRecord[]
   resolvedClassifications: ClassificationRecord[]
   classificationFiles?: Array<{ path: string; rows: ClassificationRecord[] }>
-  measurements?: import('./patch-measurements').PatchMeasurementsById
+  measurements?: Record<string, PatchMeasurementRecord>
   indexedByAssetPath: Record<string, IndexedFile>
   sourceResolutionByPath?: Record<string, IndexedFile>
   packageRoot?: string
@@ -326,6 +327,7 @@ export function hydratePackageEntities(params: {
       patch,
       patchSource: patchSourcesById[patch.patch_id],
       botMetadata: botMetadataByPatch.get(patch.patch_id),
+      measurement: measurements?.[patch.patch_id],
     })
     const classification = classificationByPatch.get(patch.patch_id)
     if (classification) {
@@ -373,6 +375,7 @@ function detectionMetadataFromPatch(params: {
   patch: PatchRecord
   patchSource?: PatchSourceRecord
   botMetadata?: BotClassificationMetadata
+  measurement?: PatchMeasurementRecord
 }): Partial<DetectionEntity> {
   const clusterId = clusterIdFromPatchRecord(params.patch)
   const points = cropPointsFromPatchSource(params.patchSource)
@@ -388,12 +391,31 @@ function detectionMetadataFromPatch(params: {
     ...(shapeType ? { shapeType } : {}),
     ...(botClassifierId ? { botClassifierId } : {}),
     ...(botScore !== undefined ? { score: botScore } : {}),
+    ...pixelMassForPatch(params.measurement, params.botMetadata),
   }
+}
+
+/**
+ * Pixel mass is a property of the patch, not of whoever identified it: take it from
+ * the measurements file (refreshed when Process re-measures), else from the bot's
+ * row. A human identification row carries none, so without this a reviewed patch
+ * lost its pixel mass when the dataset was reopened.
+ */
+function pixelMassForPatch(measurement?: PatchMeasurementRecord, bot?: BotClassificationMetadata): Partial<DetectionEntity> {
+  if (typeof measurement?.pixel_mass_pixels === 'number') {
+    return {
+      pixelMassPixels: measurement.pixel_mass_pixels,
+      pixelMassMm2: measurement.pixel_mass_mm2 ?? null,
+      ...(measurement.pixel_mass_method ? { pixelMassMethod: measurement.pixel_mass_method } : {}),
+    }
+  }
+  return bot?.pixelMass ?? {}
 }
 
 type BotClassificationMetadata = {
   classifierId?: string
   confidence?: number
+  pixelMass?: Pick<DetectionEntity, 'pixelMassPixels' | 'pixelMassMm2' | 'pixelMassMethod' | 'pixelMassTimestamp'>
 }
 
 function buildBotMetadataByPatch(params: {
@@ -416,7 +438,15 @@ function buildBotMetadataByPatch(params: {
     const confidence = typeof row.confidence === 'number' && Number.isFinite(row.confidence)
       ? row.confidence
       : undefined
-    if (classifierId || confidence !== undefined) out.set(patchId, { classifierId, confidence })
+    const pixelMass = typeof row.pixel_mass_pixels === 'number'
+      ? {
+          pixelMassPixels: row.pixel_mass_pixels,
+          pixelMassMm2: row.pixel_mass_mm2 ?? null,
+          ...(row.pixel_mass_method ? { pixelMassMethod: row.pixel_mass_method } : {}),
+          ...(row.pixel_mass_timestamp ? { pixelMassTimestamp: row.pixel_mass_timestamp } : {}),
+        }
+      : undefined
+    if (classifierId || confidence !== undefined || pixelMass) out.set(patchId, { classifierId, confidence, pixelMass })
   }
 
   return out
