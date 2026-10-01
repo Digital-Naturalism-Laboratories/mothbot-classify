@@ -103,7 +103,7 @@ function VisualizationDialogBody(props: Props) {
           scale: config.scale * (PREVIEW_RENDER_WIDTH / Math.max(1, config.outputWidth)),
           limit: config.limit > 0 ? Math.min(config.limit, PREVIEW_MAX_ITEMS) : PREVIEW_MAX_ITEMS,
         }
-        const { detections, scopeLabel, countAll, sizeAll, sizeShown } = buildVizDetections(previewConfig)
+        const { detections, scopeLabel, countAll, sizeAll, sizeShown, blurDropped } = buildVizDetections(previewConfig)
         const { images } = await loadPatchImages(detections, {
           preferNobg: config.preferNobg, requireNobg: config.requireNobg,
         })
@@ -126,7 +126,7 @@ function VisualizationDialogBody(props: Props) {
           extra += ` · est. full ⌀ ~${estD.toLocaleString()}px${fits ? '' : ' ⚠ exceeds width'}`
         }
         setStatus(`${scopeLabel} · placed ${stats.placed}/${detections.length}` +
-          (stats.filtered ? ` · filtered ${stats.filtered}` : '') + extra)
+          (blurDropped ? ` · ${blurDropped.toLocaleString()} over blurriness limit` : '') + extra)
       } catch (e) {
         setStatus(`⚠️ ${(e as Error).message}`)
       } finally {
@@ -181,12 +181,13 @@ function VisualizationDialogBody(props: Props) {
         // Report against the detections selected, and name the actual reason for
         // each loss — only `noFit` is fixed by a bigger canvas.
         const noImage = result.selected - result.loaded
+        const total = result.selected + result.blurDropped
         const reasons = [
+          result.blurDropped > 0 ? `${result.blurDropped.toLocaleString()} left out by the blurriness limit` : '',
           noImage > 0 ? `${noImage.toLocaleString()} had no readable patch image` : '',
           result.tooTransparent > 0
             ? `${result.tooTransparent.toLocaleString()} skipped as near-transparent (blurry or empty crops)`
             : '',
-          result.filtered > 0 ? `${result.filtered.toLocaleString()} removed by the quality sliders` : '',
           result.noFit > 0 ? `${result.noFit.toLocaleString()} didn't fit on the canvas` : '',
         ].filter(Boolean)
 
@@ -194,7 +195,7 @@ function VisualizationDialogBody(props: Props) {
           // Only a genuine fit failure is solved by a bigger canvas — the other
           // reasons are intentional exclusions and need no action.
           const advice = result.noFit > 0 ? ' Increase Width or lower Scale to fit more.' : ''
-          toast.warning(`Exported ${result.placed.toLocaleString()} of ${result.selected.toLocaleString()}`, {
+          toast.warning(`Exported ${result.placed.toLocaleString()} of ${total.toLocaleString()}`, {
             description: `${reasons.join('; ')}.${advice}`,
             duration: 12000,
           })
@@ -364,10 +365,9 @@ function VisualizationDialogBody(props: Props) {
                 onChange={(v) => update({ scale: v })} />
               <SliderRow label='Padding' value={config.padding} min={0} max={12} step={1}
                 onChange={(v) => update({ padding: v })} />
-              <SliderRow label='Drop blurriest %' value={config.blurDropPct} min={0} max={60} step={5}
-                onChange={(v) => update({ blurDropPct: v })} />
-              <SliderRow label='Drop least-opaque %' value={config.opacityDropPct} min={0} max={60} step={5}
-                onChange={(v) => update({ opacityDropPct: v })} />
+              <SliderRow label='Blurriness limit' value={config.blurLimit} min={0} max={100} step={1}
+                display={config.blurLimit >= 100 ? 'all' : `≤ ${config.blurLimit}`}
+                onChange={(v) => update({ blurLimit: v })} />
             </div>
           </Section>
 
@@ -461,13 +461,17 @@ function SwitchRow(props: { label: string; checked: boolean; onChange: (v: boole
   )
 }
 
-function SliderRow(props: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
+function SliderRow(props: {
+  label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void
+  /** Text shown instead of the raw value. */
+  display?: string
+}) {
   return (
     <div className='flex items-center gap-12'>
       <span className='text-13 text-ink-secondary w-[120px] shrink-0'>{props.label}</span>
       <input type='range' min={props.min} max={props.max} step={props.step} value={props.value}
         onChange={(e) => props.onChange(Number(e.target.value))} className='flex-1 max-w-[220px] accent-blue-600' />
-      <span className='text-12 tabular-nums w-32 text-right text-ink-primary'>{props.value}</span>
+      <span className='text-12 tabular-nums w-40 text-right text-ink-primary'>{props.display ?? props.value}</span>
     </div>
   )
 }

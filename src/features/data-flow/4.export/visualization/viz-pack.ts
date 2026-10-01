@@ -30,9 +30,6 @@ export type PreparedItem = {
   /** offset of the mask's top-left within the scaled patch */
   offR: number
   offC: number
-  /** quality metrics */
-  focus: number
-  opaque: number
 }
 
 export type Placement = { index: number; dx: number; dy: number }

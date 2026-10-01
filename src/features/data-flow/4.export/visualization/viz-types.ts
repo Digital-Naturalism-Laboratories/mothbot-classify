@@ -25,8 +25,8 @@ export type VizConfig = {
   // patch images
   preferNobg: boolean
   requireNobg: boolean
-  blurDropPct: number
-  opacityDropPct: number
+  /** Leave out patches whose Process blurriness score (0 sharp .. 100 blurriest) is above this; 100 = show all. */
+  blurLimit: number
 
   // canvas / style
   outputWidth: number // radial is square; bar auto-heights; shape uses mask aspect
@@ -52,8 +52,7 @@ export function defaultVizConfig(leafGroupIds: string[], hasSelection: boolean):
     limit: 0, // all
     preferNobg: true,
     requireNobg: false,
-    blurDropPct: 0,
-    opacityDropPct: 0,
+    blurLimit: 100,
     outputWidth: 4500,
     scale: 0.2,
     padding: 2,

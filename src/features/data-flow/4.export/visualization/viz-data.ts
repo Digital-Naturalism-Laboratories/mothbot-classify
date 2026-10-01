@@ -20,6 +20,8 @@ export type VizDetectionSet = {
    * used to estimate how much bigger the full export would be than the preview. */
   sizeAll: number
   sizeShown: number
+  /** Left out by the blurriness limit (patches without a score are kept). */
+  blurDropped: number
 }
 
 /** Mothbox unclustered/noise: clusterId missing or negative. */
@@ -72,6 +74,17 @@ export function buildVizDetections(config: VizConfig): VizDetectionSet {
     dets = dets.filter((d) => filter.has(getGroupKey(d, 'taxa', config.taxaRank)))
   }
   if (config.excludeNoise) dets = dets.filter((d) => !isNoise(d))
+  // Before picking cluster representatives, so a cluster is shown by a sharp
+  // patch rather than dropped because its pick happened to be blurry.
+  const beforeBlur = dets.length
+  if (config.blurLimit < 100) {
+    const patches = patchesStore.get() ?? {}
+    dets = dets.filter((d) => {
+      const score = patches[d.patchId]?.blurScore
+      return typeof score !== 'number' || score <= config.blurLimit
+    })
+  }
+  const blurDropped = beforeBlur - dets.length
   if (config.onePerCluster) dets = pickRepresentatives(dets)
 
   // Full candidate set (after filters, before the display limit).
@@ -94,7 +107,7 @@ export function buildVizDetections(config: VizConfig): VizDetectionSet {
 
   return {
     detections: dets, totalInScope, scopeLabel: scopeLabelFor(config, totalInScope),
-    countAll, sizeAll, sizeShown,
+    countAll, sizeAll, sizeShown, blurDropped,
   }
 }
 

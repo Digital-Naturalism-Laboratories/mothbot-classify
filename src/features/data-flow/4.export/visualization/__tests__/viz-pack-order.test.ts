@@ -7,7 +7,7 @@ function solidItem(id: string, w: number, h: number): PreparedItem {
   return {
     id, sw: w, sh: h, mw: w, mh: h,
     maskR: Uint16Array.from(rs), maskC: Uint16Array.from(cs),
-    offR: 0, offC: 0, focus: 1, opaque: w * h,
+    offR: 0, offC: 0,
   }
 }
 

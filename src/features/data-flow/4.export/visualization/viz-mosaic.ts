@@ -1,6 +1,6 @@
 /**
  * Canvas layer for the silhouette mosaic: turns `ImageBitmap`s into tight masks,
- * applies the blur/opacity quality filters, runs the pure packing geometry from
+ * runs the pure packing geometry from
  * `viz-pack.ts`, and composites the result onto an OffscreenCanvas at its natural
  * size (radial = square, bar = auto height, shape = mask aspect).
  */
@@ -24,8 +24,6 @@ export type MosaicOptions = {
   padding: number
   background: [number, number, number] | null // null = transparent
   baseMask?: { data: Uint8Array; w: number; h: number } | null
-  blurDropPct?: number
-  opacityDropPct?: number
   seed?: number
   onProgress?: (frac: number, msg: string) => void
 }
@@ -33,8 +31,6 @@ export type MosaicOptions = {
 export type MosaicResult = {
   canvas: OffscreenCanvas
   stats: PackStats & {
-    /** Dropped by the blur/opacity quality filters. */
-    filtered: number
     /** Excluded as near-fully-transparent — blurry or empty crops. */
     tooTransparent: number
   }
@@ -76,10 +72,9 @@ function prepareItem(id: string, bitmap: ImageBitmap, scale: number, padding: nu
 
   // Opaque mask over the expanded region.
   const solid = new Uint8Array(mw * mh)
-  let opaque = 0
   for (let y = 0; y < mh; y++) {
     for (let x = 0; x < mw; x++) {
-      if (rgba[((y + er0) * sw + (x + ec0)) * 4 + 3]! > ALPHA_THRESHOLD) { solid[y * mw + x] = 1; opaque++ }
+      if (rgba[((y + er0) * sw + (x + ec0)) * 4 + 3]! > ALPHA_THRESHOLD) solid[y * mw + x] = 1
     }
   }
 
@@ -95,8 +90,6 @@ function prepareItem(id: string, bitmap: ImageBitmap, scale: number, padding: nu
     maskR: Uint16Array.from(rs),
     maskC: Uint16Array.from(cs),
     offR: er0, offC: ec0,
-    focus: focusScore(rgba, sw, sh),
-    opaque,
   }
 }
 
@@ -112,54 +105,6 @@ function dilate(src: Uint8Array, w: number, h: number, m: number): Uint8Array {
     }
   }
   return out
-}
-
-/** Variance of the Laplacian over opaque pixels — low ⇒ blurry/out-of-focus. */
-function focusScore(rgba: Uint8ClampedArray, w: number, h: number): number {
-  if (w < 3 || h < 3) return 0
-  const lum = new Float32Array(w * h)
-  for (let i = 0; i < w * h; i++) {
-    lum[i] = 0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!
-  }
-  let sum = 0, sum2 = 0, n = 0
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i = y * w + x
-      if (rgba[i * 4 + 3]! <= ALPHA_THRESHOLD) continue
-      const lap = 4 * lum[i]! - lum[i - 1]! - lum[i + 1]! - lum[i - w]! - lum[i + w]!
-      sum += lap; sum2 += lap * lap; n++
-    }
-  }
-  if (n < 2) return 0
-  const mean = sum / n
-  return sum2 / n - mean * mean
-}
-
-/** Drop the blurriest / least-opaque percentiles (percentile of the current set). */
-function applyQualityFilter(
-  prepared: PreparedItem[], bitmaps: ImageBitmap[], blurDropPct: number, opacityDropPct: number,
-): { prepared: PreparedItem[]; bitmaps: ImageBitmap[]; filtered: number } {
-  if (blurDropPct <= 0 && opacityDropPct <= 0) return { prepared, bitmaps, filtered: 0 }
-  const n0 = prepared.length
-  let keepIdx = prepared.map((_, i) => i)
-  const threshold = (vals: number[], pct: number): number => {
-    const s = [...vals].sort((a, b) => a - b)
-    const rank = Math.min(s.length - 1, Math.floor((pct / 100) * s.length))
-    return s[rank] ?? -Infinity
-  }
-  if (blurDropPct > 0) {
-    const thr = threshold(keepIdx.map((i) => prepared[i]!.focus), blurDropPct)
-    keepIdx = keepIdx.filter((i) => prepared[i]!.focus >= thr)
-  }
-  if (opacityDropPct > 0) {
-    const thr = threshold(keepIdx.map((i) => prepared[i]!.opaque), opacityDropPct)
-    keepIdx = keepIdx.filter((i) => prepared[i]!.opaque >= thr)
-  }
-  return {
-    prepared: keepIdx.map((i) => prepared[i]!),
-    bitmaps: keepIdx.map((i) => bitmaps[i]!),
-    filtered: n0 - keepIdx.length,
-  }
 }
 
 /** Rasterize a base silhouette bitmap to a boolean fill mask sized to `width`. */
@@ -200,9 +145,7 @@ export async function renderMosaic(items: MosaicItem[], opts: MosaicOptions): Pr
     if (report && (i % 50 === 0 || i === items.length - 1)) report((i + 1) / items.length, `preparing ${i + 1}/${items.length}`)
   }
 
-  const q = applyQualityFilter(prepared, bitmaps, opts.blurDropPct ?? 0, opts.opacityDropPct ?? 0)
-
-  const geom = computePlacements(q.prepared, {
+  const geom = computePlacements(prepared, {
     layout: opts.layout,
     width: opts.width,
     baseMask: opts.baseMask ?? null,
@@ -228,13 +171,13 @@ export async function renderMosaic(items: MosaicItem[], opts: MosaicOptions): Pr
     ctx.fillRect(0, 0, geom.width, geom.height)
   }
   for (const p of geom.placements) {
-    const it = q.prepared[p.index]!
+    const it = prepared[p.index]!
     ctx.drawImage(bitmaps[p.index]!, p.dx, p.dy, it.sw, it.sh)
   }
 
   return {
     canvas,
-    stats: { ...geom.stats, filtered: q.filtered, tooTransparent },
+    stats: { ...geom.stats, tooTransparent },
     contentRadius: geom.contentRadius,
     center: geom.center,
   }

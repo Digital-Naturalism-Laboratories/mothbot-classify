@@ -17,14 +17,14 @@ export type VizExportResult =
       fullPath: string
       /** Detections chosen by the current scope/filters. */
       selected: number
+      /** Left out by the blurriness limit (not counted in `selected`). */
+      blurDropped: number
       /** Of those, how many had a usable image. */
       loaded: number
       /** Of those, how many actually landed on the canvas. */
       placed: number
       /** Excluded as near-fully-transparent — blurry or empty crops. */
       tooTransparent: number
-      /** Removed by the blur / opacity quality sliders. */
-      filtered: number
       /** Ran out of room on the canvas. */
       noFit: number
     }
@@ -44,7 +44,7 @@ export async function exportVisualization(
   const granted = await ensureReadWritePermission(root as any)
   if (!granted) return null
 
-  const { detections } = buildVizDetections(config)
+  const { detections, blurDropped } = buildVizDetections(config)
   if (!detections.length) return null
 
   const { images, misses } = await loadPatchImages(detections, {
@@ -76,8 +76,8 @@ export async function exportVisualization(
     selected: detections.length,
     loaded: images.size,
     placed: stats.placed,
+    blurDropped,
     tooTransparent: stats.tooTransparent,
-    filtered: stats.filtered,
     noFit: stats.noFit,
     ...misses,
   })
@@ -87,10 +87,10 @@ export async function exportVisualization(
     filePath,
     fullPath,
     selected: detections.length,
+    blurDropped,
     loaded: imageCount,
     placed: stats.placed,
     tooTransparent: stats.tooTransparent,
-    filtered: stats.filtered,
     noFit: stats.noFit,
   }
 }

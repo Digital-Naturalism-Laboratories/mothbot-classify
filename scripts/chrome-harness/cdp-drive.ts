@@ -14,6 +14,13 @@ const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chro
   '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir}`,
   '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--window-size=1600,1000', 'about:blank',
 ], { stdio: 'ignore' })
+// Close headless Chrome however this script ends (a failed step, Ctrl-C, a timeout's
+// SIGTERM): a leftover instance has no window but keeps the user's Chrome app from quitting.
+const closeChrome = () => { if (chrome.exitCode === null) chrome.kill('SIGKILL') }
+process.on('exit', closeChrome)
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => process.exit(1))
+process.on('uncaughtException', (err) => { console.error(err); process.exit(1) })
+process.on('unhandledRejection', (err) => { console.error(err); process.exit(1) })
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 let wsUrl = ''
 for (let i = 0; i < 50 && !wsUrl; i++) {
