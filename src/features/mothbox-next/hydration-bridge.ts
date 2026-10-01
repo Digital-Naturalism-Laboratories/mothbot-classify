@@ -337,6 +337,7 @@ export function hydratePackageEntities(params: {
         }),
         ...patchDetectionMetadata,
         ...(patch.detector_id ? { detectorId: patch.detector_id } : {}),
+        ...(patch.clustered_at ? { clusteredAt: patch.clustered_at } : {}),
       }
     } else {
       detections[patch.patch_id] = {
@@ -347,6 +348,7 @@ export function hydratePackageEntities(params: {
         detectedBy: 'auto',
         ...patchDetectionMetadata,
         ...(patch.detector_id ? { detectorId: patch.detector_id } : {}),
+        ...(patch.clustered_at ? { clusteredAt: patch.clustered_at } : {}),
       }
     }
   }

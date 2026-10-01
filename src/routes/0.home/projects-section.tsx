@@ -449,7 +449,7 @@ function SiteItem(props: SiteItemProps) {
               </ProjectsTreeExpandTitle>
             </div>
           </div>
-          <InlineProgress total={prog.total} identified={prog.identified} />
+          <InlineProgress total={prog.total} identified={prog.identified} activity={prog} />
         </div>
       </ProjectsTreeRowContextMenu>
       {hasDeployments ? (
@@ -556,7 +556,7 @@ function DeploymentItem(props: DeploymentItemProps) {
               </ProjectsTreeExpandTitle>
             </div>
           </div>
-          <InlineProgress total={prog.total} identified={prog.identified} />
+          <InlineProgress total={prog.total} identified={prog.identified} activity={prog} />
         </div>
       </ProjectsTreeRowContextMenu>
 
@@ -632,7 +632,7 @@ function NightsList(props: NightsListProps) {
                     </button>
                   )}
                 </div>
-                <InlineProgress total={prog.total} identified={prog.identified} />
+                <InlineProgress total={prog.total} identified={prog.identified} activity={prog} />
               </div>
             </Link>
           </ProjectsTreeRowContextMenu>

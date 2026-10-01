@@ -2,8 +2,53 @@ import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import { buildLeafGroupSummary, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
+import { newestDetectorId } from '~/features/mothbox-next/detector-runs'
 
-export type ProgressCounts = { total: number; identified: number }
+export type ProgressCounts = {
+  total: number
+  identified: number
+  /** Detection runs present (model ids); only known when the night's detections are loaded. */
+  detectorIds?: string[]
+  /** Newest of detectorIds (version-aware, see detector-runs.ts). */
+  newestDetector?: string
+  /** When Mothbot Process last clustered these detections (ms), as recorded in the package. */
+  clusteredAt?: number
+  /** When someone last identified a detection here in Classify (ms). */
+  lastIdentifiedAt?: number
+}
+
+/** Process timestamps look like `2026-07-05__21_02_22_(+0200)`; returns ms, or undefined. */
+export function parseProcessTimestamp(value?: string): number | undefined {
+  const m = /^(\d{4}-\d{2}-\d{2})__(\d{2})_(\d{2})_(\d{2})(?:_\(([+-]\d{2})(\d{2})\))?/.exec(value ?? '')
+  if (!m) return undefined
+  const ms = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}${m[5] ? `${m[5]}:${m[6]}` : ''}`)
+  return Number.isFinite(ms) ? ms : undefined
+}
+
+function maxDefined(a?: number, b?: number) {
+  if (a === undefined) return b
+  if (b === undefined) return a
+  return Math.max(a, b)
+}
+
+function summarizeActivity(detections: DetectionEntity[]): Omit<ProgressCounts, 'total' | 'identified'> {
+  const detectorIds = new Set<string>()
+  let clusteredAt: number | undefined
+  let lastIdentifiedAt: number | undefined
+  for (const d of detections) {
+    if (d.detectorId) detectorIds.add(d.detectorId)
+    clusteredAt = maxDefined(clusteredAt, parseProcessTimestamp(d.clusteredAt))
+    if (d.detectedBy === 'user' && typeof d.identifiedAt === 'number' && d.identifiedAt > 1) {
+      lastIdentifiedAt = maxDefined(lastIdentifiedAt, d.identifiedAt)
+    }
+  }
+  const ids = [...detectorIds]
+  return {
+    ...(ids.length ? { detectorIds: ids, newestDetector: newestDetectorId(ids) } : {}),
+    ...(clusteredAt !== undefined ? { clusteredAt } : {}),
+    ...(lastIdentifiedAt !== undefined ? { lastIdentifiedAt } : {}),
+  }
+}
 
 export type ProgressIndex = {
   byProject: Record<string, ProgressCounts>
@@ -45,6 +90,7 @@ function buildProgressByLeafGroup(params: {
       byLeafGroup[leafGroupId] = {
         total: summary.totalDetections,
         identified: summary.totalIdentified,
+        ...summarizeActivity(detectionsForNight),
       }
       continue
     }
@@ -101,9 +147,21 @@ function addProgressCounts(params: {
   progress: ProgressCounts
 }) {
   const { bucket, id, progress } = params
-  const existing = bucket[id] ?? { total: 0, identified: 0 }
-  bucket[id] = {
-    total: existing.total + progress.total,
-    identified: existing.identified + progress.identified,
+  bucket[id] = mergeProgressCounts(bucket[id] ?? { total: 0, identified: 0 }, progress)
+}
+
+/** Sum two progress entries: counts add, detector runs union, dates take the latest. */
+export function mergeProgressCounts(a: ProgressCounts, b: ProgressCounts): ProgressCounts {
+  const detectorIds = [...new Set([...(a.detectorIds ?? []), ...(b.detectorIds ?? [])])]
+  return {
+    total: a.total + b.total,
+    identified: a.identified + b.identified,
+    ...(detectorIds.length ? { detectorIds, newestDetector: newestDetectorId(detectorIds) } : {}),
+    ...optional('clusteredAt', maxDefined(a.clusteredAt, b.clusteredAt)),
+    ...optional('lastIdentifiedAt', maxDefined(a.lastIdentifiedAt, b.lastIdentifiedAt)),
   }
+}
+
+function optional<K extends string>(key: K, value: number | undefined) {
+  return (value === undefined ? {} : { [key]: value }) as Partial<Record<K, number>>
 }

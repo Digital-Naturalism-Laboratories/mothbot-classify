@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildProgressIndex } from '../projects-progress'
+import { buildProgressIndex, parseProcessTimestamp } from '../projects-progress'
 
 describe('buildProgressIndex', () => {
   it('rolls up night progress to deployment, site, and project using entity ids', () => {
@@ -59,5 +59,37 @@ describe('buildProgressIndex', () => {
     expect(index.byDeployment[deploymentId]).toEqual({ total: 2, identified: 2 })
     expect(index.bySite[siteId]).toEqual({ total: 2, identified: 2 })
     expect(index.byProject[projectId]).toEqual({ total: 2, identified: 2 })
+  })
+})
+
+describe('night details (detector, dates)', () => {
+  it('parses Mothbot Process timestamps, with or without a UTC offset', () => {
+    expect(parseProcessTimestamp('2026-07-05__21_02_22_(+0200)')).toBe(Date.parse('2026-07-05T21:02:22+02:00'))
+    expect(parseProcessTimestamp('2026-07-05__21_02_22')).toBe(Date.parse('2026-07-05T21:02:22'))
+    expect(parseProcessTimestamp('not a date')).toBeUndefined()
+    expect(parseProcessTimestamp(undefined)).toBeUndefined()
+  })
+
+  it('reports the newest detector run and latest dates per night, and rolls them up', () => {
+    const deploymentId = 'P/dep'
+    const night = (id: string) => ({ id, name: id, projectId: 'P', siteId: 'P/site', deploymentId })
+    const det = (id: string, leafGroupId: string, extra: object) =>
+      ({ id, leafGroupId, patchId: id, photoId: 'x.jpg', detectedBy: 'auto', ...extra }) as any
+    const index = buildProgressIndex({
+      nights: { n1: night('n1'), n2: night('n2') },
+      nightSummaries: {},
+      detections: {
+        a: det('a', 'n1', { detectorId: 'Mothbot_MBD-0-2.pt', clusteredAt: '2026-07-05__21_02_22_(+0200)' }),
+        b: det('b', 'n1', { detectorId: 'Mothbot_MBD-1-1.pt', clusteredAt: '2026-07-06__08_00_00_(+0200)' }),
+        c: det('c', 'n2', { detectorId: 'Mothbot_yolo11m_4500_imgsz1600_b1_2024-01-18.pt', detectedBy: 'user', identifiedAt: 1790000000000 }),
+      },
+    })
+    expect(index.byLeafGroup.n1.newestDetector).toBe('Mothbot_MBD-1-1.pt')
+    expect(index.byLeafGroup.n1.clusteredAt).toBe(Date.parse('2026-07-06T08:00:00+02:00'))
+    expect(index.byLeafGroup.n1.lastIdentifiedAt).toBeUndefined()
+    expect(index.byLeafGroup.n2.lastIdentifiedAt).toBe(1790000000000)
+    expect(index.byDeployment[deploymentId].newestDetector).toBe('Mothbot_MBD-1-1.pt')
+    expect(index.byDeployment[deploymentId].detectorIds).toHaveLength(3)
+    expect(index.byDeployment[deploymentId].lastIdentifiedAt).toBe(1790000000000)
   })
 })

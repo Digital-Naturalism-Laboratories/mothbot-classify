@@ -20,7 +20,7 @@ import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { cn } from '~/utils/cn'
 import { InlineProgress } from './inline-progress'
 import { ProjectsTreeRowContextMenu } from './item-actions'
-import type { ProgressIndex } from './projects-progress'
+import { mergeProgressCounts, type ProgressCounts, type ProgressIndex } from './projects-progress'
 
 const projectsTreeDeepRowTitleClass = 'text-neutral-900'
 const projectsTreeRowClass =
@@ -208,7 +208,7 @@ function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
                 </button>
               )}
             </div>
-            <InlineProgress total={prog.total} identified={prog.identified} />
+            <InlineProgress total={prog.total} identified={prog.identified} activity={prog} />
           </div>
         </Link>
       </ProjectsTreeRowContextMenu>
@@ -243,7 +243,7 @@ function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
               </ExpandDisclosureTitleRow>
             </div>
           </div>
-          <InlineProgress total={prog.total} identified={prog.identified} />
+          <InlineProgress total={prog.total} identified={prog.identified} activity={prog} />
         </div>
       </ProjectsTreeRowContextMenu>
       {hasChildren ? (
@@ -272,17 +272,15 @@ function progressForBranch(params: {
 }) {
   const { progressIndex, node, resolved } = params
   const leafIds = collectLeafIdsUnderNode({ resolved, node })
-  let total = 0
-  let identified = 0
+  let sum: ProgressCounts = { total: 0, identified: 0 }
 
   for (const leafId of leafIds) {
     const prog = progressIndex.byLeafGroup[leafId]
     if (!prog) continue
-    total += prog.total
-    identified += prog.identified
+    sum = mergeProgressCounts(sum, prog)
   }
 
-  return { total, identified }
+  return sum
 }
 
 function collectLeafIdsUnderNode(params: { resolved: ResolvedHierarchy; node: HierarchyNode }) {

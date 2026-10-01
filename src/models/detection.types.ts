@@ -42,4 +42,6 @@ export type DetectionEntity = {
   pixelMassMm2?: number | null
   pixelMassTimestamp?: string
   detectorId?: string
+  /** When Mothbot Process clustered this detection (its raw `timestamp_cluster`), from the package records. */
+  clusteredAt?: string
 }
