@@ -11,6 +11,9 @@ export type VizConfig = {
   /** Night(s) used when scope === 'night'. */
   selectedLeafGroupIds: string[]
 
+  /** Detection run to draw — the one shown in the night view. Nights without it use their newest run. */
+  detectorId?: string
+
   // ordering / selection
   sortMode: VizSortMode
   /** Flip the chosen sort's direction. Applies to every sort mode. */
@@ -37,11 +40,12 @@ export type VizConfig = {
   seed: number
 }
 
-export function defaultVizConfig(leafGroupIds: string[], hasSelection: boolean): VizConfig {
+export function defaultVizConfig(leafGroupIds: string[], hasSelection: boolean, detectorId?: string): VizConfig {
   return {
     layout: 'radial',
     scope: hasSelection ? 'selection' : 'night',
     selectedLeafGroupIds: leafGroupIds,
+    ...(detectorId ? { detectorId } : {}),
     sortMode: 'size',
     sortReversed: false,
     taxaRank: 'family',

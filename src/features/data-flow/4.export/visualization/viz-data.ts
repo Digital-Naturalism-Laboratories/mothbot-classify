@@ -4,6 +4,7 @@ import { patchesStore } from '~/stores/entities/5.patches'
 import { selectedPatchIdsStore } from '~/stores/ui'
 import { RANK_HIERARCHY } from '~/models/taxonomy/types'
 import { resolveCaptureTimestamp } from '~/models/detection-time'
+import { itemsOfOneRun } from '~/features/mothbox-next/detector-runs'
 import type { VizConfig, VizTaxaRank } from './viz-types'
 
 const TAXON_ORDER: VizTaxaRank[] = ['order', 'family', 'genus', 'species']
@@ -58,8 +59,9 @@ function resolveScopeDetections(config: VizConfig): DetectionEntity[] {
   // call argument, and Chrome's V8 overflows the stack somewhere past ~110k
   // arguments ("Maximum call stack size exceeded") — a single 160k-detection
   // night crashed the whole app here.
+  // One detection run per night, as the night view shows it (never all runs mixed).
   for (const id of config.selectedLeafGroupIds) {
-    for (const det of getDetectionsForLeafGroup(id)) out.push(det)
+    for (const det of itemsOfOneRun(getDetectionsForLeafGroup(id), config.detectorId)) out.push(det)
   }
   return out
 }

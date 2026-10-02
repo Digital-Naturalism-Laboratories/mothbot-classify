@@ -25,7 +25,13 @@ const PREVIEW_HEIGHT = 667
 const PREVIEW_RENDER_WIDTH = 1100 // pack at a reduced width for a responsive preview
 const PREVIEW_MAX_ITEMS = 1500
 
-type Props = { open: boolean; onClose: () => void; initialLeafGroupIds?: string[] }
+type Props = {
+  open: boolean
+  onClose: () => void
+  initialLeafGroupIds?: string[]
+  /** Detection run shown in the night view; nights without it use their newest run. */
+  detectorId?: string
+}
 
 const NOBG_MODES = {
   prefer: { preferNobg: true, requireNobg: false, label: 'Prefer transparent (fall back to jpg)' },
@@ -47,7 +53,7 @@ export function VisualizationDialog(props: Props) {
 }
 
 function VisualizationDialogBody(props: Props) {
-  const { open, onClose, initialLeafGroupIds } = props
+  const { open, onClose, initialLeafGroupIds, detectorId } = props
 
   const leafGroups = useStore(leafGroupsStore)
   const activeNightIds = useStore(activeNightIdsStore)
@@ -64,7 +70,7 @@ function VisualizationDialogBody(props: Props) {
     return allLeafGroupIds.slice(0, 1)
   }, [initialLeafGroupIds, activeNightIds, allLeafGroupIds])
 
-  const [config, setConfig] = useState<VizConfig>(() => defaultVizConfig(initialNights(), selectionCount > 0))
+  const [config, setConfig] = useState<VizConfig>(() => defaultVizConfig(initialNights(), selectionCount > 0, detectorId))
   const [baseMask, setBaseMask] = useState<ImageBitmap | null>(null)
   const [rendering, setRendering] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -76,7 +82,7 @@ function VisualizationDialogBody(props: Props) {
   // Reset when reopened.
   useEffect(() => {
     if (!open) return
-    setConfig(defaultVizConfig(initialNights(), selectionCount > 0))
+    setConfig(defaultVizConfig(initialNights(), selectionCount > 0, detectorId))
     setLastExportPath(null)
     setCopied(false)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps

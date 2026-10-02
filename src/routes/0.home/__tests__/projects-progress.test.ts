@@ -2,6 +2,26 @@ import { describe, expect, it } from 'vitest'
 import { buildProgressIndex, parseProcessTimestamp } from '../projects-progress'
 
 describe('buildProgressIndex', () => {
+  it('counts only the newest detection run of a night', () => {
+    const leafGroupId = 'D/dep/2026-08-14'
+    const det = (id: string, detectorId: string, user = false) =>
+      ({ id, leafGroupId, patchId: id, photoId: 'p.jpg', detectorId, detectedBy: user ? 'user' : 'auto' }) as any
+    const index = buildProgressIndex({
+      nights: { [leafGroupId]: { id: leafGroupId, name: '2026-08-14', projectId: 'D', siteId: 'D/s', deploymentId: 'D/dep' } },
+      nightSummaries: {},
+      detections: {
+        o1: det('o1', 'Mothbot_MBD-1-0.pt', true),
+        o2: det('o2', 'Mothbot_MBD-1-0.pt', true),
+        o3: det('o3', 'Mothbot_MBD-1-0.pt'),
+        n1: det('n1', 'Mothbot_MBD-1-1.pt', true),
+        n2: det('n2', 'Mothbot_MBD-1-1.pt'),
+      },
+    })
+    expect(index.byLeafGroup[leafGroupId]).toMatchObject({ total: 2, identified: 1, newestDetector: 'Mothbot_MBD-1-1.pt' })
+    expect(index.byLeafGroup[leafGroupId].detectorIds?.sort()).toEqual(['Mothbot_MBD-1-0.pt', 'Mothbot_MBD-1-1.pt'])
+    expect(index.byDeployment['D/dep']).toMatchObject({ total: 2, identified: 1 })
+  })
+
   it('rolls up night progress to deployment, site, and project using entity ids', () => {
     const projectId = 'Dinacon2025-no-raw-img'
     const siteId = `${projectId}/Les_BeachPalm`

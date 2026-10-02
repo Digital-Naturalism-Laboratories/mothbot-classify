@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { newestDetectorId, sortDetectorRunsNewestFirst } from '../detector-runs'
+import { itemsOfOneRun, newestDetectorId, sortDetectorRunsNewestFirst } from '../detector-runs'
 
 describe('detector run ordering', () => {
   it('ranks MBD versions numerically, newest first', () => {
@@ -45,5 +45,25 @@ describe('detector run ordering', () => {
 
   it('matches the real bowedBarbo case: MBD-1-1 beats MBD-0-2 and HumanDetection', () => {
     expect(newestDetectorId(['HumanDetection', 'Mothbot_MBD-0-2.pt', 'Mothbot_MBD-1-1.pt'])).toBe('Mothbot_MBD-1-1.pt')
+  })
+})
+
+describe('itemsOfOneRun', () => {
+  const night = [
+    { id: 'a', detectorId: 'Mothbot_MBD-1-0.pt' },
+    { id: 'b', detectorId: 'Mothbot_MBD-1-1.pt' },
+    { id: 'c', detectorId: 'Mothbot_MBD-1-1.pt' },
+    { id: 'h', detectorId: 'HumanDetection' },
+  ]
+  it('keeps the newest bot run by default', () => {
+    expect(itemsOfOneRun(night).map((d) => d.id)).toEqual(['b', 'c'])
+  })
+  it('keeps the preferred run when the night has it, else falls back to the newest', () => {
+    expect(itemsOfOneRun(night, 'Mothbot_MBD-1-0.pt').map((d) => d.id)).toEqual(['a'])
+    expect(itemsOfOneRun(night, 'Mothbot_MBD-2-0.pt').map((d) => d.id)).toEqual(['b', 'c'])
+  })
+  it('leaves a single-run night untouched', () => {
+    const one = [{ id: 'x', detectorId: 'Mothbot_MBD-1-1.pt' }, { id: 'y' }]
+    expect(itemsOfOneRun(one)).toBe(one)
   })
 })

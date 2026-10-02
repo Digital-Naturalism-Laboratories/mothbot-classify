@@ -56,3 +56,24 @@ describe('viz blurriness limit', () => {
     expect(ids).not.toContain('clusterBlurry')
   })
 })
+
+describe('viz detection run', () => {
+  function seedTwoRuns() {
+    const det = (id: string, detectorId: string) => ({ id, patchId: id, photoId: `${id}.jpg`, leafGroupId: LEAF, detectorId, pixelMassPixels: 10 })
+    detectionsStore.set({
+      old1: det('old1', 'Mothbot_MBD-1-0.pt'),
+      old2: det('old2', 'Mothbot_MBD-1-0.pt'),
+      new1: det('new1', 'Mothbot_MBD-1-1.pt'),
+    } as never)
+    patchesStore.set({} as never)
+  }
+  it('draws the run shown in the night view, not every run mixed', () => {
+    seedTwoRuns()
+    expect(build({ detectorId: 'Mothbot_MBD-1-0.pt' }).detections.map((d) => d.id).sort()).toEqual(['old1', 'old2'])
+  })
+  it('uses the newest run when none is chosen (home page) or the night lacks the chosen one', () => {
+    seedTwoRuns()
+    expect(build({}).detections.map((d) => d.id)).toEqual(['new1'])
+    expect(build({ detectorId: 'Mothbot_MBD-9-9.pt' }).detections.map((d) => d.id)).toEqual(['new1'])
+  })
+})

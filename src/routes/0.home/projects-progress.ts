@@ -2,7 +2,7 @@ import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import { buildLeafGroupSummary, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
-import { newestDetectorId } from '~/features/mothbox-next/detector-runs'
+import { itemsOfOneRun, newestDetectorId } from '~/features/mothbox-next/detector-runs'
 
 export type ProgressCounts = {
   total: number
@@ -31,12 +31,13 @@ function maxDefined(a?: number, b?: number) {
   return Math.max(a, b)
 }
 
-function summarizeActivity(detections: DetectionEntity[]): Omit<ProgressCounts, 'total' | 'identified'> {
+/** Every run is listed; the dates come from *shown* (the newest run, which the counts use). */
+function summarizeActivity(all: DetectionEntity[], shown: DetectionEntity[]): Omit<ProgressCounts, 'total' | 'identified'> {
   const detectorIds = new Set<string>()
+  for (const d of all) if (d.detectorId) detectorIds.add(d.detectorId)
   let clusteredAt: number | undefined
   let lastIdentifiedAt: number | undefined
-  for (const d of detections) {
-    if (d.detectorId) detectorIds.add(d.detectorId)
+  for (const d of shown) {
     clusteredAt = maxDefined(clusteredAt, parseProcessTimestamp(d.clusteredAt))
     if (d.detectedBy === 'user' && typeof d.identifiedAt === 'number' && d.identifiedAt > 1) {
       lastIdentifiedAt = maxDefined(lastIdentifiedAt, d.identifiedAt)
@@ -86,11 +87,14 @@ function buildProgressByLeafGroup(params: {
 
     const detectionsForNight = detectionsByLeafGroup[leafGroupId] ?? []
     if (detectionsForNight.length > 0) {
-      const summary = buildLeafGroupSummary({ leafGroupId, detections: detectionsForNight })
+      // Count the newest detection run only: re-running Detect keeps the older
+      // run beside it, and counting both would double the night's insects.
+      const newestRun = itemsOfOneRun(detectionsForNight)
+      const summary = buildLeafGroupSummary({ leafGroupId, detections: newestRun })
       byLeafGroup[leafGroupId] = {
         total: summary.totalDetections,
         identified: summary.totalIdentified,
-        ...summarizeActivity(detectionsForNight),
+        ...summarizeActivity(detectionsForNight, newestRun),
       }
       continue
     }

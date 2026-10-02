@@ -244,6 +244,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           open={vizDialogOpen}
           onClose={() => setVizDialogOpen(false)}
           initialLeafGroupIds={[leafGroupId]}
+          detectorId={selectedDetectorId}
         />
 
         {/* <Button

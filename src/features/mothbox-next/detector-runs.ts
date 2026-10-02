@@ -47,3 +47,17 @@ export function newestDetectorId(ids: readonly string[]): string | undefined {
   const sorted = sortDetectorRunsNewestFirst(ids)
   return sorted.find((id) => id !== HUMAN_DETECTOR_ID) ?? sorted[0]
 }
+
+/**
+ * One night's items from a single detection run: *preferred* when the night has
+ * it, otherwise its newest run. Re-running Detect keeps the older run beside the
+ * new one, so counting or drawing every run would show the night's insects twice.
+ * Pass one night at a time — runs are chosen per night.
+ */
+export function itemsOfOneRun<T extends { detectorId?: string }>(items: T[], preferred?: string): T[] {
+  const ids = new Set<string>()
+  for (const item of items) if (item.detectorId) ids.add(item.detectorId)
+  if (ids.size <= 1) return items
+  const run = preferred && ids.has(preferred) ? preferred : newestDetectorId([...ids])
+  return items.filter((item) => item.detectorId === run)
+}
