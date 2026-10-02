@@ -390,3 +390,19 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
     )
   })
 })
+
+describe('IdentifyDialog - error options before typing', () => {
+  it('offers Error and Error: Blur with an empty search, but never as the first option', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={onSubmit} datasetId='project-errors' detectionIds={['target']} />)
+
+    expect(await screen.findByText('Error: Blur')).toBeInTheDocument()
+    const items = screen.getAllByRole('option')
+    expect(items[0]?.textContent).not.toMatch(/^Error/)
+    expect(items.some((el) => el.textContent?.startsWith('Errorgeneric'))).toBe(true)
+
+    await user.click(screen.getByText('Error: Blur'))
+    expect(onSubmit).toHaveBeenCalledWith('ERROR_Blur', undefined)
+  })
+})

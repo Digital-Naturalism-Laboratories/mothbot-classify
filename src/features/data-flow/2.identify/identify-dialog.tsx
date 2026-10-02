@@ -465,6 +465,25 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
               </CommandGroup>
             )}
 
+            {/* Before anything is typed, offer the common errors too — last in the list,
+                so the first (auto-highlighted) option an Enter would pick is never an error. */}
+            {!query.trim() ? (
+              <CommandGroup heading='Errors'>
+                <CommandItem key='empty-error-generic' onSelect={() => submitSelection('ERROR')}>
+                  <div className='flex items-center justify-between w-full'>
+                    <span className='text-13 text-red-700'>Error</span>
+                    <span className='text-11 text-neutral-500'>generic · hotkey E</span>
+                  </div>
+                </CommandItem>
+                <CommandItem key='empty-error-blur' onSelect={() => submitSelection(errorLabelForReason('Blur'))}>
+                  <div className='flex items-center justify-between w-full'>
+                    <span className='text-13 text-red-700'>Error: Blur</span>
+                    <span className='text-11 text-neutral-500'>{errorLabelForReason('Blur')}</span>
+                  </div>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+
             {/* No legacy suggestions rendered */}
           </CommandList>
         </Command>
