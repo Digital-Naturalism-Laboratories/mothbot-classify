@@ -16,15 +16,15 @@ vi.mock('~/stores/datasets-registry', () => ({
   clearDatasetsRegistry: vi.fn(),
 }))
 
-vi.mock('../scan-datasets-folder', () => ({
+vi.mock('~/features/data-flow/1.ingest/scan-datasets-folder', () => ({
   scanDatasetsFolder: vi.fn(),
 }))
 
-vi.mock('../load-workspace-species-lists', () => ({
+vi.mock('~/features/data-flow/1.ingest/load-workspace-species-lists', () => ({
   loadWorkspaceSpeciesLists: vi.fn(async () => 0),
 }))
 
-vi.mock('../ensure-default-dataset-open', () => ({
+vi.mock('~/features/data-flow/1.ingest/ensure-default-dataset-open', () => ({
   rememberDefaultDatasetSelection: vi.fn(() => false),
 }))
 

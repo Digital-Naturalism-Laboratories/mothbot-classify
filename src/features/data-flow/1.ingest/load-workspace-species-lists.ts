@@ -3,6 +3,7 @@ import { collectFilesWithPathsRecursively, type IndexedPickedFile } from './file
 import { requireDatasetsFolderHandle } from './datasets-folder-handle'
 import { ingestSpeciesListsFromFiles } from './species.ingest'
 import { isSpeciesListIndexedPath } from './species-indexed-paths'
+import { isGbifSidecarPath } from './species-list-gbif'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 
 /**
@@ -34,13 +35,15 @@ export async function loadWorkspaceSpeciesLists(): Promise<number> {
   }
 
   const speciesFiles = indexed.filter((entry) => isSpeciesListIndexedPath(entry.path))
+  // Mothbot Process saves each GBIF list's DOI next to it as `<list>.gbif.json`.
+  const gbifSidecars = indexed.filter((entry) => isGbifSidecarPath(entry.path))
 
   if (!speciesFiles.length) {
     console.log('🌀 species: no CSV/TSV files found under the datasets folder')
     return 0
   }
 
-  await ingestSpeciesListsFromFiles({ files: speciesFiles })
+  await ingestSpeciesListsFromFiles({ files: [...speciesFiles, ...gbifSidecars] })
   return speciesFiles.length
 }
 

@@ -1,3 +1,4 @@
+import type { SpeciesListDoiStatus, TaxonIDSource } from '~/models/taxonomy/species-list-source'
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import type { SpeciesListValidation } from '~/models/taxonomy/species-list-validation'
 
@@ -14,6 +15,10 @@ export type SpeciesCsvWorkerResponse = {
   id: string
   name: string
   doi: string
+  doiStatus: SpeciesListDoiStatus
+  downloadKey?: string
+  pendingRef?: string
+  taxonIDSource?: TaxonIDSource
   fileName: string
   sourcePath: string
   records: TaxonRecord[]

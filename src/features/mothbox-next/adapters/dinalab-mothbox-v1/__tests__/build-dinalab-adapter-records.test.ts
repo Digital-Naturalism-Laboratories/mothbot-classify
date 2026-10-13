@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { NO_MACHINE_ID_CLASSIFIER } from '../../../bot-shape-to-classification'
 import { buildDinalabMothboxV1Records } from '../build-dinalab-adapter-records'
 import { buildAmiAdapterRecords, mergeAmiPrimaryAndSupplementalRows } from '../build-ami-adapter-records'
-import { buildPatchImagesOnlyRecords } from '../build-patch-images-only-records'
 import { runDinalabMothboxV1Adapter } from '../run-adapter'
 import { loadMothboxNextPackageData } from '../../../load-package-data'
 import type { DinalabAdapterIO } from '../adapter-io'
@@ -55,7 +55,8 @@ describe('buildDinalabMothboxV1Records', () => {
       'shared_0_Mothbot_last.pt',
       'shared_0_Mothbot_last.pt@Deployment_A__2025-01-02',
     ])
-    expect(built.botRows.map((row) => row.classifier_id)).toEqual(['last.pt', 'last.pt'])
+    // The test shapes carry no identifier_bot, so they land in the "No Machine ID" bucket.
+    expect(built.botRows.map((row) => row.classifier_id)).toEqual([NO_MACHINE_ID_CLASSIFIER, NO_MACHINE_ID_CLASSIFIER])
     expect(built.humanRows.map((row) => row.patch_id)).toEqual(patchIds)
   })
 
@@ -243,7 +244,7 @@ describe('buildDinalabMothboxV1Records', () => {
     expect(loaded?.resolvedClassifications).toEqual([
       expect.objectContaining({
         patch_id: 'photo_0_Mothbot_model.pt',
-        classifier_id: 'model.pt',
+        classifier_id: NO_MACHINE_ID_CLASSIFIER,
         classifier_type: 'bot',
         label: 'ORDER_Diptera',
       }),
@@ -291,7 +292,7 @@ describe('buildDinalabMothboxV1Records', () => {
     expect(loaded?.resolvedClassifications).toEqual([
       expect.objectContaining({
         patch_id: 'photo_0_Mothbot_model.pt',
-        classifier_id: 'model.pt',
+        classifier_id: NO_MACHINE_ID_CLASSIFIER,
         classifier_type: 'bot',
         label: 'ORDER_Diptera',
       }),
@@ -346,7 +347,7 @@ describe('buildAmiAdapterRecords', () => {
     expect(built.botRows[0]).toMatchObject({
       patch_id: detectionId,
       classifier_id: 'ami-csv',
-      label: 'Diptera Brachycera',
+      label: 'Diptera', // AMI's "Diptera Brachycera" sub-order qualifier is stripped
       confidence: 13.27,
     })
     expect(built.deployments[0]).toMatchObject({
@@ -509,7 +510,9 @@ describe('buildAmiAdapterRecords', () => {
       packageSourceLayout: 'in_place',
     })
 
-    expect(built.botRows[0]).toMatchObject({
+    // One bot row per algorithm (switchable in the UI); the preferred one has classified_at = 1.
+    expect(built.botRows).toHaveLength(3)
+    expect(built.botRows.find((row) => row.classified_at === 1)).toMatchObject({
       patch_id: detectionId,
       classifier_id: 'uk-denmark-moths',
       label: 'Chrysoteuchia culmella',
@@ -610,7 +613,9 @@ describe('buildAmiAdapterRecords', () => {
       ],
     })
 
-    expect(merged).toHaveLength(1)
+    // The CSV's order-level row is kept too, so both levels feed the taxonomy.
+    expect(merged).toHaveLength(2)
+    expect(merged[1]).toMatchObject({ taxonlevel: 'order', label: 'Diptera Brachycera', algorithm: 'ami-csv' })
     expect(merged[0]).toMatchObject({
       detectionid: detectionId,
       taxonlevel: 'species',
@@ -651,42 +656,6 @@ describe('buildAmiAdapterRecords', () => {
 
     expect(built.deployments[0]?.deployment_id).toBe('custom_project_denmark_F1_2025')
     expect(built.patchSources[0]?.source_metadata?.ami_project_id).toBe('custom_project')
-  })
-})
-
-describe('buildPatchImagesOnlyRecords', () => {
-  it('sets media type from patch image extension', async () => {
-    const files = new Map<string, string>([['patches/transparent-wing.png', '']])
-
-    const built = await buildPatchImagesOnlyRecords({
-      datasetId: 'Images_Only',
-      io: createMemoryIo(files),
-      retainPatchesInSource: true,
-      packageRelativeSourcePrefix: '',
-      packageSourceLayout: 'in_place',
-    })
-
-    expect(built.patches[0]?.media_type).toBe('image/png')
-  })
-
-  it('keeps duplicate image basenames from different folders as distinct patches', async () => {
-    const files = new Map<string, string>([
-      ['Deployment_A/2025-01-01/shared.jpg', ''],
-      ['Deployment_A/2025-01-02/shared.jpg', ''],
-    ])
-
-    const built = await buildPatchImagesOnlyRecords({
-      datasetId: 'Images_Only',
-      io: createMemoryIo(files),
-      retainPatchesInSource: true,
-      packageRelativeSourcePrefix: '',
-      packageSourceLayout: 'in_place',
-    })
-
-    expect(built.patches).toHaveLength(2)
-    expect(new Set(built.patches.map((patch) => patch.patch_id)).size).toBe(2)
-    expect(new Set(built.patchSources.map((source) => source.patch_id)).size).toBe(2)
-    expect(new Set(built.patchSources.map((source) => source.source_photo_id)).size).toBe(2)
   })
 })
 

@@ -61,6 +61,7 @@ function isNonHumanJsonName(lowerName: string): boolean {
     return true
   }
   if (lowerName.includes('_botdetection_')) return true // archived detector runs
+  if (lowerName.endsWith('.gbif.json')) return true // species-list DOI sidecar (Mothbot Process)
   return ['manifest.json', 'calibration.json', 'cluster_cache.json', 'dataset.json', 'package.json'].includes(lowerName)
 }
 

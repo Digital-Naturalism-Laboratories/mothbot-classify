@@ -160,6 +160,7 @@ function buildTaxonMetadataFields(params: { detection: DetectionEntity }) {
 
   return {
     taxonID: taxonMetadata.taxonID,
+    taxonID_source: taxonMetadata.taxonID ? taxonMetadata.taxonIDSource : undefined,
     acceptedTaxonKey: taxonMetadata.acceptedTaxonKey,
     acceptedScientificName: taxonMetadata.acceptedScientificName,
     vernacularName: taxonMetadata.vernacularName,

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
@@ -19,6 +19,9 @@ import { persistPackageClassifications } from '../persist/persist-human-classifi
 import { userSessionStore } from '~/stores/ui'
 import { parseClassificationRecords } from '../parse-package-records'
 import type { ClassificationRecord } from '../records'
+
+// jsdom has no IndexedDB; ingest reads cluster overrides / caches through it.
+vi.mock('~/utils/index-db', () => import('~/test/memory-index-db'))
 
 describe('persist round-trip (L4)', () => {
   beforeEach(() => {

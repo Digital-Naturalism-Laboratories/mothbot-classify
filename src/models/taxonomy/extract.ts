@@ -4,6 +4,7 @@
  */
 
 import type { TaxonRecord, ExtractedTaxonomy } from './types'
+import type { TaxonIDSource } from './species-list-source'
 import { safeTaxonString, safeString } from './normalize'
 import { buildGenusSpeciesName, getDeepestTaxonomicLevel } from './rank'
 import { getSpeciesValueForExport } from './morphospecies'
@@ -37,6 +38,7 @@ export function buildTaxonFromShape(params: { shape: any; taxonomy: ExtractedTax
 
   const metadata: TaxonMetadata = {
     taxonID: shape?.taxonID,
+    taxonIDSource: parseTaxonIDSource(shape?.taxonID_source),
     acceptedTaxonKey: shape?.acceptedTaxonKey,
     acceptedScientificName: shape?.acceptedScientificName,
     vernacularName: shape?.vernacularName,
@@ -108,6 +110,7 @@ export function extractTaxonMetadataFromDetection(params: { detection: Detection
 
   return {
     taxonID: isError ? undefined : (taxon?.taxonID as string | undefined),
+    taxonIDSource: isError ? undefined : taxon?.taxonIDSource,
     acceptedTaxonKey: isError ? undefined : (taxon?.acceptedTaxonKey as string | undefined),
     acceptedScientificName: isError ? undefined : (taxon?.acceptedScientificName as string | undefined),
     vernacularName: isError ? undefined : (taxon?.vernacularName as string | undefined),
@@ -221,4 +224,8 @@ export function aggregateTaxonomyFromDetections(params: { detections: DetectionL
     name,
     commonName,
   }
+}
+
+function parseTaxonIDSource(value: unknown): TaxonIDSource | undefined {
+  return value === 'gbif-backbone' || value === 'col' ? value : undefined
 }

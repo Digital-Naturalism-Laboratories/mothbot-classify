@@ -29,16 +29,18 @@ describe('buildForeignContentDialogCopy', () => {
 })
 
 describe('buildPendingDatasetSetupCopy', () => {
-  it('uses patch-image copy for image-only folders', () => {
-    const copy = buildPendingDatasetSetupCopy({
-      count: 1,
-      folderNames: ['patches'],
-      imageOnlyCount: 1,
-      legacyCount: 0,
-    })
+  it('names the folder when setting up one dataset', () => {
+    const copy = buildPendingDatasetSetupCopy({ count: 1, folderNames: ['Panama_2026'] })
 
-    expect(copy.confirmLabel).toBe('Set up as patch images')
-    expect(copy.lead).toContain('patch images')
+    expect(copy.title).toBe('Set up "Panama_2026"?')
+    expect(copy.confirmLabel).toBe('Set up')
+  })
+
+  it('counts folders when setting up several datasets', () => {
+    const copy = buildPendingDatasetSetupCopy({ count: 3, folderNames: ['a', 'b', 'c'] })
+
+    expect(copy.title).toBe('Set up 3 new datasets?')
+    expect(copy.lead).toContain('3 folders')
   })
 })
 

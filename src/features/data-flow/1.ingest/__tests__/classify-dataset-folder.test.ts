@@ -63,12 +63,13 @@ describe('classifyDatasetFolder', () => {
     await expect(classifyDatasetFolder({ directory, folderName: 'ami_abms' })).resolves.toBe('ami')
   })
 
-  it('classifies processed crop images without AMI metadata as patch images only', async () => {
+  // Folders of bare patch images used to get a "patch images only" setup; that mode was removed.
+  it('skips processed crop images without AMI metadata', async () => {
     const directory = createDirectoryHandle([
       'abms/_processed/2025/denmark/F1/20250501231959-snapshot_crop_0403014a-ef2b-40ef-bdc1-2d72c55d1b3d.jpg',
     ])
 
-    await expect(classifyDatasetFolder({ directory, folderName: 'images' })).resolves.toBe('patch-images-only')
+    await expect(classifyDatasetFolder({ directory, folderName: 'images' })).resolves.toBe('skip')
   })
 
   it('finds legacy projects whose detection JSON sits in date-named deployment/night folders', async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { cp, mkdtemp, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
@@ -12,6 +12,9 @@ import {
 } from './node-fixture-access'
 import { serializeNdjsonLines } from '../parse-ndjson'
 import type { ClassificationRecord } from '../records'
+
+// jsdom has no IndexedDB; ingest reads cluster overrides / caches through it.
+vi.mock('~/utils/index-db', () => import('~/test/memory-index-db'))
 
 const TEST_PATCH_ID = 'grupoKite_2025_06_23__04_56_19_HDR0_2_Mothbot_last.pt'
 

@@ -47,11 +47,11 @@ vi.mock('~/utils/index-db', () => ({
 
 const openDatasetByFolderNameMock = vi.hoisted(() => vi.fn(async () => true))
 
-vi.mock('../open-dataset-by-folder', () => ({
+vi.mock('~/features/data-flow/1.ingest/open-dataset-by-folder', () => ({
   openDatasetByFolderName: openDatasetByFolderNameMock,
 }))
 
-vi.mock('../scan-datasets-folder', () => ({
+vi.mock('~/features/data-flow/1.ingest/scan-datasets-folder', () => ({
   scanDatasetsFolder: vi.fn(async () => {
     setDatasetsRegistry([
       { folderName: 'dinacon-fixture', datasetId: 'dinacon', hasManifest: true },
@@ -60,7 +60,7 @@ vi.mock('../scan-datasets-folder', () => ({
   }),
 }))
 
-vi.mock('../load-workspace-species-lists', () => ({
+vi.mock('~/features/data-flow/1.ingest/load-workspace-species-lists', () => ({
   loadWorkspaceSpeciesLists: vi.fn(async () => 0),
 }))
 

@@ -267,8 +267,15 @@ export function mergeTaxonRanks(params: MergeTaxonRanksParams): TaxonRecord {
   }
 
   // Preserve metadata fields
-  if (newTaxon?.taxonID) merged.taxonID = newTaxon.taxonID
-  else if (existing?.taxonID && !merged.taxonID) merged.taxonID = existing.taxonID
+  // The ID's source travels with whichever taxonID wins.
+  if (newTaxon?.taxonID) {
+    merged.taxonID = newTaxon.taxonID
+    if (newTaxon.taxonIDSource) merged.taxonIDSource = newTaxon.taxonIDSource
+    else delete merged.taxonIDSource
+  } else if (existing?.taxonID && !merged.taxonID) {
+    merged.taxonID = existing.taxonID
+    if (existing.taxonIDSource) merged.taxonIDSource = existing.taxonIDSource
+  }
 
   if (newTaxon?.acceptedTaxonKey) merged.acceptedTaxonKey = newTaxon.acceptedTaxonKey
   else if (existing?.acceptedTaxonKey && !merged.acceptedTaxonKey) merged.acceptedTaxonKey = existing.acceptedTaxonKey

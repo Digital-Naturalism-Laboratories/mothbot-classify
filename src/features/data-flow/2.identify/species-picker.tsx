@@ -104,6 +104,7 @@ function ListItem(props: { list: SpeciesList; isSelected?: boolean; onSelect: (i
           ) : null}
         </span>
         <span className='flex-1 text-11 font-mono text-ink-secondary truncate'>{list.sourcePath || list.doi}</span>
+        <SpeciesListSourceLine list={list} />
         {list.validation?.reason ? (
           <span className={cn('text-11', isInvalid ? 'text-red-600' : 'text-amber-600')}>{list.validation.reason}</span>
         ) : null}
@@ -112,5 +113,28 @@ function ListItem(props: { list: SpeciesList; isSelected?: boolean; onSelect: (i
       {isInvalid ? <Icon icon={XCircleIcon} className='text-red-500 mr-6 shrink-0' /> : null}
       {isIncomplete && !isSelected ? <Icon icon={AlertTriangleIcon} className='text-amber-500 mr-6 shrink-0' /> : null}
     </CommandItem>
+  )
+}
+
+/** DOI (or "DOI pending" while offline) and which taxon-ID system the list uses. */
+function SpeciesListSourceLine(props: { list: SpeciesList }) {
+  const { list } = props
+  const ids = list.taxonIDSource === 'col' ? 'Catalogue of Life IDs' : list.taxonIDSource === 'gbif-backbone' ? 'GBIF Backbone IDs' : null
+  const isPending = list.doiStatus === 'pending'
+  const doi = list.doiStatus === 'resolved' || list.doiStatus === 'filename' ? list.doi.replace(/^https:\/\/doi\.org\//, '') : ''
+  const parts = [doi ? `DOI ${doi}` : null, ids].filter(Boolean)
+  if (!isPending && !parts.length) return null
+  return (
+    <span className='flex items-center gap-6 text-11 text-ink-secondary'>
+      {isPending ? (
+        <span
+          className='shrink-0 rounded px-4 py-1 text-10 font-medium bg-amber-100 text-amber-700'
+          title={`GBIF download ${list.downloadKey} — its DOI will be fetched when online. IDs made meanwhile reference ${list.pendingRef}.`}
+        >
+          DOI pending (offline)
+        </span>
+      ) : null}
+      <span className='truncate'>{parts.join(' · ')}</span>
+    </span>
   )
 }

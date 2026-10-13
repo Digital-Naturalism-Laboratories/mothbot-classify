@@ -3,6 +3,14 @@ import { invalidateSpeciesIndexForListId } from '~/features/data-flow/2.identify
 import type { IndexedFile as FolderIndexedFile } from './files.state'
 import type { SpeciesCsvWorkerRequest, SpeciesCsvWorkerResponse } from '~/workers/species-csv.types'
 import { isSpeciesListIndexedPath } from './species-indexed-paths'
+import {
+  applyGbifInfoToList,
+  getCachedGbifInfo,
+  indexGbifSidecars,
+  readGbifSidecar,
+  resolveSpeciesListsFromGbif,
+  retryGbifLookupsWhenOnline,
+} from './species-list-gbif'
 
 export type IndexedFile = FolderIndexedFile
 export { isSpeciesListIndexedPath } from './species-indexed-paths'
@@ -20,9 +28,14 @@ function getWorker(): Worker {
   return workerInstance
 }
 
+/**
+ * Parses every species-list CSV in `files`. `.gbif.json` sidecars in `files`
+ * (saved by Mothbot Process) supply each GBIF download's DOI and description.
+ */
 export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[] }) {
   const { files } = params
   if (!files?.length) return
+  const sidecars = indexGbifSidecars(files)
 
   const lists: Record<string, SpeciesList> = { ...(speciesListsStore.get() || {}) }
   const speciesFiles: IndexedFile[] = []
@@ -55,16 +68,23 @@ export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[]
         const response = await processFileInWorker({ worker, csvText, fileId, fileName, sourcePath: f.path })
 
         if (response) {
-          lists[response.id] = {
+          let list: SpeciesList = {
             id: response.id,
             name: response.name,
             doi: response.doi,
+            doiStatus: response.doiStatus,
+            downloadKey: response.downloadKey,
+            pendingRef: response.pendingRef,
+            taxonIDSource: response.taxonIDSource,
             fileName: response.fileName,
             sourcePath: response.sourcePath,
             records: response.records,
             recordCount: response.recordCount,
             validation: response.validation,
           }
+          const gbif = (await readGbifSidecar(sidecars.forCsv(f.path))) ?? (await getCachedGbifInfo(list))
+          if (gbif) list = applyGbifInfoToList(list, gbif)
+          lists[response.id] = list
 
           invalidateSpeciesIndexForListId(response.id)
         }
@@ -78,6 +98,10 @@ export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[]
   } finally {
     speciesListsLoadingStore.set(false)
   }
+
+  // Background, offline-safe: fetch DOIs still pending (and retry once back online).
+  retryGbifLookupsWhenOnline()
+  void resolveSpeciesListsFromGbif()
 }
 
 function processFileInWorker(params: {

@@ -16,6 +16,12 @@ import { getNightDiskPathFromPhotos, getPhotoBaseFromPhotoId } from '~/utils/pat
 import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getProjectExportPath } from './export-utils'
 import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classification'
 import { currentHumanClassifierId } from '~/features/mothbox-next/human-classifier-id'
+import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
+import {
+  TAXON_ID_SOURCE_LABELS,
+  canonicalSpeciesListRef,
+  inferTaxonIDSource,
+} from '~/models/taxonomy/species-list-source'
 
 const DARWIN_COLUMNS = [
   // Taxonomy columns
@@ -29,6 +35,7 @@ const DARWIN_COLUMNS = [
   'species',
   'morphospecies',
   'taxonID',
+  'taxonID_source',
   'commonName',
   'scientificName',
   'name',
@@ -292,8 +299,12 @@ export function buildDarwinShapeFromDetection(params: {
   const species = taxonomyFields.species || ''
   const morphospecies = detection?.morphospecies || ''
   const taxonID = String(taxonMetadata.taxonID || '')
+  // Lists from the GBIF Backbone and Catalogue of Life eras can be mixed in one
+  // project, and a bare taxonID doesn't say which system it's from.
+  const taxonIDSource = taxonID ? taxonMetadata.taxonIDSource ?? inferTaxonIDSource(taxonID) : undefined
+  const taxonID_source = taxonIDSource ? TAXON_ID_SOURCE_LABELS[taxonIDSource] : ''
   const commonName = taxonMetadata.vernacularName || ''
-  const species_list_doi = String(taxonMetadata.speciesListDOI || '')
+  const species_list_doi = speciesListRefForExport(taxonMetadata.speciesListDOI)
 
   // For errors, scientificName should be blank, but name should be "ERROR"
   // Use validated scientificName (no morphospecies/numbers)
@@ -348,6 +359,7 @@ export function buildDarwinShapeFromDetection(params: {
     species,
     morphospecies,
     taxonID,
+    taxonID_source,
     commonName,
     scientificName,
     name,
@@ -363,6 +375,22 @@ export function buildDarwinShapeFromDetection(params: {
     pixel_mass_method: detection?.pixelMassMethod ?? '',
   }
   return row
+}
+
+/**
+ * The species-list reference for the export, in one canonical form (older
+ * versions stored `doi.org10.15468dl.x.csv`). An ID made while a GBIF list's DOI
+ * was still pending (offline) carries the download page URL; if that list's DOI
+ * has since been fetched, export the DOI instead.
+ */
+function speciesListRefForExport(ref?: string) {
+  const canonical = canonicalSpeciesListRef(ref)
+  if (!canonical) return ''
+  for (const list of Object.values(speciesListsStore.get() || {})) {
+    if (list.doiStatus !== 'resolved' && list.doiStatus !== 'filename') continue
+    if (list.pendingRef && canonicalSpeciesListRef(list.pendingRef) === canonical) return list.doi
+  }
+  return canonical
 }
 
 // FSAA writer moved to utils/fsaa.ts

@@ -1,3 +1,4 @@
+import { canonicalSpeciesListRef } from '~/models/taxonomy/species-list-source'
 import type { ClassificationRecord } from './records'
 import type { SpeciesList } from '~/features/data-flow/2.identify/species-list.store'
 import { saveProjectSpeciesSelection } from '~/stores/species/project-species-list'
@@ -44,6 +45,8 @@ function matchSpeciesListId(params: { ref: string; speciesLists: Record<string, 
     if (normalizeSpeciesListRef(list.id) === normalizedRef) return list.id
     if (normalizeSpeciesListRef(list.fileName) === normalizedRef) return list.id
     if (normalizeSpeciesListRef(list.doi) === normalizedRef) return list.id
+    // A DOI or GBIF download ref in any of its historical spellings.
+    if (list.pendingRef && normalizeSpeciesListRef(list.pendingRef) === normalizedRef) return list.id
     if (normalizeSpeciesListRef(list.sourcePath) === normalizedRef) return list.id
   }
 
@@ -59,7 +62,7 @@ function readSpeciesListRef(taxon: ClassificationRecord['taxon']) {
 }
 
 function normalizeSpeciesListRef(value: string) {
-  return value
+  return canonicalSpeciesListRef(value)
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//, '')

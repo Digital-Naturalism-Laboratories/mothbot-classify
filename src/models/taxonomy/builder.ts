@@ -4,12 +4,14 @@
  */
 
 import type { TaxonRecord, ExtractedTaxonomy } from './types'
+import type { TaxonIDSource } from './species-list-source'
 import { normalizeTaxonValue, safeString } from './normalize'
 import { determineScientificNameAndRank } from './rank'
 import { looksLikeMorphospeciesCode } from './morphospecies'
 
 export type TaxonMetadata = {
   taxonID?: string | number
+  taxonIDSource?: TaxonIDSource
   acceptedTaxonKey?: string | number
   acceptedScientificName?: string
   vernacularName?: string
@@ -96,6 +98,7 @@ export function buildTaxonRecord(params: {
     genus: normalizedGenus,
     species: finalSpecies,
     taxonID: metadata?.taxonID,
+    ...(metadata?.taxonIDSource ? { taxonIDSource: metadata.taxonIDSource } : {}),
     acceptedTaxonKey: metadata?.acceptedTaxonKey,
     acceptedScientificName: metadata?.acceptedScientificName,
     vernacularName: metadata?.vernacularName,
