@@ -31,6 +31,8 @@ export function detectionFromClassification(params: {
     classificationType: row.classification_type,
     botClassifierId: row.classifier_type === 'bot' ? row.classifier_id : undefined,
     humanClassifierId: row.classifier_type === 'human' ? row.classifier_id : undefined,
+    ...(row.species_list ? { speciesListDOI: row.species_list } : {}),
+    ...(row.species_list_exclusions ? { speciesListExclusions: row.species_list_exclusions } : {}),
     ...(typeof row.pixel_mass_pixels === 'number' ? { pixelMassPixels: row.pixel_mass_pixels } : {}),
     ...(row.pixel_mass_mm2 != null ? { pixelMassMm2: row.pixel_mass_mm2 } : {}),
     ...(typeof row.pixel_mass_timestamp === 'string' ? { pixelMassTimestamp: row.pixel_mass_timestamp } : {}),
@@ -71,6 +73,7 @@ export function classificationFromDetection(params: {
       morphospecies: detection.morphospecies ?? null,
       is_error: false,
       classified_at: classifiedAt,
+      ...speciesListFields(detection),
     }
   }
 
@@ -85,6 +88,7 @@ export function classificationFromDetection(params: {
       morphospecies: null,
       is_error: false,
       classified_at: classifiedAt,
+      ...speciesListFields(detection),
     }
   }
 
@@ -98,5 +102,14 @@ export function classificationFromDetection(params: {
     morphospecies: null,
     is_error: false,
     classified_at: classifiedAt,
+    ...speciesListFields(detection),
+  }
+}
+
+/** The species list (and any exclusions) the detection's current ID was made with. */
+function speciesListFields(detection: DetectionEntity): Pick<ClassificationRecord, 'species_list' | 'species_list_exclusions'> {
+  return {
+    species_list: detection.speciesListDOI || null,
+    species_list_exclusions: detection.speciesListExclusions || null,
   }
 }

@@ -74,6 +74,13 @@ export type ClassificationRecord = {
   confidence?: number | null
   classified_at?: number | null
   source_bot_detection_id?: string | null
+  /**
+   * Species list this ID was made from: the DOI URL (or GBIF download page while the
+   * DOI is pending). Bot IDs carry Process's list; human IDs the list picked in Classify.
+   */
+  species_list?: string | null
+  /** For bot IDs: taxa Process left out of the choices (e.g. "light-trap-exclusions@d62bede7"). */
+  species_list_exclusions?: string | null
   resolved_from?: string
   pixel_mass_pixels?: number | null
   pixel_mass_mm2?: number | null

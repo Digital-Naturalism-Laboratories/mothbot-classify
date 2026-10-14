@@ -14,7 +14,7 @@ export function restoreSpeciesListSelectionFromPackage(params: {
   const counts = new Map<string, number>()
   for (const row of classifications) {
     if (row.classifier_type !== 'human') continue
-    const raw = readSpeciesListRef(row.taxon)
+    const raw = row.species_list || readSpeciesListRef(row.taxon)
     if (typeof raw !== 'string' || !raw.trim()) continue
     const key = normalizeSpeciesListRef(raw)
     counts.set(key, (counts.get(key) ?? 0) + 1)

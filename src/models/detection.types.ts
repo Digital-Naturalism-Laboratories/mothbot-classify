@@ -33,9 +33,16 @@ export type DetectionEntity = {
   // When user types free text identification, store the morphospecies string
   morphospecies?: string
   speciesListId?: string
+  /** Species list (DOI, or GBIF download URL while its DOI is pending) the current ID was made from. */
   speciesListDOI?: string
+  /** Taxa Mothbot Process left out of the choices for a bot ID (e.g. "light-trap-exclusions@d62bede7"). */
+  speciesListExclusions?: string
   // Original label from bot detection JSON (e.g., "ORDER_Diptera")
   originalMothboxLabel?: string
+  /** Species list the original bot ID used — kept after a human re-identifies with another list. */
+  originalMothboxSpeciesList?: string
+  /** Exclusions the original bot ID used. */
+  originalMothboxSpeciesListExclusions?: string
   classificationType?: DetectionClassificationType
   humanClassifierId?: string
   pixelMassPixels?: number

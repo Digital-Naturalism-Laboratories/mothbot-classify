@@ -26,6 +26,7 @@ import {
 const DARWIN_COLUMNS = [
   // Taxonomy columns
   'species_list_doi',
+  'species_list_exclusions',
   'kingdom',
   'phylum',
   'class',
@@ -50,6 +51,8 @@ const DARWIN_COLUMNS = [
   'mothbox',
   'filepath',
   'original_mothbox_identifciation',
+  'original_mothbox_species_list_doi',
+  'original_mothbox_species_list_exclusions',
   'cluster_ID',
   'temporal_subcluster_ID',
   'width',
@@ -304,7 +307,13 @@ export function buildDarwinShapeFromDetection(params: {
   const taxonIDSource = taxonID ? taxonMetadata.taxonIDSource ?? inferTaxonIDSource(taxonID) : undefined
   const taxonID_source = taxonIDSource ? TAXON_ID_SOURCE_LABELS[taxonIDSource] : ''
   const commonName = taxonMetadata.vernacularName || ''
+  // Each ID carries the species list it was made from: the final ID's (human or
+  // bot) and, separately, the original bot ID's — they can differ when a human
+  // re-identifies with another list.
   const species_list_doi = speciesListRefForExport(taxonMetadata.speciesListDOI)
+  const species_list_exclusions = isError ? '' : detection?.speciesListExclusions || ''
+  const original_mothbox_species_list_doi = speciesListRefForExport(detection?.originalMothboxSpeciesList)
+  const original_mothbox_species_list_exclusions = detection?.originalMothboxSpeciesListExclusions || ''
 
   // For errors, scientificName should be blank, but name should be "ERROR"
   // Use validated scientificName (no morphospecies/numbers)
@@ -364,9 +373,12 @@ export function buildDarwinShapeFromDetection(params: {
     scientificName,
     name,
     species_list_doi,
+    species_list_exclusions,
     filepath,
     mothbox,
     original_mothbox_identifciation: detection?.originalMothboxLabel || '',
+    original_mothbox_species_list_doi,
+    original_mothbox_species_list_exclusions,
     ...geometryFields,
     deployment,
     image_id,

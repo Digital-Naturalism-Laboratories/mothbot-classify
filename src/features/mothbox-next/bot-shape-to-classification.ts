@@ -57,7 +57,19 @@ export function classificationFromBotShape(params: {
     pixel_mass_mm2: typeof shape.pixel_mass_mm2 === 'number' ? shape.pixel_mass_mm2 : null,
     pixel_mass_timestamp: typeof shape.timestamp_pixel_mass === 'string' ? shape.timestamp_pixel_mass : null,
     pixel_mass_method: typeof shape.pixel_mass_method === 'string' ? shape.pixel_mass_method : null,
+    species_list: speciesListOf(shape),
+    species_list_exclusions: speciesListExclusionsOf(shape),
   }
+}
+
+function speciesListOf(shape: LegacyDetectionShape): string | null {
+  const v = (shape as { species_list?: unknown }).species_list
+  return typeof v === 'string' && v.trim() && v !== 'no_doi' ? v : null
+}
+
+function speciesListExclusionsOf(shape: LegacyDetectionShape): string | null {
+  const v = (shape as { species_list_exclusions?: unknown }).species_list_exclusions
+  return typeof v === 'string' && v.trim() ? v : null
 }
 
 export function classificationFromIdentifiedShape(params: {
@@ -98,6 +110,7 @@ export function classificationFromIdentifiedShape(params: {
       morphospecies,
       is_error: false,
       classified_at: classifiedAt ?? Date.now(),
+      species_list: speciesListOf(shape),
     }
   }
 
@@ -112,6 +125,7 @@ export function classificationFromIdentifiedShape(params: {
       morphospecies: null,
       is_error: false,
       classified_at: classifiedAt ?? Date.now(),
+      species_list: speciesListOf(shape),
     }
   }
 

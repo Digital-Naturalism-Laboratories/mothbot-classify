@@ -68,8 +68,12 @@ export function buildDetectionFromBotShape(params: { shape: any; existingDetecti
     isError: undefined,
     morphospecies: undefined,
     speciesListId: undefined,
-    speciesListDOI: undefined,
+    speciesListDOI: botSpeciesList(shape),
+    speciesListExclusions: safeString(shape?.species_list_exclusions),
     originalMothboxLabel: existingDetection?.originalMothboxLabel ?? safeString(shape?.label),
+    originalMothboxSpeciesList: existingDetection?.originalMothboxSpeciesList ?? botSpeciesList(shape),
+    originalMothboxSpeciesListExclusions:
+      existingDetection?.originalMothboxSpeciesListExclusions ?? safeString(shape?.species_list_exclusions),
     classificationType: undefined,
     humanClassifierId: undefined,
     botClassifierId: safeString(shape?.detector_bot) || existingDetection?.botClassifierId,
@@ -112,7 +116,10 @@ export function buildDetectionFromIdentifiedJsonShape(params: { shape: any; phot
     isError: isError ? true : undefined,
     morphospecies,
     speciesListDOI: shape?.species_list ?? existingDetection?.speciesListDOI,
+    speciesListExclusions: safeString(shape?.species_list_exclusions),
     originalMothboxLabel: existingDetection?.originalMothboxLabel,
+    originalMothboxSpeciesList: existingDetection?.originalMothboxSpeciesList,
+    originalMothboxSpeciesListExclusions: existingDetection?.originalMothboxSpeciesListExclusions,
   }
 
   return detection
@@ -166,6 +173,7 @@ function buildTaxonMetadataFields(params: { detection: DetectionEntity }) {
     vernacularName: taxonMetadata.vernacularName,
     taxonRank: taxonMetadata.taxonRank,
     species_list: taxonMetadata.speciesListDOI || undefined,
+    species_list_exclusions: detection.speciesListExclusions || undefined,
   }
 }
 
@@ -279,4 +287,10 @@ export function acceptDetection(params: AcceptDetectionParams): DetectionEntity 
   })
 
   return result.detection
+}
+
+/** Process writes "no_doi" when a list has no DOI — treat that as no reference. */
+function botSpeciesList(shape: any): string | undefined {
+  const v = safeString(shape?.species_list)
+  return v && v !== 'no_doi' ? v : undefined
 }

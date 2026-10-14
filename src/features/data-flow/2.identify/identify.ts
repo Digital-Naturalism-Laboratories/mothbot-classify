@@ -80,8 +80,7 @@ function handleErrorIdentification(params: { detection: DetectionEntity; context
     taxon: undefined,
     isError: true,
     morphospecies: undefined,
-    speciesListId: context?.speciesListId || detection?.speciesListId,
-    speciesListDOI: context?.speciesListDOI || detection?.speciesListDOI,
+    ...humanSpeciesListFields({ detection, context }),
   }
 
   return { detection: next, changed: true, skipped: false }
@@ -95,8 +94,11 @@ function handleAcceptIdentification(params: { detection: DetectionEntity; contex
     detectedBy: 'user',
     identifiedAt: Date.now(),
     classificationType: 'accept',
-    speciesListId: context?.speciesListId || detection?.speciesListId,
-    speciesListDOI: context?.speciesListDOI || detection?.speciesListDOI,
+    // Accepting keeps the bot's taxon, so the ID still comes from the bot's species
+    // list (and its exclusions) — not whichever list the human has selected.
+    speciesListId: detection?.speciesListId || context?.speciesListId,
+    speciesListDOI: detection?.speciesListDOI || context?.speciesListDOI,
+    speciesListExclusions: detection?.speciesListExclusions,
   }
 
   return { detection: next, changed: true, skipped: false }
@@ -139,8 +141,7 @@ function handleMorphospeciesIdentification(params: {
     taxon: taxonWithNameField,
     isError: false,
     morphospecies: trimmed,
-    speciesListId: context?.speciesListId || detection?.speciesListId,
-    speciesListDOI: context?.speciesListDOI || detection?.speciesListDOI,
+    ...humanSpeciesListFields({ detection, context }),
   }
 
   return { detection: next, changed: true, skipped: false }
@@ -255,11 +256,26 @@ function handleTaxonIdentification(params: {
     taxon: taxonWithNameField,
     isError: false,
     morphospecies: nextMorphospecies,
-    speciesListId: context?.speciesListId || detection?.speciesListId,
-    speciesListDOI: context?.speciesListDOI || detection?.speciesListDOI,
+    ...humanSpeciesListFields({ detection, context }),
   }
 
   return { detection: next, changed: true, skipped: false }
+}
+
+/**
+ * Species list for a human ID: the list selected in Classify. With no list
+ * selected, a previous *human* ID's list is kept — but never the bot's, which
+ * would credit the human's choice to Process's list. Exclusions only apply to
+ * bot IDs, so they're cleared.
+ */
+function humanSpeciesListFields(params: { detection: DetectionEntity; context?: IdentificationContext }) {
+  const { detection, context } = params
+  const keepPrevious = detection?.detectedBy === 'user' && detection.classificationType !== 'accept'
+  return {
+    speciesListId: context?.speciesListId || (keepPrevious ? detection?.speciesListId : undefined),
+    speciesListDOI: context?.speciesListDOI || (keepPrevious ? detection?.speciesListDOI : undefined),
+    speciesListExclusions: undefined,
+  }
 }
 
 /**

@@ -383,6 +383,7 @@ function detectionMetadataFromPatch(params: {
   const shapeType = cropShapeTypeFromPatchSource(params.patchSource)
   const botClassifierId = params.botMetadata?.classifierId
   const botScore = params.botMetadata?.confidence
+  const bot = params.botMetadata
 
   return {
     ...(clusterId !== undefined ? { clusterId } : {}),
@@ -391,6 +392,9 @@ function detectionMetadataFromPatch(params: {
     ...(shapeType ? { shapeType } : {}),
     ...(botClassifierId ? { botClassifierId } : {}),
     ...(botScore !== undefined ? { score: botScore } : {}),
+    ...(bot?.label ? { originalMothboxLabel: bot.label } : {}),
+    ...(bot?.speciesList ? { originalMothboxSpeciesList: bot.speciesList } : {}),
+    ...(bot?.speciesListExclusions ? { originalMothboxSpeciesListExclusions: bot.speciesListExclusions } : {}),
     ...pixelMassForPatch(params.measurement, params.botMetadata),
   }
 }
@@ -415,6 +419,10 @@ function pixelMassForPatch(measurement?: PatchMeasurementRecord, bot?: BotClassi
 type BotClassificationMetadata = {
   classifierId?: string
   confidence?: number
+  /** The bot's own ID — kept on the detection after a human re-identifies it. */
+  label?: string
+  speciesList?: string
+  speciesListExclusions?: string
   pixelMass?: Pick<DetectionEntity, 'pixelMassPixels' | 'pixelMassMm2' | 'pixelMassMethod' | 'pixelMassTimestamp'>
 }
 
@@ -446,7 +454,12 @@ function buildBotMetadataByPatch(params: {
           ...(row.pixel_mass_timestamp ? { pixelMassTimestamp: row.pixel_mass_timestamp } : {}),
         }
       : undefined
-    if (classifierId || confidence !== undefined || pixelMass) out.set(patchId, { classifierId, confidence, pixelMass })
+    const label = row.label?.trim() || undefined
+    const speciesList = row.species_list?.trim() || undefined
+    const speciesListExclusions = row.species_list_exclusions?.trim() || undefined
+    if (classifierId || confidence !== undefined || pixelMass || label || speciesList) {
+      out.set(patchId, { classifierId, confidence, pixelMass, label, speciesList, speciesListExclusions })
+    }
   }
 
   return out
