@@ -7,11 +7,75 @@ export function invalidateSpeciesIndexForListId(listId: string) {
   if (!listId) return
   delete speciesIndexCache[listId]
   delete speciesExactIndexCache[listId]
+  delete largeListIndexCache[listId]
 }
 
 type SpeciesIndexItem = { ref: TaxonRecord; search: any }
 const speciesIndexCache: Record<string, SpeciesIndexItem[] | undefined> = {}
 const speciesExactIndexCache: Record<string, Record<string, TaxonRecord[]> | undefined> = {}
+
+/**
+ * Above this many taxa (the ~790k-taxon worldwide insect list) fuzzysort's
+ * prepared index runs the tab out of memory, so large lists use a compact
+ * substring index instead: no typo tolerance from fuzzysort (the approximate
+ * fallback below still catches misspellings), but a few MB rather than GBs.
+ */
+export const LARGE_SPECIES_LIST = 150_000
+
+type LargeListIndex = { names: string[]; refs: TaxonRecord[] }
+const largeListIndexCache: Record<string, LargeListIndex | undefined> = {}
+
+const OWN_RANK_ORDER = ['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom'] as const
+
+/** A record's own name at its own rank (the species for a species record, etc.). */
+function ownRankName(r: TaxonRecord): string {
+  const rank = (r?.taxonRank ?? '').toLowerCase() as (typeof OWN_RANK_ORDER)[number]
+  const own = OWN_RANK_ORDER.includes(rank) ? (r as any)?.[rank] : undefined
+  return String(own || r?.scientificName || '')
+}
+
+function ensureLargeListIndex(list: SpeciesList): LargeListIndex {
+  const cached = largeListIndexCache[list.id]
+  if (cached) return cached
+
+  const names: string[] = []
+  const refs: TaxonRecord[] = []
+  const exactIndex: Record<string, TaxonRecord[]> = {}
+  for (const r of list.records) {
+    const isUnranked = (r?.taxonRank ?? '').toLowerCase() === 'unranked'
+    const status = (r?.taxonomicStatus ?? '').toLowerCase()
+    if (isUnranked || (status && status !== 'accepted')) continue
+    const own = ownRankName(r)
+    if (!own) continue
+    names.push(r.vernacularName ? `${own} ${r.vernacularName}`.toLowerCase() : own.toLowerCase())
+    refs.push(r)
+    // Exact matches keyed only by the record's own name — keying every record
+    // by its class/order too would put ~all 790k records in one bucket.
+    addExact(exactIndex, own, r)
+  }
+
+  const index = { names, refs }
+  largeListIndexCache[list.id] = index
+  speciesExactIndexCache[list.id] = exactIndex
+  return index
+}
+
+/** Substring search for large lists: whole-name prefix, then word prefix, then anywhere. */
+function searchLargeList(index: LargeListIndex, query: string, limit: number): TaxonRecord[] {
+  const q = query.toLowerCase()
+  const tiers: TaxonRecord[][] = [[], [], []]
+  const want = limit * 4
+  for (let i = 0; i < index.names.length; i++) {
+    const name = index.names[i]
+    const at = name.indexOf(q)
+    if (at < 0) continue
+    const tier = at === 0 ? 0 : name[at - 1] === ' ' ? 1 : 2
+    if (tiers[tier].length < want) tiers[tier].push(index.refs[i])
+  }
+  // Shorter names first within a tier: "Hypercompe" before "Hypercompe albescens".
+  for (const tier of tiers) tier.sort((a, b) => ownRankName(a).length - ownRankName(b).length)
+  return tiers.flat()
+}
 
 function ensureSpeciesIndexForList(list: SpeciesList | undefined): SpeciesIndexItem[] {
   if (!list) return []
@@ -52,17 +116,23 @@ export function searchSpecies(params: { speciesListId?: string; query: string; l
 
   const allLists = speciesListsStore.get() || {}
   const list = speciesListId ? allLists[speciesListId] : undefined
+  const isLarge = (list?.records?.length ?? 0) > LARGE_SPECIES_LIST
 
-  const index = ensureSpeciesIndexForList(list)
-  if (!index.length) return []
+  let mapped: TaxonRecord[]
+  if (list && isLarge) {
+    mapped = searchLargeList(ensureLargeListIndex(list), trimmed, limit)
+  } else {
+    const index = ensureSpeciesIndexForList(list)
+    if (!index.length) return []
 
-  const results = fuzzysort.go(trimmed, index as any, {
-    key: 'search' as any,
-    limit,
-    threshold: -10000,
-  }) as unknown as Array<{ obj: SpeciesIndexItem }>
+    const results = fuzzysort.go(trimmed, index as any, {
+      key: 'search' as any,
+      limit,
+      threshold: -10000,
+    }) as unknown as Array<{ obj: SpeciesIndexItem }>
 
-  let mapped: TaxonRecord[] = results.map((r) => r.obj.ref)
+    mapped = results.map((r) => r.obj.ref)
+  }
 
   const exactIndex = speciesExactIndexCache[list?.id || ''] || {}
   const exactLower = trimmed.toLowerCase()
@@ -224,6 +294,7 @@ export function searchSpecies(params: { speciesListId?: string; query: string; l
       query: trimmed,
       limit: take,
       maxDistance: 2,
+      ownRankOnly: isLarge,
     })
     if (approx.length) {
       finalResults = approx.map((record) => {
@@ -299,10 +370,10 @@ function addExact(index: Record<string, TaxonRecord[]>, value: string | undefine
 
 // Fallback approximate matching for misspellings (e.g., 'hempitera' -> 'Hemiptera').
 // This runs only when primary fuzzy search yields no results.
-type ApproxParams = { records: TaxonRecord[]; query: string; limit: number; maxDistance: number }
+type ApproxParams = { records: TaxonRecord[]; query: string; limit: number; maxDistance: number; ownRankOnly?: boolean }
 
 function approximateSearch(params: ApproxParams) {
-  const { records, query, limit, maxDistance } = params
+  const { records, query, limit, maxDistance, ownRankOnly } = params
   const q = (query || '').trim().toLowerCase()
   if (!q) return [] as TaxonRecord[]
 
@@ -321,7 +392,11 @@ function approximateSearch(params: ApproxParams) {
 
   for (const rec of records) {
     let best: Candidate | undefined
-    for (const rank of ['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom'] as const) {
+    // Large lists: compare each record only at its own rank (1 comparison, not 7).
+    const ranks = ownRankOnly
+      ? OWN_RANK_ORDER.filter((rank) => rank === (rec?.taxonRank ?? '').toLowerCase())
+      : (['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom'] as const)
+    for (const rank of ranks) {
       const val = String((rec as any)?.[rank] || '')
         .trim()
         .toLowerCase()

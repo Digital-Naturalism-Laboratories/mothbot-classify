@@ -13,7 +13,7 @@ import { objectsToCSV } from '~/utils/csv'
 import { fsaaWriteText, type FileSystemDirectoryHandleLike } from '~/utils/fsaa'
 import { idbGet } from '~/utils/index-db'
 import { getNightDiskPathFromPhotos, getPhotoBaseFromPhotoId } from '~/utils/paths'
-import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getProjectExportPath } from './export-utils'
+import { buildExportFileNameParts, formatTodayYyyyMm_Dd, getPackageExportFolderPath, getProjectExportPath } from './export-utils'
 import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classification'
 import { currentHumanClassifierId } from '~/features/mothbox-next/human-classifier-id'
 import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
@@ -100,9 +100,7 @@ export async function exportNightDarwinCSV(params: { leafGroupId: string }): Pro
   if (!generated) return false
   const { csv } = generated
 
-  const fileName = buildNightExportFileName({ leafGroupId })
-  const projectExportPath = getProjectExportPath({ leafGroupId })
-  const pathParts = [...projectExportPath.split('/').filter(Boolean), fileName]
+  const pathParts = getNightDarwinExportPathParts({ leafGroupId })
 
   await fsaaWriteText(root, pathParts, csv)
   console.log('✅ exportNightDarwinCSV: written file', { path: pathParts.join('/') })
@@ -152,32 +150,57 @@ export async function openNightFolderPicker(params: { leafGroupId: string }): Pr
   }
 }
 
-export async function copyNightFolderPathToClipboard(params: { leafGroupId: string }): Promise<boolean> {
+/**
+ * Where a night's Darwin CSV is written, relative to the opened folder (the
+ * `projectsRoot` handle). The writer, the success toast and the copy-path
+ * buttons all use this, so they can't disagree about the location again.
+ *
+ * Mothbox Next packages: `<package>/04_exports/` — the opened folder *is* the
+ * package, and visualizations already go there. Legacy datasets (the opened
+ * folder holds project folders): `<project>/exports/`.
+ */
+export function getNightDarwinExportPathParts(params: { leafGroupId: string }): string[] {
   const { leafGroupId } = params
-  if (!leafGroupId) return false
+  const folder = getPackageExportFolderPath() ?? getProjectExportPath({ leafGroupId })
+  return [...folder.split('/').filter(Boolean), buildNightExportFileName({ leafGroupId })]
+}
 
-  const allPhotos = photosStore.get() || {}
-  const photos = Object.values(allPhotos).filter((p) => p.leafGroupId === leafGroupId)
-  if (!photos.length) return false
+/**
+ * The export folder as the user would find it on disk, starting from the
+ * folder they opened (browsers never reveal the absolute path).
+ */
+export function describeDarwinExportFolder(params: { leafGroupId: string }): string {
+  return withOpenedFolderName(getNightDarwinExportPathParts(params).slice(0, -1))
+}
 
-  const nightDiskPath = getNightDiskPathFromPhotos({ photos })
-  if (!nightDiskPath) return false
-
-  const ok = await writeTextToClipboard(nightDiskPath)
-  console.log(ok ? '📋 Copied night folder path' : '🚨 Failed to copy folder path', { nightDiskPath })
-  return ok
+function withOpenedFolderName(parts: string[]): string {
+  let opened = ''
+  try {
+    opened = localStorage.getItem(persistenceConstants.LOCAL_NAME_KEY) ?? ''
+  } catch {
+    // localStorage unavailable — show the path from the opened folder
+  }
+  return [opened, ...parts].filter(Boolean).join('/')
 }
 
 export async function copyNightExportFilePathToClipboard(params: { leafGroupId: string }): Promise<boolean> {
   const { leafGroupId } = params
   if (!leafGroupId) return false
 
-  const fileName = buildNightExportFileName({ leafGroupId })
-  const projectExportPath = getProjectExportPath({ leafGroupId })
-  const fullPath = [...projectExportPath.split('/').filter(Boolean), fileName].join('/')
+  const fullPath = withOpenedFolderName(getNightDarwinExportPathParts({ leafGroupId }))
 
   const ok = await writeTextToClipboard(fullPath)
   console.log(ok ? '📋 Copied export file path' : '🚨 Failed to copy export file path', { fullPath })
+  return ok
+}
+
+export async function copyNightExportFolderPathToClipboard(params: { leafGroupId: string }): Promise<boolean> {
+  const { leafGroupId } = params
+  if (!leafGroupId) return false
+
+  const folderPath = describeDarwinExportFolder({ leafGroupId })
+  const ok = await writeTextToClipboard(folderPath)
+  console.log(ok ? '📋 Copied export folder path' : '🚨 Failed to copy export folder path', { folderPath })
   return ok
 }
 

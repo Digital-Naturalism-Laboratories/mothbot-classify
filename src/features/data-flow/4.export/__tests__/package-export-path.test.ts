@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { PACKAGE_EXPORTS_FOLDER, getPackageExportFolderPath } from '../export-utils'
+import { describeDarwinExportFolder, getNightDarwinExportPathParts } from '../darwin-csv'
 
 function setPackageRoot(packageRoot: string) {
   mothboxNextPackageStore.set({ packageRoot, manifest: {} as any })
@@ -36,5 +37,28 @@ describe('getPackageExportFolderPath', () => {
   it('returns null when no package is open, so legacy datasets keep their path', () => {
     mothboxNextPackageStore.set(null)
     expect(getPackageExportFolderPath()).toBeNull()
+  })
+})
+
+describe('Darwin CSV export location', () => {
+  const night = 'Tucson/DesertHouse_2026-01/2026-01-15'
+
+  it('writes package exports to 04_exports, not a stray <project>/exports folder', () => {
+    setPackageRoot('')
+    const parts = getNightDarwinExportPathParts({ leafGroupId: night })
+    expect(parts.slice(0, -1)).toEqual(['04_exports'])
+    expect(parts.at(-1)).toMatch(/^Tucson_.*_exported-\d{4}-\d{2}_\d{2}\.csv$/)
+  })
+
+  it('keeps <project>/exports for legacy datasets', () => {
+    mothboxNextPackageStore.set(null)
+    expect(getNightDarwinExportPathParts({ leafGroupId: night }).slice(0, -1)).toEqual(['Tucson', 'exports'])
+  })
+
+  it('describes the folder starting from the opened folder\'s name', () => {
+    setPackageRoot('')
+    localStorage.setItem('mbl/pickedDirName', 'DesertHouse_pkg')
+    expect(describeDarwinExportFolder({ leafGroupId: night })).toBe('DesertHouse_pkg/04_exports')
+    localStorage.removeItem('mbl/pickedDirName')
   })
 })

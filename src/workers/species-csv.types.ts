@@ -4,7 +4,10 @@ import type { SpeciesListValidation } from '~/models/taxonomy/species-list-valid
 
 export type SpeciesCsvWorkerRequest = {
   requestId: string
-  csvText: string
+  /** The CSV file — streamed by the worker, never read into one string. */
+  file?: Blob
+  /** Alternative to `file` for callers that already have the text. */
+  csvText?: string
   fileId: string
   fileName: string
   sourcePath: string

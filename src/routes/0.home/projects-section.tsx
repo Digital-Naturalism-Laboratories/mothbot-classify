@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { DownloadIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { exportScopeDarwinCSV } from '~/features/data-flow/4.export/export-orchestrator'
+import { describeDarwinExportFolder } from '~/features/data-flow/4.export/darwin-csv'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { Loader } from '~/components/atomic/Loader'
 import {
@@ -624,7 +625,11 @@ function NightsList(props: NightsListProps) {
                         e.preventDefault()
                         e.stopPropagation()
                         const p = exportScopeDarwinCSV({ scope: 'night', id: night.id, nights })
-                        toast.promise(p, { loading: '💾 Exporting DwC…', success: '✅ DwC exported', error: '🚨 Failed to export DwC' })
+                        toast.promise(p, {
+                      loading: '💾 Exporting DwC…',
+                      success: () => ({ message: '✅ DwC exported', description: `Saved in ${describeDarwinExportFolder({ leafGroupId: night.id })}` }),
+                      error: '🚨 Failed to export DwC',
+                    })
                       }}
                     >
                       <DownloadIcon className='h-12 w-12' />

@@ -15,7 +15,12 @@ import {
 } from '~/components/ui/dropdown-menu'
 import { detectionsStore } from '~/stores/entities/detections'
 import { selectedPatchIdsStore } from '~/stores/ui'
-import { exportNightDarwinCSV, copyNightExportFilePathToClipboard, copyNightFolderPathToClipboard } from '~/features/data-flow/4.export/darwin-csv'
+import {
+  exportNightDarwinCSV,
+  copyNightExportFilePathToClipboard,
+  copyNightExportFolderPathToClipboard,
+  describeDarwinExportFolder,
+} from '~/features/data-flow/4.export/darwin-csv'
 import { toast } from 'sonner'
 import { Number } from '~/components/atomic/number'
 import { LabeledSliderControl } from '~/components/atomic/labeled-slider-control'
@@ -309,7 +314,8 @@ function showDarwinExportToast(params: { leafGroupId: string }) {
   toast.promise(promise, {
     loading: '💾 Exporting Darwin CSV…',
     success: () => ({
-      message: '✅ Darwin CSV exported in the night folder',
+      message: '✅ Darwin CSV exported',
+      description: `Saved in ${describeDarwinExportFolder({ leafGroupId })}`,
       action: {
         label: 'Copy file path',
         onClick: () => {
@@ -319,7 +325,7 @@ function showDarwinExportToast(params: { leafGroupId: string }) {
       cancel: {
         label: 'Copy folder path',
         onClick: () => {
-          void copyNightFolderPathToClipboard({ leafGroupId })
+          void copyNightExportFolderPathToClipboard({ leafGroupId })
         },
       },
     }),

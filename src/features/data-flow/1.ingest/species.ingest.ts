@@ -59,13 +59,14 @@ export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[]
         const file = f?.file || (await (f?.handle as any)?.getFile?.())
         if (!file) continue
 
-        const csvText = await file.text()
-        if (!csvText) continue
+        if (!file.size) continue
 
         const fileId = f?.name || f?.path
         const fileName = f?.name || f?.path
 
-        const response = await processFileInWorker({ worker, csvText, fileId, fileName, sourcePath: f.path })
+        // Hand the File itself to the worker (a cheap reference, not a copy): the
+        // worldwide list is >300 MB and reading it into a string crashed the tab.
+        const response = await processFileInWorker({ worker, file, fileId, fileName, sourcePath: f.path })
 
         if (response) {
           let list: SpeciesList = {
@@ -106,33 +107,41 @@ export async function ingestSpeciesListsFromFiles(params: { files: IndexedFile[]
 
 function processFileInWorker(params: {
   worker: Worker
-  csvText: string
+  file: Blob
   fileId: string
   fileName: string
   sourcePath: string
 }): Promise<SpeciesCsvWorkerResponse | null> {
-  const { worker, csvText, fileId, fileName, sourcePath } = params
+  const { worker, file, fileId, fileName, sourcePath } = params
   const requestId = `${fileId}-${Date.now()}-${Math.random()}`
 
   return new Promise((resolve) => {
     const request: SpeciesCsvWorkerRequest = {
       requestId,
-      csvText,
+      file,
       fileId,
       fileName,
       sourcePath,
     }
 
-    const messageHandler = (event: MessageEvent<SpeciesCsvWorkerResponse | null>) => {
-      if (!event.data || (event.data as any).requestId !== requestId) {
-        return
-      }
+    const finish = (response: SpeciesCsvWorkerResponse | null) => {
       worker.removeEventListener('message', messageHandler)
-      resolve(event.data)
+      worker.removeEventListener('error', errorHandler)
+      resolve(response)
+    }
+    const messageHandler = (event: MessageEvent<any>) => {
+      if (!event.data || event.data.requestId !== requestId) return
+      // The worker answers { failed } / { empty } instead of a list when it can't
+      // parse the file — without the requestId it used to hang the loader forever.
+      finish(event.data.failed || event.data.empty ? null : (event.data as SpeciesCsvWorkerResponse))
+    }
+    const errorHandler = (event: ErrorEvent) => {
+      console.warn('🚨 species: worker failed while parsing', { path: sourcePath, message: event.message })
+      finish(null)
     }
 
     worker.addEventListener('message', messageHandler)
-    worker.addEventListener('error', () => {})
+    worker.addEventListener('error', errorHandler)
     worker.postMessage(request)
   })
 }

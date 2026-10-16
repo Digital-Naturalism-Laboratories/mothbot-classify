@@ -1,34 +1,24 @@
-import { csvToObjects } from '~/utils/csv'
-import { mapRowToTaxonRecords } from '~/models/taxonomy/csv-parser'
-import { dedupeByTaxonKey } from '~/models/taxonomy/keys'
+import Papa from 'papaparse'
 import { validateSpeciesListCsv } from '~/models/taxonomy/species-list-validation'
-import { identifySpeciesListFromFileName, orderRowsForDedupe } from '~/models/taxonomy/species-list-rows'
-import { detectTaxonIDSource } from '~/models/taxonomy/species-list-source'
+import { createSpeciesListAccumulator, identifySpeciesListFromFileName } from '~/models/taxonomy/species-list-rows'
 import type { SpeciesCsvWorkerRequest, SpeciesCsvWorkerResponse } from './species-csv.types'
 
+/** Rows parsed per chunk; the file is never read into one string. */
+const CHUNK_BYTES = 8 * 1024 * 1024
+
 self.onmessage = async (event: MessageEvent<SpeciesCsvWorkerRequest>) => {
-  const { requestId, csvText, fileId, fileName, sourcePath } = event.data
+  const { requestId, file, csvText, fileId, fileName, sourcePath } = event.data
 
   try {
-    const rows = csvToObjects({ csvContent: csvText, hasHeaders: true }) as any[]
-    if (!Array.isArray(rows) || rows.length === 0) {
-      self.postMessage(null)
+    const accumulator = createSpeciesListAccumulator()
+    await streamCsvRows(file ?? csvText ?? '', (row) => accumulator.addRow(row))
+    const { records, headers, rowCount, taxonIDSource } = accumulator.finish()
+    if (rowCount === 0) {
+      self.postMessage({ requestId, empty: true })
       return
     }
 
-    // Backbone keys are integers, Catalogue of Life keys alphanumeric; a sample decides.
-    const taxonIDSource = detectTaxonIDSource(rows.slice(0, 2000).map((r) => r?.taxonKey ?? r?.taxonID))
-
-    const records = orderRowsForDedupe(rows).flatMap((row) => mapRowToTaxonRecords(row))
-    const unique = dedupeByTaxonKey(records)
-    if (taxonIDSource) {
-      for (const record of unique) if (record.taxonID != null && record.taxonID !== '') record.taxonIDSource = taxonIDSource
-    }
-
-    // Headers come from the first parsed row — PapaParse keys every row by header.
-    const headers = Object.keys(rows[0] ?? {})
-    const validation = validateSpeciesListCsv({ headers, recordCount: unique.length })
-
+    const validation = validateSpeciesListCsv({ headers, recordCount: records.length })
     const identity = identifySpeciesListFromFileName(fileName ?? '')
 
     const response: SpeciesCsvWorkerResponse = {
@@ -38,14 +28,30 @@ self.onmessage = async (event: MessageEvent<SpeciesCsvWorkerRequest>) => {
       taxonIDSource,
       fileName,
       sourcePath,
-      records: unique,
-      recordCount: unique.length,
+      records,
+      recordCount: records.length,
       validation,
     }
 
     self.postMessage(response)
   } catch (err) {
     console.error('🚨 species worker: failed to parse species list', { path: sourcePath, err })
-    self.postMessage(null)
+    self.postMessage({ requestId, failed: true })
   }
+}
+
+function streamCsvRows(input: Blob | string, onRow: (row: any) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    Papa.parse(input as any, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: true, // numbers stay numbers (numberOfOccurrences, backbone keys)
+      chunkSize: CHUNK_BYTES,
+      chunk: (results: Papa.ParseResult<any>) => {
+        for (const row of results.data) onRow(row)
+      },
+      complete: () => resolve(),
+      error: (err: unknown) => reject(err),
+    })
+  })
 }

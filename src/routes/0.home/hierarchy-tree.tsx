@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { DownloadIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { exportScopeDarwinCSV } from '~/features/data-flow/4.export/export-orchestrator'
+import { describeDarwinExportFolder } from '~/features/data-flow/4.export/darwin-csv'
 import {
   ExpandDisclosurePanel,
   ExpandDisclosureTitleRow,
@@ -200,7 +201,11 @@ function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
                     e.preventDefault()
                     e.stopPropagation()
                     const p = exportScopeDarwinCSV({ scope: 'night', id: node.id, nights })
-                    toast.promise(p, { loading: '💾 Exporting DwC…', success: '✅ DwC exported', error: '🚨 Failed to export DwC' })
+                    toast.promise(p, {
+                      loading: '💾 Exporting DwC…',
+                      success: () => ({ message: '✅ DwC exported', description: `Saved in ${describeDarwinExportFolder({ leafGroupId: node.id })}` }),
+                      error: '🚨 Failed to export DwC',
+                    })
                   }}
                 >
                   <DownloadIcon className='h-12 w-12' />

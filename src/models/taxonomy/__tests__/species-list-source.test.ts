@@ -11,7 +11,7 @@ import {
   speciesListNameFromFileName,
   speciesListNameFromGbif,
 } from '../species-list-source'
-import { identifySpeciesListFromFileName, orderRowsForDedupe } from '../species-list-rows'
+import { createSpeciesListAccumulator, identifySpeciesListFromFileName, orderRowsForDedupe } from '../species-list-rows'
 import { mapRowToTaxonRecords } from '../csv-parser'
 import { dedupeByTaxonKey } from '../keys'
 
@@ -185,6 +185,22 @@ describe('orderRowsForDedupe', () => {
     expect(species.acceptedScientificName).toBe('Apanteles lisabearssae Fernandez-Triana, 2014')
     expect(species.taxonomicStatus).toBe('ACCEPTED')
     expect(String(species.acceptedTaxonKey)).toBe('L9SZG')
+  })
+
+  it('streaming accumulator gives the same records as sort → map → dedupe', () => {
+    const rows = [binRow, synonymRow, speciesRow, { ...speciesRow, taxonKey: 'X2', species: 'Apanteles other', speciesKey: 'X2' }]
+    const expected = dedupeByTaxonKey(orderRowsForDedupe(rows).flatMap((r) => mapRowToTaxonRecords(r)))
+
+    const acc = createSpeciesListAccumulator()
+    for (const row of rows) acc.addRow(row)
+    const { records, rowCount, taxonIDSource, headers } = acc.finish()
+
+    expect(rowCount).toBe(4)
+    expect(taxonIDSource).toBe('col')
+    expect(headers).toContain('scientificName')
+    const byKey = (list: typeof records) => Object.fromEntries(list.map((r) => [`${r.taxonRank}:${r.species ?? r.genus ?? r.family}`, r.acceptedScientificName]))
+    expect(byKey(records)).toEqual(byKey(expected))
+    expect(records.find((r) => r.taxonRank === 'species' && r.species === 'Apanteles lisabearssae')?.taxonIDSource).toBe('col')
   })
 
   it('is stable within each group', () => {
