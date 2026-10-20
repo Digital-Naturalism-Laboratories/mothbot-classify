@@ -1,5 +1,6 @@
 import type { DetectionEntity } from '~/models/detection.types'
 import type { ClassificationRecord } from './records'
+import { withKnownOrderLineage } from '~/models/taxonomy/known-lineage'
 
 /** Keep an error sub-category label ("ERROR_Frass") intact; otherwise "ERROR". */
 function preserveErrorLabel(label?: string | null): string {
@@ -22,7 +23,8 @@ export function detectionFromClassification(params: {
     photoId,
     leafGroupId,
     label: isError ? preserveErrorLabel(row.label) : row.label ?? row.taxon?.scientificName ?? undefined,
-    taxon: isError ? undefined : row.taxon ?? undefined,
+    // Repairs IDs saved before class followed the order (e.g. Araneae under Insecta).
+    taxon: isError || !row.taxon ? undefined : withKnownOrderLineage(row.taxon),
     detectedBy: row.classifier_type === 'bot' ? 'auto' : 'user',
     identifiedAt: typeof row.classified_at === 'number' ? row.classified_at : undefined,
     isError: isError ? true : undefined,

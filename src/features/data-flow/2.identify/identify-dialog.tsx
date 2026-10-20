@@ -16,6 +16,7 @@ import { openGlobalDialog } from '~/components/dialogs/global-dialog'
 import { TaxonKeyDialogContent } from './taxon-key-dialog'
 import { useConfirmDialog } from '~/components/dialogs/ConfirmDialog'
 import { detectMissingRanks } from '~/models/taxonomy/rank'
+import { withKnownOrderLineage } from '~/models/taxonomy/known-lineage'
 import { TaxonomyGapFillDialogContent } from './taxonomy-gap-fill-dialog'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { matchDefaultTaxa } from './default-taxa'
@@ -192,7 +193,9 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
     const value = (query ?? '').trim()
     if (!value) return
 
-    const partialTaxon: TaxonRecord = {
+    // A typed well-known order (e.g. "Araneae") gets its real class, so it can't
+    // inherit the class of whatever the detection was before.
+    const partialTaxon: TaxonRecord = withKnownOrderLineage({
       scientificName: value,
       taxonRank: rank,
       ...(rank === 'class' && { class: value }),
@@ -200,7 +203,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
       ...(rank === 'genus' && { genus: value }),
       ...(rank === 'family' && { family: value }),
       ...(rank === 'species' && { species: value }),
-    }
+    })
 
     openTaxonKeyDialog({ partialTaxon, onConfirm: (taxonID) => finalizeTaxonIdentification(partialTaxon, taxonID) })
   }

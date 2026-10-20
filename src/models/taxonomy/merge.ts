@@ -4,8 +4,29 @@
  */
 
 import type { TaxonRecord } from './types'
+import { knownLineageForOrder } from './known-lineage'
 
-const RANK_HIERARCHY = ['kingdom', 'phylum', 'class', 'order', 'suborder', 'family', 'subfamily', 'tribe', 'genus', 'species']
+/** Ranks a taxon's lineage is made of, highest first. */
+const LINEAGE_RANKS = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus'] as const
+
+/** How many {@link LINEAGE_RANKS} sit strictly above `rank` (e.g. order → 3: kingdom, phylum, class). */
+function lineageRankIndex(rank: string): number {
+  switch (rank) {
+    case 'kingdom': return 0
+    case 'phylum': return 1
+    case 'class': return 2
+    case 'order':
+    case 'suborder': return 3
+    case 'family':
+    case 'subfamily': return 4
+    case 'tribe':
+    case 'genus': return 5
+    case 'species': return 6
+    default: return 0
+  }
+}
+
+const RANK_HIERARCHY =['kingdom', 'phylum', 'class', 'order', 'suborder', 'family', 'subfamily', 'tribe', 'genus', 'species']
 
 /**
  * Checks if a rank is higher than species (i.e., not species-level).
@@ -264,6 +285,26 @@ export function mergeTaxonRanks(params: MergeTaxonRanksParams): TaxonRecord {
     if (!merged.family && existing?.family) merged.family = existing.family
     if (!merged.genus && existing?.genus) merged.genus = existing.genus
     if (!merged.species && existing?.species) merged.species = existing.species
+  }
+
+  // The new ID's own lineage wins over the old one: picking Araneae (class
+  // Arachnida) for a detection that was Insecta › Diptera must move it to Arachnida.
+  for (const rank of LINEAGE_RANKS.slice(0, lineageRankIndex(newRank))) {
+    const value = newTaxon?.[rank]
+    if (value) merged[rank] = value
+  }
+
+  // Without a class on the new ID, take it from the order when it's well known;
+  // otherwise drop the old class if the order changed, since it may not apply.
+  if (merged.order && !newTaxon?.class) {
+    const lineage = knownLineageForOrder(merged.order)
+    if (lineage) {
+      merged.class = lineage.class
+      merged.phylum = merged.phylum || lineage.phylum
+      merged.kingdom = merged.kingdom || lineage.kingdom
+    } else if (existing?.order && existing.order !== merged.order) {
+      merged.class = undefined
+    }
   }
 
   // Preserve metadata fields

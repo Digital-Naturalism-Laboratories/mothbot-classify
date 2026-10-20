@@ -1,4 +1,5 @@
 import type { TaxonRecord } from '~/models/taxonomy/types'
+import { ARACHNID_ORDERS, INSECT_ORDERS } from '~/models/taxonomy/known-lineage'
 
 /**
  * Standard higher taxa offered as quick identification targets even when the
@@ -13,36 +14,6 @@ import type { TaxonRecord } from '~/models/taxonomy/types'
 const ANIMALIA = { kingdom: 'Animalia' }
 const ARTHROPODA = { ...ANIMALIA, phylum: 'Arthropoda' }
 const INSECTA = { ...ARTHROPODA, class: 'Insecta' }
-
-/** Insect orders: [order, GBIF backbone key, common name]. */
-const INSECT_ORDERS: Array<[string, number, string]> = [
-  ['Lepidoptera', 797, 'Moths & butterflies'],
-  ['Coleoptera', 1470, 'Beetles'],
-  ['Diptera', 811, 'Flies'],
-  ['Hymenoptera', 1457, 'Wasps, bees & ants'],
-  ['Hemiptera', 809, 'True bugs'],
-  ['Orthoptera', 1458, 'Grasshoppers & crickets'],
-  ['Trichoptera', 1003, 'Caddisflies'],
-  ['Ephemeroptera', 1225, 'Mayflies'],
-  ['Neuroptera', 1501, 'Lacewings & antlions'],
-  ['Megaloptera', 1451, 'Dobsonflies & alderflies'],
-  ['Raphidioptera', 786, 'Snakeflies'],
-  ['Odonata', 789, 'Dragonflies & damselflies'],
-  ['Plecoptera', 787, 'Stoneflies'],
-  ['Blattodea', 800, 'Cockroaches & termites'],
-  ['Mantodea', 788, 'Mantises'],
-  ['Dermaptera', 1224, 'Earwigs'],
-  ['Psocodea', 7612838, 'Barklice & lice'],
-  ['Thysanoptera', 1228, 'Thrips'],
-  ['Mecoptera', 1000, 'Scorpionflies'],
-  ['Phasmida', 1460, 'Stick insects'],
-  ['Strepsiptera', 1227, 'Twisted-wing parasites'],
-  ['Siphonaptera', 1366, 'Fleas'],
-  ['Embioptera', 584, 'Webspinners'],
-  ['Zygentoma', 1004, 'Silverfish'],
-  ['Archaeognatha', 1187, 'Jumping bristletails'],
-  ['Zoraptera', 1229, 'Angel insects'],
-]
 
 /** The broad groups, shown before anything is typed; orders appear once you search. */
 const BROAD_TAXA: TaxonRecord[] = [
@@ -96,7 +67,23 @@ const ORDER_TAXA: TaxonRecord[] = INSECT_ORDERS.map(([order, key, common]) => ({
   extras: { kingdomKey: 1, phylumKey: 54, classKey: 216, orderKey: key },
 }))
 
-export const DEFAULT_TAXA: TaxonRecord[] = [...BROAD_TAXA, ...ORDER_TAXA]
+/** Spiders and harvestmen: missing from insect-only lists, so offered here with their real class. */
+const OFFERED_ARACHNID_ORDERS = new Set(['Araneae', 'Opiliones'])
+const ARACHNID_ORDER_TAXA: TaxonRecord[] = ARACHNID_ORDERS.filter(([order]) => OFFERED_ARACHNID_ORDERS.has(order)).map(
+  ([order, key, common]) => ({
+    scientificName: order,
+    taxonRank: 'order',
+    ...ARTHROPODA,
+    class: 'Arachnida',
+    order,
+    taxonID: key,
+    taxonIDSource: 'gbif-backbone',
+    vernacularName: common,
+    extras: { kingdomKey: 1, phylumKey: 54, classKey: 1367, orderKey: key },
+  }),
+)
+
+export const DEFAULT_TAXA: TaxonRecord[] = [...BROAD_TAXA, ...ORDER_TAXA, ...ARACHNID_ORDER_TAXA]
 
 /** Standard taxa matching a query (by scientific/common name), for the picker. */
 export function matchDefaultTaxa(query: string): TaxonRecord[] {

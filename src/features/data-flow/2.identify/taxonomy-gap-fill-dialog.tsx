@@ -18,6 +18,7 @@ import { Column, Row } from '~/styles'
 import type { TaxonRecord, TaxonomyRank, MissingRank } from '~/models/taxonomy/types'
 import { RANK_LABELS } from '~/models/taxonomy/types'
 import { getRankValue, setRankValue } from '~/models/taxonomy/rank'
+import { knownLineageForOrder } from '~/models/taxonomy/known-lineage'
 
 export type TaxonomyGapFillDialogProps = {
   taxon: TaxonRecord
@@ -31,11 +32,16 @@ export function TaxonomyGapFillDialogContent(props: TaxonomyGapFillDialogProps) 
   const { taxon, missingRanks, existingTaxon, onSubmit, onSkip } = props
 
   const [values, setValues] = useState<Record<string, string>>(() => {
+    // The previous ID's higher ranks only make sense as suggestions when it was in
+    // the same order: re-labelling a fly as Araneae must not suggest class Insecta.
+    const sameOrder = !taxon?.order || !existingTaxon?.order || taxon.order === existingTaxon.order
+    const knownLineage = knownLineageForOrder(taxon?.order)
     const initial: Record<string, string> = {}
     for (const { rank } of missingRanks) {
       const newTaxonValue = getRankValue(taxon, rank)
-      const existingTaxonValue = existingTaxon ? getRankValue(existingTaxon, rank) : undefined
-      initial[rank] = newTaxonValue || existingTaxonValue || ''
+      const knownValue = knownLineage?.[rank as keyof typeof knownLineage]
+      const existingTaxonValue = existingTaxon && sameOrder ? getRankValue(existingTaxon, rank) : undefined
+      initial[rank] = newTaxonValue || knownValue || existingTaxonValue || ''
     }
     return initial
   })
