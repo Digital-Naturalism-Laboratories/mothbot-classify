@@ -63,3 +63,8 @@ For **Mothbox Next packages** (`dataset.json`, `01_patches/`, NDJSON records), s
 ## Agent context
 
 Routing and domain language: [`CONTEXT-MAP.md`](CONTEXT-MAP.md) → local `CONTEXT.md` files under `src/features/`.
+
+## License
+
+Mothbot Classify is released under the [MIT License](LICENSE). Third-party packages it uses
+keep their own (all permissive) licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
