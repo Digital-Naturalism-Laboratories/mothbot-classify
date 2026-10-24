@@ -1,14 +1,9 @@
 import { useState } from 'react'
 import { useStore } from '@nanostores/react'
-import { EllipsisIcon, FolderOpenIcon, RefreshCwIcon, RotateCcwIcon } from 'lucide-react'
+import { FolderOpenIcon, RefreshCwIcon, RotateCcwIcon } from 'lucide-react'
 import { Loader } from '~/components/atomic/Loader'
 import { Button } from '~/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '~/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -78,7 +73,7 @@ export function HomeDatasetsPanel() {
     <div className='shadow-border flex min-h-0 flex-1 flex-col rounded-2xl bg-white p-0 pb-16'>
       <div className='mb-8 flex shrink-0 items-center justify-between gap-8 px-16 pt-16'>
         <h3 className='text-16 font-semibold text-balance'>Datasets</h3>
-        <DatasetsPanelMenu
+        <DatasetsPanelActions
           hasDatasetsFolder={!!workspace?.folderName}
           isScanning={isScanning}
           isChoosing={isChoosing}
@@ -97,7 +92,7 @@ export function HomeDatasetsPanel() {
                 to the app to set it up.
               </>
             ) : (
-              <>Use ⋯ → Choose datasets folder, then drop dataset folders into it.</>
+              <>Click the folder icon above to choose your datasets folder, then drop dataset folders into it.</>
             )}
           </p>
         ) : (
@@ -121,7 +116,7 @@ export function HomeDatasetsPanel() {
   )
 }
 
-type DatasetsPanelMenuProps = {
+type DatasetsPanelActionsProps = {
   hasDatasetsFolder: boolean
   isScanning: boolean
   isChoosing: boolean
@@ -129,49 +124,61 @@ type DatasetsPanelMenuProps = {
   onChooseFolder: () => void
 }
 
-function DatasetsPanelMenu(props: DatasetsPanelMenuProps) {
+/** Folder button to choose where datasets live, refresh button to re-scan it. */
+function DatasetsPanelActions(props: DatasetsPanelActionsProps) {
   const { hasDatasetsFolder, isScanning, isChoosing, onRefresh, onChooseFolder } = props
   const canPick = isDirectoryPickerLikelySupported()
   const busy = isScanning || isChoosing
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size='icon-sm' variant='ghostMuted' aria-label='Dataset actions' icon={EllipsisIcon} />
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent side='right' align='start' sideOffset={4}>
-        <DropdownMenuItem disabled={busy || !canPick} onSelect={onChooseFolder}>
-          <DropdownMenuItemLabel
-            icon={isChoosing ? <Loader size={14} /> : <FolderOpenIcon className='h-14 w-14' />}
-            label={isChoosing ? 'Choosing…' : 'Choose datasets folder'}
-          />
-        </DropdownMenuItem>
-
-        <DropdownMenuItem disabled={busy || !canPick || !hasDatasetsFolder} onSelect={onRefresh}>
-          <DropdownMenuItemLabel
-            icon={isScanning ? <Loader size={14} /> : <RefreshCwIcon className='h-14 w-14' />}
-            label={isScanning ? 'Scanning…' : 'Refresh datasets'}
-          />
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className='flex shrink-0 items-center gap-2'>
+      <IconActionButton
+        label={isChoosing ? 'Choosing…' : hasDatasetsFolder ? 'Change datasets folder' : 'Choose datasets folder'}
+        disabled={busy || !canPick}
+        onClick={onChooseFolder}
+        icon={isChoosing ? <Loader size={14} /> : <FolderOpenIcon className='h-16 w-16' />}
+        highlight={!hasDatasetsFolder}
+      />
+      <IconActionButton
+        label={isScanning ? 'Scanning…' : 'Refresh datasets'}
+        disabled={busy || !canPick || !hasDatasetsFolder}
+        onClick={onRefresh}
+        icon={isScanning ? <Loader size={14} /> : <RefreshCwIcon className='h-16 w-16' />}
+      />
+    </div>
   )
 }
 
-type DropdownMenuItemLabelProps = {
-  icon: React.ReactNode
+function IconActionButton(props: {
   label: string
-}
-
-function DropdownMenuItemLabel(props: DropdownMenuItemLabelProps) {
-  const { icon, label } = props
+  disabled?: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  /** Draws the eye to the folder button before any datasets folder is chosen. */
+  highlight?: boolean
+}) {
+  const { label, disabled, onClick, icon, highlight } = props
 
   return (
-    <span className='inline-flex items-center gap-8'>
-      <span className='flex h-14 w-14 shrink-0 items-center justify-center text-neutral-500'>{icon}</span>
-      {label}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type='button'
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+          className={cn(
+            'flex h-28 w-28 items-center justify-center rounded-md text-neutral-500',
+            'transition-[background-color,color,scale] duration-150 ease-out hover:bg-neutral-100 hover:text-neutral-900',
+            'active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50',
+            highlight && 'bg-brand/10 text-brand hover:bg-brand/20',
+          )}
+        >
+          {icon}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side='bottom'>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 

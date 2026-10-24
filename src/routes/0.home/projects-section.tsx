@@ -36,9 +36,7 @@ import {
 import { shouldSkipSiteLevelInProjectsTree } from '~/features/mothbox-next/hierarchy-display-labels'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import { ManifestHierarchyTree } from './hierarchy-tree'
-import { speciesListsStore, speciesListsLoadingStore } from '~/features/data-flow/2.identify/species-list.store'
-import { projectSpeciesSelectionStore } from '~/stores/species/project-species-list'
-import { $isSpeciesPickerOpen, $speciesPickerProjectId } from '~/features/data-flow/2.identify/species-picker.state'
+import { SpeciesListControl } from '~/features/data-flow/2.identify/species-list-control'
 
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
 const projectsTreeDeepRowTitleClass = 'text-neutral-900'
@@ -73,15 +71,6 @@ export function ProjectsSection(props: ProjectsSectionProps) {
   const hasProjects = Object.keys(projects ?? {}).length > 0
   const activeFolderName = useStore(activeDatasetFolderNameStore)
   const datasetProjectId = useMemo(() => Object.keys(projects ?? {})[0], [projects])
-  const speciesSelection = useStore(projectSpeciesSelectionStore)
-  const speciesLists = useStore(speciesListsStore)
-  const isSpeciesListsLoading = useStore(speciesListsLoadingStore)
-  const datasetSpeciesListName = useMemo(() => {
-    if (!datasetProjectId) return undefined
-    const listId = speciesSelection?.[datasetProjectId]
-    if (!listId) return undefined
-    return speciesLists?.[listId]?.name
-  }, [datasetProjectId, speciesSelection, speciesLists])
   const [collapsed, setCollapsed] = useState<CollapsedState>({ sites: {}, deployments: {} })
   const datasetProgress = useMemo(
     () =>
@@ -111,12 +100,6 @@ export function ProjectsSection(props: ProjectsSectionProps) {
     setCollapsed((prev) => withToggledCollapsedNode({ prev, bucket: 'deployments', id: deploymentId }))
   }, [])
 
-  const onChooseSpeciesList = useCallback(() => {
-    if (!datasetProjectId) return
-    $speciesPickerProjectId.set(datasetProjectId)
-    $isSpeciesPickerOpen.set(true)
-  }, [datasetProjectId])
-
   return (
     <Column className='gap-8'>
       <div className='flex items-start justify-between gap-12'>
@@ -141,18 +124,7 @@ export function ProjectsSection(props: ProjectsSectionProps) {
               <Button variant='outline' size='xxsm' type='button' onClick={() => setIsMorphoOpen(true)}>
                 Morphospecies
               </Button>
-              <button
-                type='button'
-                onClick={onChooseSpeciesList}
-                disabled={isSpeciesListsLoading}
-                className='text-left text-13 text-neutral-500 underline-offset-2 hover:text-neutral-800 hover:underline disabled:cursor-wait disabled:opacity-70'
-              >
-                {isSpeciesListsLoading
-                  ? 'Loading species lists…'
-                  : datasetSpeciesListName
-                    ? `Species list: ${datasetSpeciesListName}`
-                    : 'species list not selected — click to choose'}
-              </button>
+              <SpeciesListControl projectId={datasetProjectId} />
               <SpeciesCatalogDialog
                 open={isSpeciesOpen}
                 onOpenChange={setIsSpeciesOpen}

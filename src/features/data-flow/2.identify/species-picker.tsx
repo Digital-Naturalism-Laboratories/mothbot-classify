@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { AlertTriangleIcon, CheckCircleIcon, XCircleIcon } from 'lucide-react'
+import { AlertTriangleIcon, CheckCircleIcon, FolderOpenIcon, XCircleIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { toast } from 'sonner'
 import { Icon } from '~/components/atomic/Icon'
@@ -11,6 +11,7 @@ import { describeSpeciesListValidation } from '~/models/taxonomy/species-list-va
 import { cn } from '~/utils/cn'
 import { Column } from '~/styles'
 import { $isSpeciesPickerOpen, $speciesPickerProjectId } from './species-picker.state'
+import { addSpeciesListFromFile, pickSpeciesListFile } from '~/features/data-flow/1.ingest/add-species-list-from-file'
 
 // state is in species-picker.state.ts to satisfy fast refresh rules
 
@@ -65,16 +66,38 @@ export function SpeciesPicker() {
     $isSpeciesPickerOpen.set(next)
   }
 
+  async function handleSelectOtherFile() {
+    const file = await pickSpeciesListFile()
+    if (!file) return
+    const listId = await addSpeciesListFromFile({ file, projectId })
+    if (listId) $isSpeciesPickerOpen.set(false)
+  }
+
   return (
     <CommandDialog open={isOpen} onOpenChange={handleOpenChange} className='max-w-[520px] !p-0'>
       <CommandInput placeholder='Search species lists…' withSearchIcon />
       <CommandList className='p-8'>
-        <CommandEmpty>No species lists found.</CommandEmpty>
+        <CommandEmpty>No species lists found in your datasets folder.</CommandEmpty>
 
         {options.map((opt) => (
           <ListItem key={opt.id} list={opt} isSelected={selection?.[projectId] === opt.id} onSelect={handleSelect} />
         ))}
       </CommandList>
+      <div className='border-t p-8'>
+        <button
+          type='button'
+          onClick={() => void handleSelectOtherFile()}
+          className='flex w-full items-center gap-8 rounded-md px-8 py-8 text-left text-13 text-ink-primary hover:bg-neutral-50'
+        >
+          <Icon icon={FolderOpenIcon} className='shrink-0 text-neutral-500' />
+          <Column className='gap-2 min-w-0'>
+            <span>Select other species list…</span>
+            <span className='text-11 text-ink-secondary'>
+              Pick a CSV/TSV from anywhere — it&apos;s copied into Species/ in your datasets folder.
+            </span>
+          </Column>
+        </button>
+      </div>
     </CommandDialog>
   )
 }

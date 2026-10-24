@@ -15,6 +15,7 @@ import { ScopeFilters, type ScopeType } from '~/features/catalogues/shared/scope
 import { useCatalogScopeContext } from '~/features/catalogues/shared/catalog-scope-context'
 import { usePreviewFile } from '~/features/catalogues/shared/use-preview-file'
 import { buildSpeciesCatalogView } from './species-catalog-model'
+import { SpeciesListControl } from '~/features/data-flow/2.identify/species-list-control'
 import {
   buildSpeciesTaxonomyTree,
   filterSpeciesByTaxon,
@@ -83,6 +84,8 @@ export function SpeciesCatalogDialog(props: SpeciesCatalogDialogProps) {
               hasNight={hasNight}
               counts={scopeCounts}
             />
+            {/* People open this window expecting to set the list here, so it lives here too. */}
+            <SpeciesListControl projectId={projectId} className='ml-auto mr-32' />
           </Row>
         </Column>
 

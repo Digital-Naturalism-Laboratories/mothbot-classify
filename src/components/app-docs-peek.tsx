@@ -383,7 +383,7 @@ function CollaborationSection() {
       <DocSubheading id='collab-receive'>2. Collaborator — receive</DocSubheading>
       <DocList
         items={[
-          <>If you haven't already, click <strong>Choose datasets folder…</strong> on the home screen.</>,
+          <>If you haven't already, click the <strong>folder icon</strong> next to Datasets on the home screen to choose your datasets folder.</>,
           <>
             Unzip the file (double-click usually works) and move the dataset folder into your datasets folder.
           </>,
