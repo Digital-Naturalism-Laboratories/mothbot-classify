@@ -3,6 +3,7 @@ import { resolveDatasetId } from '~/features/mothbox-next/dataset-scope'
 import type { DetectionEntity } from '~/stores/entities/detections'
 import { buildLeafGroupSummary, type LeafGroupSummaryEntity } from '~/stores/entities/night-summaries'
 import { itemsOfOneRun, newestDetectorId } from '~/features/mothbox-next/detector-runs'
+import { isNoMachineIdClassifier } from '~/features/mothbox-next/bot-shape-to-classification'
 
 export type ProgressCounts = {
   total: number
@@ -13,6 +14,10 @@ export type ProgressCounts = {
   newestDetector?: string
   /** When Mothbot Process last clustered these detections (ms), as recorded in the package. */
   clusteredAt?: number
+  /** Some detections were machine-identified by Mothbot Process (BioCLIP). */
+  machineIdentified?: boolean
+  /** When Mothbot Process last machine-identified them (ms); unknown for datasets loaded before it was recorded. */
+  machineIdentifiedAt?: number
   /** When someone last identified a detection here in Classify (ms). */
   lastIdentifiedAt?: number
 }
@@ -37,8 +42,12 @@ function summarizeActivity(all: DetectionEntity[], shown: DetectionEntity[]): Om
   for (const d of all) if (d.detectorId) detectorIds.add(d.detectorId)
   let clusteredAt: number | undefined
   let lastIdentifiedAt: number | undefined
+  let machineIdentified = false
+  let machineIdentifiedAt: number | undefined
   for (const d of shown) {
     clusteredAt = maxDefined(clusteredAt, parseProcessTimestamp(d.clusteredAt))
+    if (d.botClassifierId && !isNoMachineIdClassifier(d.botClassifierId)) machineIdentified = true
+    machineIdentifiedAt = maxDefined(machineIdentifiedAt, parseProcessTimestamp(d.machineIdentifiedAt))
     if (d.detectedBy === 'user' && typeof d.identifiedAt === 'number' && d.identifiedAt > 1) {
       lastIdentifiedAt = maxDefined(lastIdentifiedAt, d.identifiedAt)
     }
@@ -47,6 +56,8 @@ function summarizeActivity(all: DetectionEntity[], shown: DetectionEntity[]): Om
   return {
     ...(ids.length ? { detectorIds: ids, newestDetector: newestDetectorId(ids) } : {}),
     ...(clusteredAt !== undefined ? { clusteredAt } : {}),
+    ...(machineIdentified || machineIdentifiedAt !== undefined ? { machineIdentified: true } : {}),
+    ...(machineIdentifiedAt !== undefined ? { machineIdentifiedAt } : {}),
     ...(lastIdentifiedAt !== undefined ? { lastIdentifiedAt } : {}),
   }
 }
@@ -162,6 +173,8 @@ export function mergeProgressCounts(a: ProgressCounts, b: ProgressCounts): Progr
     identified: a.identified + b.identified,
     ...(detectorIds.length ? { detectorIds, newestDetector: newestDetectorId(detectorIds) } : {}),
     ...optional('clusteredAt', maxDefined(a.clusteredAt, b.clusteredAt)),
+    ...(a.machineIdentified || b.machineIdentified ? { machineIdentified: true } : {}),
+    ...optional('machineIdentifiedAt', maxDefined(a.machineIdentifiedAt, b.machineIdentifiedAt)),
     ...optional('lastIdentifiedAt', maxDefined(a.lastIdentifiedAt, b.lastIdentifiedAt)),
   }
 }

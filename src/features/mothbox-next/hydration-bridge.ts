@@ -396,6 +396,8 @@ function detectionMetadataFromPatch(params: {
     ...(bot?.speciesList ? { originalMothboxSpeciesList: bot.speciesList } : {}),
     ...(bot?.speciesListExclusions ? { originalMothboxSpeciesListExclusions: bot.speciesListExclusions } : {}),
     ...pixelMassForPatch(params.measurement, params.botMetadata),
+    // Like pixel mass, a property of the patch: kept when a person identifies it later.
+    ...(bot?.machineIdentifiedAt ? { machineIdentifiedAt: bot.machineIdentifiedAt } : {}),
   }
 }
 
@@ -424,6 +426,8 @@ type BotClassificationMetadata = {
   speciesList?: string
   speciesListExclusions?: string
   pixelMass?: Pick<DetectionEntity, 'pixelMassPixels' | 'pixelMassMm2' | 'pixelMassMethod' | 'pixelMassTimestamp'>
+  /** When Mothbot Process machine-identified it (raw `timestamp_ID_bot`). */
+  machineIdentifiedAt?: string
 }
 
 function buildBotMetadataByPatch(params: {
@@ -457,8 +461,9 @@ function buildBotMetadataByPatch(params: {
     const label = row.label?.trim() || undefined
     const speciesList = row.species_list?.trim() || undefined
     const speciesListExclusions = row.species_list_exclusions?.trim() || undefined
-    if (classifierId || confidence !== undefined || pixelMass || label || speciesList) {
-      out.set(patchId, { classifierId, confidence, pixelMass, label, speciesList, speciesListExclusions })
+    const machineIdentifiedAt = row.machine_identified_at?.trim() || undefined
+    if (classifierId || confidence !== undefined || pixelMass || label || speciesList || machineIdentifiedAt) {
+      out.set(patchId, { classifierId, confidence, pixelMass, label, speciesList, speciesListExclusions, machineIdentifiedAt })
     }
   }
 

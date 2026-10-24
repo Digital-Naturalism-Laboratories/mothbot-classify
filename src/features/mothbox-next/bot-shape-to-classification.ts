@@ -57,6 +57,7 @@ export function classificationFromBotShape(params: {
     pixel_mass_mm2: typeof shape.pixel_mass_mm2 === 'number' ? shape.pixel_mass_mm2 : null,
     pixel_mass_timestamp: typeof shape.timestamp_pixel_mass === 'string' ? shape.timestamp_pixel_mass : null,
     pixel_mass_method: typeof shape.pixel_mass_method === 'string' ? shape.pixel_mass_method : null,
+    machine_identified_at: typeof shape.timestamp_ID_bot === 'string' ? shape.timestamp_ID_bot : null,
     species_list: speciesListOf(shape),
     species_list_exclusions: speciesListExclusionsOf(shape),
   }

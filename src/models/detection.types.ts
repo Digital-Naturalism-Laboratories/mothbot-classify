@@ -50,6 +50,8 @@ export type DetectionEntity = {
   pixelMassTimestamp?: string
   /** How Mothbot Process outlined the insect for pixel mass (a rembg model name, or 'border-colour-mask/v1'). */
   pixelMassMethod?: string
+  /** When Mothbot Process machine-identified this detection (raw `timestamp_ID_bot`). */
+  machineIdentifiedAt?: string
   detectorId?: string
   /** When Mothbot Process clustered this detection (its raw `timestamp_cluster`), from the package records. */
   clusteredAt?: string

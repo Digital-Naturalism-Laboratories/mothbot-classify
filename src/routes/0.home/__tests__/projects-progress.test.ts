@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { buildProgressIndex, parseProcessTimestamp } from '../projects-progress'
 
 describe('buildProgressIndex', () => {
+  it('notes when a night was machine-identified, and when', () => {
+    const night = (id: string) => ({ id, name: id, projectId: 'P', siteId: 'P/s', deploymentId: 'P/d' })
+    const det = (id: string, leafGroupId: string, extra: object) =>
+      ({ id, leafGroupId, patchId: id, photoId: 'p.jpg', detectedBy: 'auto', detectorId: 'Mothbot_MBD-1-1.pt', ...extra }) as any
+    const index = buildProgressIndex({
+      nights: { a: night('a'), b: night('b') },
+      nightSummaries: {},
+      detections: {
+        a1: det('a1', 'a', { botClassifierId: 'pybioclip_2.1.3', machineIdentifiedAt: '2026-10-02__12_00_00_(+0200)' }),
+        a2: det('a2', 'a', { botClassifierId: 'pybioclip_2.1.3' }),
+        b1: det('b1', 'b', { botClassifierId: 'No Machine ID' }),
+      },
+    })
+    expect(index.byLeafGroup.a).toMatchObject({ machineIdentified: true, machineIdentifiedAt: Date.parse('2026-10-02T12:00:00+02:00') })
+    expect(index.byLeafGroup.b.machineIdentified).toBeUndefined()
+    expect(index.byDeployment['P/d']).toMatchObject({ machineIdentified: true })
+  })
+
   it('counts only the newest detection run of a night', () => {
     const leafGroupId = 'D/dep/2026-08-14'
     const det = (id: string, detectorId: string, user = false) =>
