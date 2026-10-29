@@ -1,6 +1,7 @@
 import type { DetectionEntity } from '~/models/detection.types'
 import { buildBaseMask, renderMosaic, type MosaicItem, type MosaicResult } from './viz-mosaic'
 import { resolveBackground, type VizConfig } from './viz-types'
+import { bitmapColor, sortByColor } from './viz-color'
 
 /** Build ordered mosaic items and pack them into a natural-size OffscreenCanvas. */
 export async function renderMosaicFromDetections(
@@ -10,10 +11,14 @@ export async function renderMosaicFromDetections(
   baseMask: ImageBitmap | null,
   onProgress?: (frac: number, msg: string) => void,
 ): Promise<MosaicResult> {
-  const items: MosaicItem[] = []
+  let items: MosaicItem[] = []
   for (const det of detections) {
     const bmp = images.get(det.patchId)
     if (bmp) items.push({ id: det.patchId, bitmap: bmp })
+  }
+  if (config.sortMode === 'color') {
+    const source = config.preferNobg || config.requireNobg ? 'nobg' : 'jpg'
+    items = sortByColor(items, (item) => bitmapColor(`${item.id}:${source}`, item.bitmap), config.sortReversed)
   }
   return renderMosaic(items, {
     layout: config.layout,

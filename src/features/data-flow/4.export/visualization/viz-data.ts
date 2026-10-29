@@ -127,6 +127,9 @@ function pickRepresentatives(dets: DetectionEntity[]): DetectionEntity[] {
 }
 
 function sortDetections(dets: DetectionEntity[], config: VizConfig): DetectionEntity[] {
+  // Color is measured from the patch images, so that sort (and its reversal)
+  // happens in the renderer once they're loaded.
+  if (config.sortMode === 'color') return dets
   const arr = [...dets]
   if (config.sortMode === 'size') {
     arr.sort((a, b) => detSize(b) - detSize(a))
