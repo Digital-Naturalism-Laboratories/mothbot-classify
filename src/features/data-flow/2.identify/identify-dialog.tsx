@@ -296,8 +296,13 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
             onValueChange={setQuery as any}
             withSearchIcon
             onKeyDown={(e: any) => {
-              const hasAnyResults = (speciesOptions?.length ?? 0) > 0
-              if (e.key === 'Enter' && query.trim() && !hasAnyResults) {
+              // Enter picks the highlighted row (e.g. "Insecta" while typing "inse"). Only
+              // with nothing highlighted does it fall back to the typed text — checking the
+              // species-list results alone missed standard taxa, recents and morphospecies,
+              // and turned half-typed names into new morphospecies.
+              const root = (e.currentTarget as HTMLElement | null)?.closest('[cmdk-root]')
+              const hasHighlightedRow = !!root?.querySelector('[cmdk-item][aria-selected="true"]')
+              if (e.key === 'Enter' && query.trim() && !hasHighlightedRow) {
                 e.preventDefault()
                 handleSubmitFreeText()
               }
