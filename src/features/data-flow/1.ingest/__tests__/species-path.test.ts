@@ -21,6 +21,7 @@ describe('isInSpeciesNamedFolder', () => {
     expect(isInSpeciesNamedFolder('Species/my-list.csv')).toBe(true)
     expect(isInSpeciesNamedFolder('project/species/list.csv')).toBe(true)
     expect(isInSpeciesNamedFolder('Species/nested/list.tsv')).toBe(true)
+    expect(isInSpeciesNamedFolder('_processed/_specieslists/alaska.csv')).toBe(true)
   })
 
   it('is false for CSVs outside any species-named folder', () => {

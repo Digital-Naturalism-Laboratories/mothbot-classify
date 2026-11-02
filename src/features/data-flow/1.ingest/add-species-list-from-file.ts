@@ -4,7 +4,7 @@ import { saveProjectSpeciesSelection } from '~/stores/species/project-species-li
 import { readFileBlob, writeBlobFile, type FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 import { requireDatasetsFolderHandle } from './datasets-folder-handle'
 import { ingestSpeciesListsFromFiles } from './species.ingest'
-import { WORKSPACE_SPECIES_HINT_DIR } from './load-workspace-species-lists'
+import { COPIED_SPECIES_LISTS_DIR } from './load-workspace-species-lists'
 
 const SPECIES_LIST_ACCEPT = '.csv,.tsv,text/csv,text/tab-separated-values'
 
@@ -45,7 +45,7 @@ function pickFileWithInput(): Promise<File | null> {
 
 /**
  * Adds a species list the user picked from anywhere and selects it for the
- * project. The file is checked first, then copied into `<datasets folder>/Species/`
+ * project. The file is checked first, then copied into `<datasets folder>/_processed/_specieslists/`
  * so it is found again on every launch (like any CSV already there) and travels
  * with the data. Without a datasets folder it is only kept for this session.
  * Returns the list id, or null when the file couldn't be used.
@@ -58,7 +58,7 @@ export async function addSpeciesListFromFile(params: { file: File; projectId?: s
   try {
     const root = await requireDatasetsFolderHandle({ mode: 'readwrite', notifyOnDenied: false })
     const fileName = root ? await chooseFileNameInSpeciesFolder({ root, file }) : file.name
-    const relativePath = root ? `${WORKSPACE_SPECIES_HINT_DIR}/${fileName}` : fileName
+    const relativePath = root ? `${COPIED_SPECIES_LISTS_DIR}/${fileName}` : fileName
 
     // Lists are keyed by file name, so ingest under the name it will have on disk.
     const named = fileName === file.name ? file : new File([file], fileName, { type: file.type })
@@ -86,7 +86,7 @@ export async function addSpeciesListFromFile(params: { file: File; projectId?: s
     toast.success('Species list added', {
       id: toastId,
       description: root
-        ? `Saved to ${WORKSPACE_SPECIES_HINT_DIR}/${fileName} in your datasets folder.`
+        ? `Saved to ${COPIED_SPECIES_LISTS_DIR}/${fileName} in your datasets folder.`
         : 'Choose a datasets folder to keep it for next time.',
     })
     return fileName
@@ -106,11 +106,11 @@ async function chooseFileNameInSpeciesFolder(params: { root: FileSystemDirectory
 
   for (let n = 1; n < 100; n++) {
     const candidate = n === 1 ? file.name : `${stem} (${n})${ext}`
-    const path = `${WORKSPACE_SPECIES_HINT_DIR}/${candidate}`
+    const path = `${COPIED_SPECIES_LISTS_DIR}/${candidate}`
     const existing = await readFileBlob(root, path).catch(() => null)
     if (!existing || (await isSameFile(existing, file))) return candidate
   }
-  throw new Error(`Too many species lists named “${file.name}” in ${WORKSPACE_SPECIES_HINT_DIR}/.`)
+  throw new Error(`Too many species lists named “${file.name}” in ${COPIED_SPECIES_LISTS_DIR}/.`)
 }
 
 async function speciesFolderHasSameFile(params: { root: FileSystemDirectoryHandleLike; relativePath: string; file: File }) {

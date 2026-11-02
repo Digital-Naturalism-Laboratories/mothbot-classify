@@ -14,6 +14,13 @@ import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adap
  */
 const WORKSPACE_SPECIES_HINT_DIR = 'Species'
 
+/**
+ * Where Classify copies a species list the user picks from elsewhere on their
+ * computer: the `_processed` side of the datasets folder, so it travels with the
+ * processed data rather than sitting beside the raw image folders.
+ */
+const COPIED_SPECIES_LISTS_DIR = '_processed/_specieslists'
+
 export async function loadWorkspaceSpeciesLists(): Promise<number> {
   const root = (await requireDatasetsFolderHandle({ mode: 'read', notifyOnDenied: false })) as
     | FileSystemDirectoryHandleLike
@@ -57,4 +64,4 @@ export async function refreshWorkspaceSpeciesLists() {
   return count
 }
 
-export { WORKSPACE_SPECIES_HINT_DIR }
+export { WORKSPACE_SPECIES_HINT_DIR, COPIED_SPECIES_LISTS_DIR }

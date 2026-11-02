@@ -69,32 +69,32 @@ describe('addSpeciesListFromFile', () => {
     projectSpeciesSelectionStore.set({})
   })
 
-  it('copies the list into Species/ and selects it for the project', async () => {
+  it('copies the list into _processed/_specieslists/ and selects it for the project', async () => {
     const id = await addSpeciesListFromFile({ file: csv('alaska.csv', 'species\nA b'), projectId: 'proj' })
 
     expect(id).toBe('alaska.csv')
-    expect(await files.get('Species/alaska.csv')?.text()).toBe('species\nA b')
+    expect(await files.get('_processed/_specieslists/alaska.csv')?.text()).toBe('species\nA b')
     expect(projectSpeciesSelectionStore.get()).toEqual({ proj: 'alaska.csv' })
-    expect(speciesListsStore.get()['alaska.csv']?.sourcePath).toBe('Species/alaska.csv')
+    expect(speciesListsStore.get()['alaska.csv']?.sourcePath).toBe('_processed/_specieslists/alaska.csv')
   })
 
   it('reuses an identical copy instead of duplicating it', async () => {
-    files.set('Species/alaska.csv', csv('alaska.csv', 'species\nA b'))
+    files.set('_processed/_specieslists/alaska.csv', csv('alaska.csv', 'species\nA b'))
 
     const id = await addSpeciesListFromFile({ file: csv('alaska.csv', 'species\nA b'), projectId: 'proj' })
 
     expect(id).toBe('alaska.csv')
-    expect([...files.keys()]).toEqual(['Species/alaska.csv'])
+    expect([...files.keys()]).toEqual(['_processed/_specieslists/alaska.csv'])
   })
 
   it('never overwrites a different list with the same name', async () => {
-    files.set('Species/alaska.csv', csv('alaska.csv', 'species\nOld list'))
+    files.set('_processed/_specieslists/alaska.csv', csv('alaska.csv', 'species\nOld list'))
 
     const id = await addSpeciesListFromFile({ file: csv('alaska.csv', 'species\nNew list'), projectId: 'proj' })
 
     expect(id).toBe('alaska (2).csv')
-    expect(await files.get('Species/alaska.csv')?.text()).toBe('species\nOld list')
-    expect(await files.get('Species/alaska (2).csv')?.text()).toBe('species\nNew list')
+    expect(await files.get('_processed/_specieslists/alaska.csv')?.text()).toBe('species\nOld list')
+    expect(await files.get('_processed/_specieslists/alaska (2).csv')?.text()).toBe('species\nNew list')
   })
 
   it('does not copy or select a file that is not a species list', async () => {

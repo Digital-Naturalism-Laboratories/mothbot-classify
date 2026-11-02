@@ -14,11 +14,12 @@ export function isSpeciesListIndexedPath(path: string) {
 }
 
 /**
- * True when the path includes a folder literally named "species" anywhere
- * in its chain (case-insensitive). Used only as a tie-breaker hint to float
- * these files to the top of the species list picker — never required.
+ * True when the path includes a folder literally named "species" — or
+ * `_specieslists`, where Classify copies lists the user adds — anywhere in its
+ * chain (case-insensitive). Used only as a tie-breaker hint to float these
+ * files to the top of the species list picker — never required.
  */
 export function isInSpeciesNamedFolder(path: string) {
-  const pathLower = path.replaceAll('\\', '/').toLowerCase()
-  return pathLower.includes('/species/') || pathLower.startsWith('species/')
+  const pathLower = `/${path.replaceAll('\\', '/').toLowerCase()}`
+  return pathLower.includes('/species/') || pathLower.includes('/_specieslists/')
 }

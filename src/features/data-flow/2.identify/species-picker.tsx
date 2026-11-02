@@ -93,7 +93,7 @@ export function SpeciesPicker() {
           <Column className='gap-2 min-w-0'>
             <span>Select other species list…</span>
             <span className='text-11 text-ink-secondary'>
-              Pick a CSV/TSV from anywhere — it&apos;s copied into Species/ in your datasets folder.
+              Pick a CSV/TSV from anywhere — it&apos;s copied into _processed/_specieslists/ in your datasets folder.
             </span>
           </Column>
         </button>
