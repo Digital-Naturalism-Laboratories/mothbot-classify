@@ -14,6 +14,7 @@ import { buildVizDetections } from './viz-data'
 import { loadPatchImages } from './viz-images'
 import { renderMosaicFromDetections, drawMosaicToPreview } from './viz-renderer'
 import { exportVisualization } from './viz-export'
+import { exportGameLevel } from './viz-game-level'
 import { defaultVizConfig, resolveBackground } from './viz-types'
 import { useAvailableTaxaKeys } from './use-viz-data'
 import type {
@@ -74,6 +75,7 @@ function VisualizationDialogBody(props: Props) {
   const [baseMask, setBaseMask] = useState<ImageBitmap | null>(null)
   const [rendering, setRendering] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [gameProgress, setGameProgress] = useState<string | null>(null)
   const [status, setStatus] = useState('')
   const [lastExportPath, setLastExportPath] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -215,6 +217,43 @@ function VisualizationDialogBody(props: Props) {
       setExporting(false)
     }
   }, [config, baseMask])
+
+  // Bakes the same scope and filters into a Mothball game level pack. Sort,
+  // layout and canvas options don't apply: the game lays the level out itself.
+  const handleGameExport = useCallback(async () => {
+    setExporting(true)
+    setGameProgress('Starting…')
+    try {
+      const result = await exportGameLevel(config, (frac, message) => {
+        setGameProgress(`${message} (${Math.round(frac * 100)}%)`)
+      }).catch((err) => {
+        toast.error('Game level export failed', {
+          description: err instanceof Error ? err.message : String(err),
+          duration: 12000,
+        })
+        return undefined
+      })
+      if (result === undefined) return
+      if (!result) {
+        toast.error('Nothing to export — check your scope/selection')
+        return
+      }
+      setLastExportPath(result.fullPath)
+      setCopied(false)
+      const skipped = [
+        result.noNobg ? `${result.noNobg.toLocaleString()} without a transparent silhouette` : '',
+        result.unreadable ? `${result.unreadable.toLocaleString()} with no readable image` : '',
+        result.tooTransparent ? `${result.tooTransparent.toLocaleString()} nearly transparent` : '',
+        result.blurDropped ? `${result.blurDropped.toLocaleString()} over the blurriness limit` : '',
+      ].filter(Boolean)
+      const summary = `${result.baked.toLocaleString()} insects · ${result.atlasPages} atlas page${result.atlasPages === 1 ? '' : 's'} · ${(result.bytes / 1e6).toFixed(1)} MB`
+      if (skipped.length) toast.warning(`Game level exported — ${summary}`, { description: `Left out: ${skipped.join('; ')}.`, duration: 12000 })
+      else toast.success(`Game level exported — ${summary}`)
+    } finally {
+      setGameProgress(null)
+      setExporting(false)
+    }
+  }, [config])
 
   const copyExportPath = useCallback(() => {
     if (!lastExportPath) return
@@ -420,9 +459,15 @@ function VisualizationDialogBody(props: Props) {
                 {copied ? 'Copied ✓' : 'Copy path'}
               </Button>
             </div>
+          ) : gameProgress ? (
+            <span className='text-11 text-ink-secondary tabular-nums'>{gameProgress}</span>
           ) : <span />}
           <div className='flex items-center gap-8 shrink-0'>
             <Button variant='outline' onClick={onClose} disabled={exporting}>Cancel</Button>
+            <Button variant='outline' onClick={handleGameExport} disabled={exporting}
+              title='Bake the insects in this scope (with these filters) into a level pack for the Mothball game. Only insects with a transparent silhouette are included.'>
+              {gameProgress ? 'Baking level…' : 'Export game level'}
+            </Button>
             <Button onClick={handleExport} disabled={exporting || rendering}>
               {exporting ? 'Exporting…' : 'Export PNG'}
             </Button>

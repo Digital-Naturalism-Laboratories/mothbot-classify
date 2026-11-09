@@ -95,7 +95,7 @@ export async function exportVisualization(
   }
 }
 
-function resolveExportFolderPath(config: VizConfig): string {
+export function resolveExportFolderPath(config: VizConfig): string {
   // Mothbox Next packages: every visualization lands in one place —
   // <package>/04_exports, alongside 02_records and 03_classifications — rather
   // than being scattered into a per-night folder for each export.
