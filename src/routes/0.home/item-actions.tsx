@@ -1,4 +1,4 @@
-import { DownloadIcon, FoldVerticalIcon, ImageIcon, MoreHorizontal, UnfoldVerticalIcon } from 'lucide-react'
+import { ArchiveIcon, DownloadIcon, FoldVerticalIcon, ImageIcon, MoreHorizontal, UnfoldVerticalIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import {
@@ -16,6 +16,7 @@ import {
 } from '~/components/ui/dropdown-menu'
 import { exportScopeDarwinCSV } from '~/features/data-flow/4.export/export-orchestrator'
 import { VisualizationDialog } from '~/features/data-flow/4.export/visualization/visualization-dialog'
+import { PackageZipDialog } from '~/features/data-flow/4.export/package-zip/package-zip-dialog'
 import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { toast } from 'sonner'
 // import { exportScopeRS } from '~/features/data-flow/4.export/export-orchestrator'
@@ -30,6 +31,7 @@ export type ProjectsTreeRowContextMenuProps = {
 export function ProjectsTreeRowContextMenu(props: ProjectsTreeRowContextMenuProps) {
   const { scope, id, nights, children } = props
   const [vizOpen, setVizOpen] = useState(false)
+  const [zipOpen, setZipOpen] = useState(false)
 
   const initialLeafGroupIds = scope === 'night' ? [id] : Object.keys(nights)
 
@@ -53,6 +55,12 @@ export function ProjectsTreeRowContextMenu(props: ProjectsTreeRowContextMenuProp
           >
             Export Visualization
           </ContextMenuItem>
+          <ContextMenuItem
+            icon={<ArchiveIcon className='h-14 w-14' />}
+            onSelect={() => setZipOpen(true)}
+          >
+            Export zip for a collaborator…
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
       <VisualizationDialog
@@ -60,6 +68,7 @@ export function ProjectsTreeRowContextMenu(props: ProjectsTreeRowContextMenuProp
         onClose={() => setVizOpen(false)}
         initialLeafGroupIds={initialLeafGroupIds}
       />
+      <PackageZipDialog open={zipOpen} onClose={() => setZipOpen(false)} initialLeafGroupIds={initialLeafGroupIds} />
     </>
   )
 }
@@ -75,6 +84,7 @@ export type DatasetHeaderMenuProps = {
 export function DatasetHeaderMenu(props: DatasetHeaderMenuProps) {
   const { projectId, nights, onExpandAll, onCollapseAll, menuAlign = 'start' } = props
   const [vizOpen, setVizOpen] = useState(false)
+  const [zipOpen, setZipOpen] = useState(false)
 
   return (
     <>
@@ -103,6 +113,9 @@ export function DatasetHeaderMenu(props: DatasetHeaderMenuProps) {
           <DropdownMenuItem onClick={() => setVizOpen(true)}>
             <DropdownMenuItemLabel icon={<ImageIcon className='h-14 w-14' />} label='Export Visualization' />
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setZipOpen(true)}>
+            <DropdownMenuItemLabel icon={<ArchiveIcon className='h-14 w-14' />} label='Export zip for a collaborator…' />
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <VisualizationDialog
@@ -110,6 +123,7 @@ export function DatasetHeaderMenu(props: DatasetHeaderMenuProps) {
         onClose={() => setVizOpen(false)}
         initialLeafGroupIds={Object.keys(nights)}
       />
+      <PackageZipDialog open={zipOpen} onClose={() => setZipOpen(false)} initialLeafGroupIds={Object.keys(nights)} />
     </>
   )
 }

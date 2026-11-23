@@ -38,6 +38,7 @@
     "baseline-browser-mapping": "^2.10.19",
     "chroma-js": "^3.1.2",
     "class-variance-authority": "^0.7.1",
+    "client-zip": "2.5.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "fflate": "^0.8.2",
