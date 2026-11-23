@@ -1,4 +1,5 @@
 import { directoryFilesStore, indexedFilesStore } from './files.state'
+import { isNonTargetLabel } from '~/models/non-target'
 import { buildNightIndexes } from './files.index'
 import { ingestSpeciesListsFromFiles } from './species.ingest'
 import { loadProjectSpeciesSelection } from '~/stores/species/project-species-list'
@@ -182,7 +183,7 @@ async function backfillTaxonomySummariesForNight(params: {
     if (!parsedUser?.shapes?.length) continue
 
     for (const shape of parsedUser.shapes) {
-      const isError = shape?.is_error === true || String(shape?.label || '').toUpperCase() === 'ERROR'
+      const isError = shape?.is_error === true || isNonTargetLabel(String(shape?.label || ''))
       const taxonomy = extractTaxonomyFromShape({ shape })
       const taxon = buildTaxonFromShape({ shape, taxonomy, isError })
       const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError })

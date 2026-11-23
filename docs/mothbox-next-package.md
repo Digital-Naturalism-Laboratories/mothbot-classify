@@ -9,13 +9,32 @@ The app opens **finished** Mothbox Next packages only. Legacy Dinalab trees (`da
 | `dataset.json` | Manifest (`format: mothbox-next-dataset`) |
 | `00_source/` | Optional — user can put legacy source here for a tidier folder |
 | `01_patches/` | Canonical patch images (`asset_path` in records) |
-| `02_records/` | NDJSON: `patches`, `patch-sources`, `deployments`, `camera-days`, derived `current-classifications` |
-| `03_classifications/` | Per-classifier claim files (`_bot.ndjson`, `{id}.ndjson`) |
+| `02_records/` | NDJSON: `patches`, `patch-sources`, `deployments`, `camera-days`, derived `current-classifications`, optional `non-target-categories` |
+| `03_classifications/` | Per-classifier identification files (`_bot.ndjson`, `{id}.ndjson`), append-only |
 | `04_exports/` | Optional export output |
 
 ## Load rule
 
-On open, the app **always resolves** `current-classifications` from every file in `03_classifications/` (latest `classified_at` wins). The file `02_records/current-classifications.ndjson` is a **cache** rewritten on save/import, not authoritative on load.
+On open, the app **always resolves** the determinations from every file in `03_classifications/`, using the determination algorithm `mothbox-default/1`: the latest human identification wins, else the latest machine identification (see `src/features/mothbox-next/resolver-spec.md`). The file `02_records/current-classifications.ndjson` is a **cache** rewritten on save/import, not authoritative on load.
+
+## Identifications are append-only
+
+Every row in `03_classifications/` is one identification. Classify never rewrites or deletes a row. A changed identification is a new row, and resetting a detection adds a `withdrawn` row. New rows carry:
+
+| Field | Meaning |
+|---|---|
+| `identification_id` | Stable id (older rows get the derived id `<classifier_id>::<patch_id>`) |
+| `occurrence_id` | The occurrence the identification is about (defaults to the patch) |
+| `identifier_name` | The person's name as typed: full name or initials |
+| `agreed_with` | For an Agree, or a choice from the history: the identification it endorses |
+| `withdraws` | On a `withdrawn` row: the identification taken back |
+
+Older Classify builds can still read these files, but they don't understand `withdrawn` rows, and saving from an older build collapses the history to one row per patch.
+
+## Occurrences and Non-Target
+
+- `patches.ndjson` rows may carry `occurrence_id`. New packages write one occurrence per detection (`occurrence_id` = `patch_id`); a missing field means the same.
+- Non-Target labels are paths: `NON_TARGET`, `NON_TARGET/Error/Blur`. Older `ERROR` / `ERROR_<reason>` labels are read as Non-Target. Categories people add are appended to `02_records/non-target-categories.ndjson` (camelCase fields: `path`, `addedAt`, `addedBy`).
 
 ## Convert legacy data
 

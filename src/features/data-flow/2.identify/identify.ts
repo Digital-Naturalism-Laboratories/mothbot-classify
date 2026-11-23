@@ -18,11 +18,12 @@ import {
 } from '~/models/taxonomy/merge'
 import { hasTaxonFields } from '~/models/taxonomy/validate'
 import { computeFinalLabel } from '~/models/taxonomy/label'
+import { NON_TARGET, isNonTargetLabel, normalizeNonTargetLabel } from '~/models/non-target'
 
 export type IdentificationInput =
   | { type: 'taxon'; taxon: TaxonRecord; label?: string }
   | { type: 'morphospecies'; text: string; taxon?: TaxonRecord }
-  | { type: 'error'; label?: string } // label carries a sub-category, e.g. "ERROR_Frass"
+  | { type: 'error'; label?: string } // Non-Target; label carries the category, e.g. "NON_TARGET/Error/Blur"
   | { type: 'accept' }
 
 export type IdentificationContext = {
@@ -65,15 +66,22 @@ export function identifyDetection(params: {
   return { detection, changed: false, skipped: true, skipReason: 'Unknown input type' }
 }
 
+/**
+ * A new identification of the person's own replaces whatever the detection showed, so
+ * it no longer endorses (`agreedWith`) or stands for (`identificationId`) a stored one.
+ */
+const NEW_OWN_IDENTIFICATION = { agreedWith: undefined, identificationId: undefined } as const
+
 function handleErrorIdentification(params: { detection: DetectionEntity; context?: IdentificationContext; label?: string }): IdentificationResult {
   const { detection, context, label } = params
-  // A sub-category label like "ERROR_Frass" is kept as-is; anything else is a
-  // generic error.
-  const errorLabel = label && /^ERROR[_:]/i.test(label.trim()) ? label.trim() : 'ERROR'
+  // A Non-Target label keeps its category ("NON_TARGET/Error/Blur", or legacy
+  // "ERROR_Frass", which is converted); anything else is plain Non-Target.
+  const nonTarget = label && isNonTargetLabel(label) ? normalizeNonTargetLabel(label) : NON_TARGET
 
   const next: DetectionEntity = {
     ...detection,
-    label: errorLabel,
+    ...NEW_OWN_IDENTIFICATION,
+    label: nonTarget,
     detectedBy: 'user',
     identifiedAt: Date.now(),
     classificationType: 'error',
@@ -86,11 +94,15 @@ function handleErrorIdentification(params: { detection: DetectionEntity; context
   return { detection: next, changed: true, skipped: false }
 }
 
+/** Agree: keeps the identification the detection shows, and records which one it agrees with. */
 function handleAcceptIdentification(params: { detection: DetectionEntity; context?: IdentificationContext }): IdentificationResult {
   const { detection, context } = params
+  const alreadyAgreed = detection.detectedBy === 'user' && detection.classificationType === 'accept'
 
   const next: DetectionEntity = {
     ...detection,
+    agreedWith: alreadyAgreed ? detection.agreedWith : detection.identificationId,
+    identificationId: undefined,
     detectedBy: 'user',
     identifiedAt: Date.now(),
     classificationType: 'accept',
@@ -134,6 +146,7 @@ function handleMorphospeciesIdentification(params: {
 
   const next: DetectionEntity = {
     ...detection,
+    ...NEW_OWN_IDENTIFICATION,
     label: trimmed,
     detectedBy: 'user',
     identifiedAt: Date.now(),
@@ -249,6 +262,7 @@ function handleTaxonIdentification(params: {
 
   const next: DetectionEntity = {
     ...detection,
+    ...NEW_OWN_IDENTIFICATION,
     label: finalLabel,
     detectedBy: 'user',
     identifiedAt: Date.now(),

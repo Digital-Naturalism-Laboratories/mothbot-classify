@@ -55,4 +55,14 @@ export type DetectionEntity = {
   detectorId?: string
   /** When Mothbot Process clustered this detection (its raw `timestamp_cluster`), from the package records. */
   clusteredAt?: string
+  /**
+   * The identification this detection currently shows (its determination's source), as
+   * loaded from the package. Cleared when a person makes a new identification here,
+   * until the package is reopened.
+   */
+  identificationId?: string
+  /** For an Agree, or an identification chosen from the history: the identification it endorses. */
+  agreedWith?: string
+  /** The occurrence (individual creature) this detection belongs to; defaults to the patch id. */
+  occurrenceId?: string
 }

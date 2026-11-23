@@ -2,6 +2,7 @@ import type { ClassificationRecord } from './records'
 import type { LegacyDetectionShape } from './legacy-detection-file'
 import { buildTaxonFromShape, extractTaxonomyFromShape } from '~/models/taxonomy/extract'
 import { extractMorphospeciesFromShape } from '~/models/taxonomy/morphospecies'
+import { isNonTargetLabel, normalizeNonTargetLabel } from '~/models/non-target'
 
 /**
  * Classifier id used for a bot detection that carries no species identification
@@ -80,7 +81,7 @@ export function classificationFromIdentifiedShape(params: {
   classifiedAt?: number
 }): ClassificationRecord | null {
   const { shape, patchId, classifierId, classifiedAt } = params
-  const isError = shape?.is_error === true || String(shape?.label ?? '').toUpperCase() === 'ERROR'
+  const isError = shape?.is_error === true || isNonTargetLabel(String(shape?.label ?? ''))
 
   if (isError) {
     return {
@@ -88,7 +89,7 @@ export function classificationFromIdentifiedShape(params: {
       classifier_id: classifierId,
       classifier_type: 'human',
       classification_type: 'error',
-      label: 'ERROR',
+      label: normalizeNonTargetLabel(typeof shape.label === 'string' ? shape.label : null),
       taxon: null,
       morphospecies: null,
       is_error: true,

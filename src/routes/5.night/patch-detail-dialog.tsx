@@ -19,6 +19,8 @@ import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
 import { getProjectIdFromNightId } from '~/utils/paths'
 import { ImageWithDownloadName } from '~/components/atomic/image-with-download-name'
 import { buildDetectionPolygonPoints } from '~/models/detection-overlay'
+import { formatNonTargetLabel } from '~/models/non-target'
+import { IdentificationHistory } from './identification-history'
 
 export type PatchDetailDialogProps = {
   open: boolean
@@ -79,10 +81,14 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
           <div className='space-y-4'>
             <h4 className='text-14 font-semibold text-neutral-800'>Detection</h4>
             <div>
-              <span className='font-medium'>Label:</span> {detection?.label ?? 'Unlabeled'}
+              <span className='font-medium'>Label:</span>{' '}
+              {detection?.isError ? formatNonTargetLabel(detection.label) : detection?.label ?? 'Unlabeled'}
             </div>
             <div>
-              <span className='font-medium'>Detected by:</span> {detection?.detectedBy ?? 'auto'}
+              <span className='font-medium'>Identified by:</span>{' '}
+              {detection?.detectedBy === 'user'
+                ? `person${detection.humanClassifierId ? ` (${detection.humanClassifierId})` : ''}`
+                : 'machine'}
             </div>
             <div>
               <span className='font-medium'>Score:</span> {detection?.score ?? '—'}
@@ -177,6 +183,9 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             <div>
               <span className='font-medium'>Patch:</span> {patch?.name ?? '—'}
             </div>
+            <div className='break-all'>
+              <span className='font-medium'>Occurrence:</span> {detection?.occurrenceId ?? patch?.id ?? '—'}
+            </div>
             {patch?.originalBotDetectionPath ? (
               <div className='break-all'>
                 <span className='font-medium'>Source data file:</span> {patch.originalBotDetectionPath}
@@ -196,6 +205,8 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
             })()}
           </div>
         </div>
+
+        <IdentificationHistory detection={detection} />
 
         <IdentifyDialog open={identifyOpen} onOpenChange={setIdentifyOpen} onSubmit={onIdentifySubmit} datasetId={projectId} />
       </DialogContent>

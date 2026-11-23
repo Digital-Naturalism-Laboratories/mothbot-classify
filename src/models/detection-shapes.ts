@@ -9,6 +9,7 @@ import {
 } from '~/models/taxonomy/extract'
 import { safeString, safeNumber } from '~/models/taxonomy/normalize'
 import { extractMorphospeciesFromShape } from '~/models/taxonomy/morphospecies'
+import { isNonTargetLabel, normalizeNonTargetLabel } from '~/models/non-target'
 import { identifyDetection } from '~/features/data-flow/2.identify/identify'
 
 /**
@@ -92,7 +93,7 @@ export function buildDetectionFromIdentifiedJsonShape(params: { shape: any; phot
 
   const patchFileName = shape?.patch_path?.replace(/^patches\//, '') || ''
   const detectionId = patchFileName
-  const isError = shape?.is_error === true || String(shape?.label || '').toUpperCase() === 'ERROR'
+  const isError = shape?.is_error === true || isNonTargetLabel(String(shape?.label || ''))
 
   const extractedTaxonomy = extractTaxonomyFromShape({ shape })
   const taxon = buildTaxonFromShape({ shape, taxonomy: extractedTaxonomy, isError })
@@ -104,7 +105,7 @@ export function buildDetectionFromIdentifiedJsonShape(params: { shape: any; phot
     patchId: detectionId,
     photoId: existingDetection?.photoId || (photo as any).id,
     leafGroupId: (photo as any).leafGroupId,
-    label: isError ? 'ERROR' : taxon?.scientificName || safeString(shape?.label) || existingDetection?.label,
+    label: isError ? normalizeNonTargetLabel(safeString(shape?.label)) : taxon?.scientificName || safeString(shape?.label) || existingDetection?.label,
     taxon: (taxon as any) ?? (isError ? undefined : existingDetection?.taxon),
     score: safeNumber(shape?.score) ?? existingDetection?.score,
     direction: safeNumber(shape?.direction) ?? existingDetection?.direction,
@@ -245,7 +246,7 @@ export function updateDetectionAsMorphospecies(params: UpdateDetectionAsMorphosp
 
 export type UpdateDetectionAsErrorParams = {
   existing: DetectionEntity
-  /** Optional error sub-category label, e.g. "ERROR_Frass". */
+  /** Optional Non-Target category label, e.g. "NON_TARGET/Error/Blur" (legacy "ERROR_Frass" is converted). */
   label?: string
   speciesListId?: string
   speciesListDOI?: string

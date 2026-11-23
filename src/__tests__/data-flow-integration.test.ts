@@ -374,7 +374,8 @@ describe('Data Flow Integration Tests', () => {
       const updated = detectionsStore.get()[initial.id]
 
       expect(updated.isError).toBe(true)
-      expect(updated.label).toBe('ERROR')
+      // A legacy "ERROR" label is stored as plain Non-Target.
+      expect(updated.label).toBe('NON_TARGET')
 
       // Verify export
       const row = buildDarwinShapeFromDetection({
@@ -390,7 +391,7 @@ describe('Data Flow Integration Tests', () => {
       expect(row.genus).toBe('')
       expect(row.species).toBe('')
       expect(row.scientificName).toBe('')
-      expect(row.name).toBe('ERROR')
+      expect(row.name).toBe('NON_TARGET')
     })
   })
 

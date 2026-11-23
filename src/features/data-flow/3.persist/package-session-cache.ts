@@ -37,7 +37,8 @@ export type IndexedFileMeta = {
 // v7: detector switching used to filter `detectionsStore` in place, and a save
 // then cached that truncated store — dropping the other run's IDs/clusters on
 // every later load. Bump so those caches are discarded and rebuilt from records.
-export const PACKAGE_SESSION_CACHE_VERSION = 7
+// 8: determinations use mothbox-default/1 (human always beats machine); detections carry occurrence ids.
+export const PACKAGE_SESSION_CACHE_VERSION = 8
 
 export type PackageSessionCacheEntry = {
   cacheVersion: number

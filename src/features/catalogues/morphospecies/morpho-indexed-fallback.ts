@@ -1,4 +1,5 @@
 import { buildTaxonFromShape, extractTaxonomyFromShape } from '~/models/taxonomy/extract'
+import { isNonTargetLabel } from '~/models/non-target'
 import { extractMorphospeciesFromShape, normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { parseUserDetectionJsonSafely } from '~/features/data-flow/1.ingest/ingest-json'
 import type { IndexedFile } from '~/features/data-flow/1.ingest/files.state'
@@ -70,7 +71,7 @@ export function buildMorphoIndexedFallback(params: { shapesByNight: Record<strin
 
   for (const [leafGroupId, shapes] of Object.entries(shapesByNight ?? {})) {
     for (const shape of shapes ?? []) {
-      const isError = shape?.is_error === true || String(shape?.label || '').toUpperCase() === 'ERROR'
+      const isError = shape?.is_error === true || isNonTargetLabel(String(shape?.label || ''))
       const taxonomy = extractTaxonomyFromShape({ shape })
       const taxon = buildTaxonFromShape({ shape, taxonomy, isError })
       const morphospecies = extractMorphospeciesFromShape({ shape, taxonomy, taxon, isError })

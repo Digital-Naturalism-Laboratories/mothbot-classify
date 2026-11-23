@@ -160,6 +160,8 @@ export async function buildAmiAdapterRecords(params: {
 
     patches.push({
       patch_id: crop.detectionId,
+      // The AMI crops carry no tracking, so each detection is its own occurrence.
+      occurrence_id: crop.detectionId,
       dataset_id: datasetId,
       asset_path: assetPath,
       media_type: imageMediaTypeFromPath(crop.patchFileName),

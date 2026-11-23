@@ -12,6 +12,8 @@ export type PatchRecord = {
   cluster_id?: number
   clustered_at?: string
   detector_id?: string
+  /** The occurrence (individual creature) this detection belongs to; defaults to `patch_id`. */
+  occurrence_id?: string
 }
 
 export type PatchSourceRecord = {
@@ -89,8 +91,25 @@ export type ClassificationRecord = {
   pixel_mass_method?: string | null
   /** When Mothbot Process machine-identified the detection (its raw `timestamp_ID_bot`); bot rows only. */
   machine_identified_at?: string | null
+  /**
+   * Stable id of this identification. Written on every row Classify appends; older rows
+   * have none and get a derived id (see `identificationIdOf`).
+   */
+  identification_id?: string
+  /** The occurrence this identification is about; absent means the patch is its own occurrence. */
+  occurrence_id?: string
+  /** The person as they typed their name (full name or initials); human rows only. */
+  identifier_name?: string | null
+  /** For an Agree, or a choice from the history: the identification this one endorses. */
+  agreed_with?: string | null
+  /** For a `withdrawn` row: the identification it takes back. */
+  withdraws?: string | null
 }
 
 export type CurrentClassificationRecord = ClassificationRecord & {
   resolved_from?: string
+  /** The determination algorithm that picked this row, e.g. `mothbox-default/1`. */
+  determination_algorithm?: string
+  /** The identification id the determination was taken from. */
+  determined_from?: string
 }

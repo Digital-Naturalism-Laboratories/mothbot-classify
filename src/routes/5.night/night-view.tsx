@@ -31,6 +31,7 @@ import { computeDetectionLongestDimension } from '~/features/patch-grid/grid-uti
 import { countUnassignedDetectionsForNight, nightHasMachineIdentification } from '~/features/labeling/night-labeling-mode'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
+import { NON_TARGET } from '~/models/non-target'
 import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
 import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
 import { newestDetectorId, sortDetectorRunsNewestFirst } from '~/features/mothbox-next/detector-runs'
@@ -412,7 +413,7 @@ export function NightView(props: { leafGroupId: string }) {
 
   function onMarkError() {
     if (selectedDetectionIds.length === 0) return
-    labelDetections({ detectionIds: selectedDetectionIds, label: 'ERROR' })
+    labelDetections({ detectionIds: selectedDetectionIds, label: NON_TARGET })
     clearPatchSelection()
   }
 
@@ -696,7 +697,7 @@ function buildTaxonomyTreeForLeafGroup(params: { detections: Record<string, any>
     if (!leafGroupIds.has((d as any)?.leafGroupId)) continue
     const detectedBy = (d as any)?.detectedBy === 'user' ? 'user' : 'auto'
     if ((onlyUser && detectedBy !== 'user') || (!onlyUser && detectedBy !== 'auto')) continue
-    // Skip error items from taxonomy tree; they are shown as a separate "Errors" row
+    // Skip Non-Target items from taxonomy tree; they are shown as a separate "Non-Target" row
     if (onlyUser && (d as any)?.isError) continue
     const klass = (d as any)?.taxon?.class as string | undefined
     const order = (d as any)?.taxon?.order as string | undefined

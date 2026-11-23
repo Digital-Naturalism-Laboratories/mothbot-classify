@@ -164,6 +164,8 @@ export async function buildDinalabMothboxV1Records(params: {
 
       patches.push({
         patch_id: patchId,
+        // One occurrence per detection until tracking merges them (ontology: Occurrence).
+        occurrence_id: patchId,
         dataset_id: datasetId,
         asset_path: assetPath,
         media_type: imageMediaTypeFromPath(patchFileName),

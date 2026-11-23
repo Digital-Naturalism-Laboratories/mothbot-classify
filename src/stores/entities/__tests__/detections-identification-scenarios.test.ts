@@ -324,10 +324,11 @@ describe('Detection Identification Scenarios', () => {
         },
       },
       action: {
+        // Legacy label: still accepted, and stored as plain Non-Target.
         label: 'ERROR',
       },
       expected: {
-        label: 'ERROR',
+        label: 'NON_TARGET',
         detectedBy: 'user',
         isError: true,
         morphospecies: undefined,
@@ -354,10 +355,11 @@ describe('Detection Identification Scenarios', () => {
         morphospecies: 'Custom Morpho X',
       },
       action: {
+        // Legacy label: still accepted, and stored as plain Non-Target.
         label: 'ERROR',
       },
       expected: {
-        label: 'ERROR',
+        label: 'NON_TARGET',
         detectedBy: 'user',
         isError: true,
         morphospecies: undefined, // Should clear morphospecies

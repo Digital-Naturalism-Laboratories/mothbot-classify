@@ -152,7 +152,7 @@ export function TaxonomySection(props: TaxonomySectionProps) {
 
         {errorsRowIsLast ? (
           <CountsRow
-            label='Errors'
+            label='Non-Target'
             count={errorsCount || 0}
             selected={isErrorsSelected}
             isAbsoluteLast

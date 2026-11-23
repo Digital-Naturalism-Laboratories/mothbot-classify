@@ -391,18 +391,19 @@ describe('IdentifyDialog - morphospecies suggestions', () => {
   })
 })
 
-describe('IdentifyDialog - error options before typing', () => {
-  it('offers Error and Error: Blur with an empty search, but never as the first option', async () => {
+describe('IdentifyDialog - Non-Target options before typing', () => {
+  it('offers Non-Target, Error and Abiotic with an empty search, but never as the first option', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
     render(<IdentifyDialog open={true} onOpenChange={() => {}} onSubmit={onSubmit} datasetId='project-errors' detectionIds={['target']} />)
 
-    expect(await screen.findByText('Error: Blur')).toBeInTheDocument()
+    expect(await screen.findByText('Non-Target › Error')).toBeInTheDocument()
+    expect(screen.getByText('Non-Target › Abiotic')).toBeInTheDocument()
     const items = screen.getAllByRole('option')
-    expect(items[0]?.textContent).not.toMatch(/^Error/)
-    expect(items.some((el) => el.textContent?.startsWith('Errorgeneric'))).toBe(true)
+    expect(items[0]?.textContent).not.toMatch(/^Non-Target/)
+    expect(items.some((el) => el.textContent === 'Non-Targethotkey E')).toBe(true)
 
-    await user.click(screen.getByText('Error: Blur'))
-    expect(onSubmit).toHaveBeenCalledWith('ERROR_Blur', undefined)
+    await user.click(screen.getByText('Non-Target › Error'))
+    expect(onSubmit).toHaveBeenCalledWith('NON_TARGET/Error', undefined)
   })
 })

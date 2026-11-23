@@ -17,6 +17,8 @@ import type {
 import { joinPackagePath, resolveManifestPaths } from './package-paths'
 import { PATCH_MEASUREMENTS_RECORD, parsePatchMeasurements, type PatchMeasurementsById } from './patch-measurements'
 import { flattenClassificationFiles, resolveCurrentClassifications } from './resolve-classifications'
+import { occurrenceIdByPatchFromRecords } from './identifications'
+import { PACKAGE_NON_TARGET_CATEGORIES_RECORD, parseNonTargetCategories } from './non-target-categories-package'
 import type { CurrentClassificationRecord } from './records'
 
 export type LoadedMothboxNextPackage = {
@@ -31,6 +33,8 @@ export type LoadedMothboxNextPackage = {
   resolvedClassifications: CurrentClassificationRecord[]
   /** Per-patch measurements (blurriness); empty when the package has none yet. */
   measurements: PatchMeasurementsById
+  /** Non-Target categories people added to this dataset, as path keys ("Error/Glare"). */
+  nonTargetCategories?: string[]
 }
 
 export type PackageDataAccess = {
@@ -95,8 +99,21 @@ export async function loadMothboxNextPackageData(params: {
     // no measurements file
   }
 
+  // Optional: a missing file just means nobody added a Non-Target category yet.
+  let nonTargetCategories: string[] = []
+  try {
+    nonTargetCategories = parseNonTargetCategories(
+      await access.readPackageFile(joinPackagePath(packageRoot, PACKAGE_NON_TARGET_CATEGORIES_RECORD)),
+    )
+  } catch {
+    // no categories file
+  }
+
   const flattened = flattenClassificationFiles({ files: classificationFiles })
-  const resolvedClassifications = resolveCurrentClassifications({ rows: flattened })
+  const resolvedClassifications = resolveCurrentClassifications({
+    rows: flattened,
+    occurrenceIdByPatch: occurrenceIdByPatchFromRecords(patches),
+  })
 
   return {
     packageRoot,
@@ -109,6 +126,7 @@ export async function loadMothboxNextPackageData(params: {
     classificationFiles,
     resolvedClassifications,
     measurements,
+    nonTargetCategories,
   }
 }
 

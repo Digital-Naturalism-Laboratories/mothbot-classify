@@ -18,7 +18,9 @@
 - Manifest & types: `dataset-manifest.ts`, `records.ts`
 - Open / validate indexed folder: `load-package-data.ts`, `validate-dataset-package.ts`, `package-indexed-access.ts`
 - Entity bridge: `hydration-bridge.ts`, `classification-to-detection.ts`, `reload-package.ts`
-- Resolver rules: `resolve-classifications.ts`, `resolver-spec.md`
+- Determination algorithm: `resolve-classifications.ts`, `resolver-spec.md`
+- Identification ids, history, claim comparison: `identifications.ts`
+- Non-Target categories file: `non-target-categories-package.ts`
 - Persist human edits: `persist/persist-human-classifications.ts`
 - Import collaborator file: `import-classifications.ts`
 - In-app ingest entry: `../data-flow/1.ingest/package/ingest-package.ts`

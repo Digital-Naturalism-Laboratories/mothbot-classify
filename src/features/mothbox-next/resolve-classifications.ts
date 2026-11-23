@@ -1,4 +1,5 @@
 import type { ClassificationRecord, CurrentClassificationRecord } from './records'
+import { identificationIdOf, isWithdrawal, occurrenceKeyOf } from './identifications'
 
 export type ClassificationRowWithSource = ClassificationRecord & {
   sourceFile: string
@@ -6,11 +7,24 @@ export type ClassificationRowWithSource = ClassificationRecord & {
 
 export type ResolvedClassificationRow = CurrentClassificationRecord
 
+/**
+ * The Mothbox default determination algorithm (ontology: Determination Algorithm):
+ *   1. If the occurrence has any human identifications, use the latest one.
+ *   2. Otherwise, use the latest machine identification.
+ * Identifications a classifier later withdrew are skipped. See `resolver-spec.md`.
+ */
+export const DETERMINATION_ALGORITHM = 'mothbox-default/1'
+
 function classificationTimestamp(row: ClassificationRecord): number | null {
   if (typeof row.classified_at === 'number' && Number.isFinite(row.classified_at)) return row.classified_at
   return null
 }
 
+/**
+ * Machine rows: a row with a timestamp beats one without, a later timestamp beats an
+ * earlier one, and on a tie the row seen first is kept. (Adapters mark a preferred
+ * machine algorithm with `classified_at: 1` and leave the others `null`.)
+ */
 function isNewerCandidate(params: {
   candidate: ClassificationRecord
   current: ClassificationRecord | null
@@ -33,26 +47,93 @@ function isNewerCandidate(params: {
   return false
 }
 
-export function resolveCurrentClassifications(params: {
-  rows: ClassificationRowWithSource[]
-}): CurrentClassificationRecord[] {
-  const { rows } = params
-  const winnerByPatch = new Map<string, ClassificationRowWithSource>()
+type OrderedRow = { row: ClassificationRowWithSource; order: number }
 
-  for (const row of rows) {
-    if (!row.patch_id) continue
-    const current = winnerByPatch.get(row.patch_id) ?? null
-    if (isNewerCandidate({ candidate: row, current })) {
-      winnerByPatch.set(row.patch_id, row)
-    }
+function timeOf(row: ClassificationRecord): number {
+  return classificationTimestamp(row) ?? -Infinity
+}
+
+/** Is `a` earlier than `b` (by time, then by position in the files)? */
+function isEarlier(a: OrderedRow, b: OrderedRow): boolean {
+  const ta = timeOf(a.row)
+  const tb = timeOf(b.row)
+  if (ta !== tb) return ta < tb
+  return a.order < b.order
+}
+
+/**
+ * Picks the determination for one occurrence's rows, or null when nothing applies
+ * (no machine row, and every human identification withdrawn).
+ */
+export function determineFromRows(rows: ClassificationRowWithSource[]): ClassificationRowWithSource | null {
+  return determineOrdered(rows.map((row, order) => ({ row, order })))
+}
+
+function determineOrdered(entries: OrderedRow[]): ClassificationRowWithSource | null {
+  const lastWithdrawalByClassifier = new Map<string, OrderedRow>()
+  for (const entry of entries) {
+    if (!isWithdrawal(entry.row)) continue
+    const current = lastWithdrawalByClassifier.get(entry.row.classifier_id)
+    if (!current || isEarlier(current, entry)) lastWithdrawalByClassifier.set(entry.row.classifier_id, entry)
   }
 
+  let latestHuman: OrderedRow | null = null
+  let machine: ClassificationRowWithSource | null = null
+
+  for (const entry of entries) {
+    if (isWithdrawal(entry.row)) continue
+    const withdrawal = lastWithdrawalByClassifier.get(entry.row.classifier_id)
+    if (withdrawal && isEarlier(entry, withdrawal)) continue
+
+    if (entry.row.classifier_type === 'bot') {
+      if (isNewerCandidate({ candidate: entry.row, current: machine })) machine = entry.row
+      continue
+    }
+
+    if (!latestHuman || isEarlier(latestHuman, entry)) latestHuman = entry
+  }
+
+  return latestHuman?.row ?? machine
+}
+
+/**
+ * The determination for every patch that has identification rows.
+ *
+ * Rows are grouped by occurrence (`occurrence_id`, else the patch's occurrence from
+ * `occurrenceIdByPatch`, else the patch itself). Every patch of an occurrence gets the
+ * occurrence's determination. Until tracking exists each occurrence holds one patch.
+ */
+export function resolveCurrentClassifications(params: {
+  rows: ClassificationRowWithSource[]
+  occurrenceIdByPatch?: ReadonlyMap<string, string>
+}): CurrentClassificationRecord[] {
+  const { rows, occurrenceIdByPatch } = params
+  const groups = new Map<string, OrderedRow[]>()
+
+  rows.forEach((row, order) => {
+    if (!row.patch_id) return
+    const key = occurrenceKeyOf(row, occurrenceIdByPatch)
+    const group = groups.get(key)
+    if (group) group.push({ row, order })
+    else groups.set(key, [{ row, order }])
+  })
+
   const resolved: CurrentClassificationRecord[] = []
-  for (const row of winnerByPatch.values()) {
-    resolved.push({
-      ...row,
-      resolved_from: row.sourceFile,
-    })
+  for (const entries of groups.values()) {
+    const winner = determineOrdered(entries)
+    if (!winner) continue
+
+    const determinedFrom = identificationIdOf(winner)
+    const patchIds = new Set(entries.map((e) => e.row.patch_id))
+    for (const patchId of patchIds) {
+      resolved.push({
+        ...winner,
+        patch_id: patchId,
+        resolved_from: winner.sourceFile,
+        determination_algorithm: DETERMINATION_ALGORITHM,
+        determined_from: determinedFrom,
+      })
+    }
   }
 
   return resolved

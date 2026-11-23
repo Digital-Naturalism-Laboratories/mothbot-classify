@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
-import { detectionsStore, resetDetections } from '~/stores/entities/detections'
+import { agreeWithIdentification, detectionsStore, resetDetections } from '~/stores/entities/detections'
+import { identificationHistory, identificationIdOf } from '../identifications'
 import { patchesStore } from '~/stores/entities/5.patches'
 import { photosStore } from '~/stores/entities/photos'
 import { acceptDetection, updateDetectionWithTaxon } from '~/models/detection-shapes'
@@ -117,7 +118,7 @@ describe('persist round-trip (L4)', () => {
     expect(reloadedFirst?.taxon?.order).toBe('Coleoptera')
   })
 
-  it('removes human rows from disk when reset clears identifications', async () => {
+  it('keeps the human row and appends a withdrawal when reset takes an identification back', async () => {
     const src = fixturePackageRoot('04_dinacon_lightweight_substrate')
     const tempRoot = await mkdtemp(path.join(tmpdir(), 'mothbox-next-'))
     await cp(src, tempRoot, { recursive: true })
@@ -167,7 +168,64 @@ describe('persist round-trip (L4)', () => {
     const userPath = path.join(tempRoot, '03_classifications/bf.ndjson')
     const humanText = await readFile(userPath, 'utf8')
     const humanRows = parseClassificationRecords(humanText)
-    expect(humanRows.some((row) => row.patch_id === foliumPatchId)).toBe(false)
+    const foliumRows = humanRows.filter((row) => row.patch_id === foliumPatchId)
+    // The identification stays in the history; a withdrawal row takes it back.
+    expect(foliumRows.length).toBe(2)
+    expect(foliumRows[0]?.taxon?.species).toBe('folium')
+    expect(foliumRows[1]?.classification_type).toBe('withdrawn')
+    expect(foliumRows[1]?.withdraws).toBe(`bf::${foliumPatchId}`)
+
+    // The determination falls back to the machine identification.
+    const current = parseClassificationRecords(await readFile(path.join(tempRoot, '02_records/current-classifications.ndjson'), 'utf8'))
+    const determination = current.find((row) => row.patch_id === foliumPatchId)
+    expect(determination?.classifier_type).toBe('bot')
+
+    // Saving again appends nothing.
+    await persistPackageClassifications({ writer, leafGroupId: leafGroupId! })
+    expect(await readFile(userPath, 'utf8')).toBe(humanText)
+  })
+
+  it('choosing an identification from the history records an Agree with it', async () => {
+    const src = fixturePackageRoot('04_dinacon_lightweight_substrate')
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'mothbox-next-'))
+    await cp(src, tempRoot, { recursive: true })
+
+    const walked = await walkFixtureFiles(tempRoot)
+    const indexed = await Promise.all(
+      walked.map(async (f) => {
+        const textContent = (await readFile(path.join(tempRoot, f.path))).toString('utf8')
+        return { path: f.path, name: f.name, size: f.size, file: { text: async () => textContent } as File }
+      }),
+    )
+    await ingestMothboxNextPackageFromIndexedFiles({ files: indexed as any })
+    userSessionStore.set({ initials: 'BF' })
+
+    const foliumPatchId = 'hopeCobo_2025_06_22__04_58_06_HDR0_0_Mothbot_yolo11m_4500_imgsz1600_b1_2024-01-18.pt'
+    const loaded = mothboxNextPackageStore.get()?.loaded
+    const history = identificationHistory({ classificationFiles: loaded?.classificationFiles, occurrenceKey: foliumPatchId })
+    expect(history.map((e) => e.row.classifier_type)).toEqual(['bot', 'human'])
+    const machine = history[0]!.row
+
+    agreeWithIdentification({ detectionId: foliumPatchId, identification: machine })
+    const chosen = detectionsStore.get()?.[foliumPatchId]
+    expect(chosen?.classificationType).toBe('accept')
+    expect(chosen?.taxon?.order).toBe('Diptera')
+    expect(chosen?.agreedWith).toBe(identificationIdOf(machine))
+    expect(chosen?.humanClassifierId).toBe('bf')
+
+    const writer = createNodePackageTextWriter(tempRoot)
+    await persistPackageClassifications({ writer, leafGroupId: chosen!.leafGroupId })
+
+    const rows = parseClassificationRecords(await readFile(path.join(tempRoot, '03_classifications/bf.ndjson'), 'utf8'))
+    const foliumRows = rows.filter((row) => row.patch_id === foliumPatchId)
+    expect(foliumRows.map((row) => row.classification_type)).toEqual(['taxon', 'accept'])
+    expect(foliumRows[1]?.agreed_with).toBe(identificationIdOf(machine))
+    expect(foliumRows[1]?.identifier_name).toBe('BF')
+
+    const current = parseClassificationRecords(await readFile(path.join(tempRoot, '02_records/current-classifications.ndjson'), 'utf8'))
+    const determination = current.find((row) => row.patch_id === foliumPatchId)
+    expect(determination?.classification_type).toBe('accept')
+    expect(determination?.taxon?.order).toBe('Diptera')
   })
 
   it('clears human taxonomy when resetting a patch-only package without bot rows', async () => {

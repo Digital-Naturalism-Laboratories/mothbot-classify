@@ -44,8 +44,8 @@ export function SelectionBar(props: SelectionBarProps) {
         <div className='text-13 text-neutral-700'>{label}</div>
         <div className='h-16 w-px bg-neutral-200' />
         <ActionButton label='Identify' keys={['D']} onClick={onIdentify} />
-        <ActionButton label='Accept' keys={['A']} onClick={onAccept} tooltip='Accept selected identifications' />
-        {onMarkError ? <ActionButton label='Error' keys={['E']} onClick={onMarkError} tooltip='Mark selected as error (open Identify for Frass / Blur / custom)' /> : null}
+        <ActionButton label='Agree' keys={['A']} onClick={onAccept} tooltip='Agree with the selected identifications' />
+        {onMarkError ? <ActionButton label='Non-Target' keys={['E']} onClick={onMarkError} tooltip='Mark selected as Non-Target (open Identify for Error, Abiotic or your own categories)' /> : null}
         <ActionButton label='Unselect' keys={['U']} onClick={onUnselect} />
         <ActionButton label='Select All' keys={['⇧', 'A']} onClick={onSelectAll} />
         {onResetToAuto ? <ActionButton label='Reset' onClick={onResetToAuto} /> : null}

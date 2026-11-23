@@ -10,6 +10,7 @@ import type { CameraDayRecord, DeploymentRecord, PatchRecord, PatchSourceRecord 
 import type { ClassificationRecord } from './records'
 import type { PatchMeasurementRecord } from './patch-measurements'
 import { detectionFromClassification } from './classification-to-detection'
+import { occurrenceIdOfPatch } from './identifications'
 import {
   buildDeploymentAndCameraDayRecords,
   enrichPatchesFromPatchSources,
@@ -386,6 +387,8 @@ function detectionMetadataFromPatch(params: {
   const bot = params.botMetadata
 
   return {
+    // One occurrence per detection unless the record says otherwise (ontology: Occurrence).
+    occurrenceId: occurrenceIdOfPatch(params.patch),
     ...(clusterId !== undefined ? { clusterId } : {}),
     ...(points ? { points } : {}),
     ...(direction !== undefined ? { direction } : {}),

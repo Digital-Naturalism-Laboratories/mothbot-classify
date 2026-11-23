@@ -1,6 +1,7 @@
 import type { DetectionEntity } from '~/models/detection.types'
 import type { PatchEntity } from '~/stores/entities/5.patches'
 import { deriveTaxonNameFromDetection } from '~/models/taxonomy/extract'
+import { normalizeNonTargetLabel } from '~/models/non-target'
 
 export type PackageExportRow = {
   patch_id: string
@@ -28,7 +29,9 @@ export function buildPackageExportRows(params: {
       asset_path: patch.imageFile?.path ?? '',
       night_id: patch.leafGroupId,
       photo_id: patch.photoId,
-      scientific_name: deriveTaxonNameFromDetection({ detection }) ?? detection.label ?? '',
+      scientific_name: detection.isError
+        ? normalizeNonTargetLabel(detection.label)
+        : deriveTaxonNameFromDetection({ detection }) ?? detection.label ?? '',
       detected_by: detection.detectedBy ?? 'auto',
       classification_type: packageExportClassificationType({ detection }),
     })

@@ -391,7 +391,7 @@ function VisualizationDialogBody(props: Props) {
                 onChange={(v) => update({ onePerCluster: v })} />
               <SwitchRow label='Exclude unclustered / noise' checked={config.excludeNoise}
                 onChange={(v) => update({ excludeNoise: v })} />
-              <SwitchRow label='Include Error-marked' checked={config.includeErrors}
+              <SwitchRow label='Include Non-Target' checked={config.includeErrors}
                 onChange={(v) => update({ includeErrors: v })} />
               <NumberRow label='Limit (0 = all)' value={config.limit} min={0}
                 onChange={(v) => update({ limit: v })} />

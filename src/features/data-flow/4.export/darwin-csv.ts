@@ -1,4 +1,5 @@
 import { ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
+import { normalizeNonTargetLabel } from '~/models/non-target'
 import {
   deriveTaxonNameFromDetection,
   extractTaxonMetadataFromDetection,
@@ -338,7 +339,7 @@ export function buildDarwinShapeFromDetection(params: {
   const original_mothbox_species_list_doi = speciesListRefForExport(detection?.originalMothboxSpeciesList)
   const original_mothbox_species_list_exclusions = detection?.originalMothboxSpeciesListExclusions || ''
 
-  // For errors, scientificName should be blank, but name should be "ERROR"
+  // For Non-Target, scientificName is blank and name holds the Non-Target label.
   // Use validated scientificName (no morphospecies/numbers)
   const scientificName = isError
     ? ''
@@ -347,15 +348,15 @@ export function buildDarwinShapeFromDetection(params: {
         morphospecies: detection?.morphospecies,
         label: detection?.label,
       })
-  // Keep the error sub-category (e.g. "ERROR_Frass") in the exported name.
-  const errorName = /^ERROR[_:]/i.test((detection?.label ?? '').trim()) ? detection!.label!.trim() : 'ERROR'
-  const name = isError ? errorName : deriveTaxonNameFromDetection({ detection })
+  // Keep the Non-Target category (e.g. "NON_TARGET/Error/Blur") in the exported name.
+  const name = isError ? normalizeNonTargetLabel(detection?.label) : deriveTaxonNameFromDetection({ detection })
 
   const nightParts = parseNightIdParts({ leafGroupId })
   const datasetID = nightParts ? `${nightParts.project}_${nightParts.deployment}_${nightParts.night}` : leafGroupId.replaceAll('/', '_')
   const parentEventID = nightParts ? `${nightParts.project}_${nightParts.deployment}` : datasetID
   const eventID = photo?.id || ''
-  const occurrenceID = patch?.id || ''
+  // One occurrence per detection unless tracking merged them (ontology: Occurrence).
+  const occurrenceID = detection?.occurrenceId || patch?.id || ''
 
   // Deployment is datasetID without the trailing night date segment
   const deployment = extractDeploymentFromDatasetID({ datasetID })

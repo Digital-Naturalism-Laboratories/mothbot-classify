@@ -24,7 +24,14 @@ import { resolveDatasetIdForLeafGroup } from '~/features/mothbox-next/dataset-sc
 import { isMothboxNextPackageOpen, mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
 import { currentHumanClassifierId } from '~/features/mothbox-next/human-classifier-id'
-import { findBotClassificationForPatch } from '~/features/mothbox-next/resolve-classifications'
+import { determineFromRows, type ClassificationRowWithSource } from '~/features/mothbox-next/resolve-classifications'
+import {
+  identificationIdOf,
+  occurrenceIdByPatchFromRecords,
+  occurrenceKeyOf,
+} from '~/features/mothbox-next/identifications'
+import type { ClassificationRecord } from '~/features/mothbox-next/records'
+import { isNonTargetLabel } from '~/models/non-target'
 import { leafGroupsStore } from './leaf-groups'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import { computeFinalLabel } from '~/models/taxonomy/label'
@@ -88,9 +95,8 @@ export function labelDetections(params: { detectionIds: string[]; label?: string
   if (!Array.isArray(detectionIds) || detectionIds.length === 0) return
 
   const hasTaxon = hasTaxonFields(taxon)
-  // Generic "ERROR" or a sub-category like "ERROR_Frass" / "ERROR: Blur".
-  const upperLabel = trimmed.toUpperCase()
-  const isError = !hasTaxon && (upperLabel === 'ERROR' || upperLabel.startsWith('ERROR_') || upperLabel.startsWith('ERROR:'))
+  // Non-Target: "NON_TARGET", a category like "NON_TARGET/Error/Blur", or a legacy "ERROR_Frass".
+  const isError = !hasTaxon && isNonTargetLabel(trimmed)
 
   if (!hasTaxon && !trimmed && !isError) return
 
@@ -189,12 +195,13 @@ export async function resetDetections(params: { detectionIds: string[] }) {
   }
 
   const updated: Record<string, DetectionEntity> = { ...current }
+  const packageFallbacks = resolvePackageDeterminationsWithoutCurrentPerson({ detectionIds, current })
 
   for (const [photoId, ids] of Object.entries(idsByPhoto)) {
     const photo = photos?.[photoId] as PhotoEntity | undefined
     const jsonFile = (photo as any)?.botDetectionFile
     let shapes: Array<any> = []
-    if (jsonFile) {
+    if (jsonFile && ids.some((id) => !packageFallbacks[id])) {
       try {
         const parsed = await parseBotDetectionJsonSafely({ file: jsonFile as any })
         shapes = Array.isArray(parsed?.shapes) ? parsed!.shapes : []
@@ -207,9 +214,9 @@ export async function resetDetections(params: { detectionIds: string[] }) {
       const existing = current?.[id]
       if (!existing) continue
 
-      const packageBot = resolvePackageBotDetection({ patchId: id, existing })
-      if (packageBot) {
-        updated[id] = packageBot
+      const packageFallback = packageFallbacks[id]
+      if (packageFallback) {
+        updated[id] = packageFallback
         continue
       }
 
@@ -231,27 +238,118 @@ export async function resetDetections(params: { detectionIds: string[] }) {
 // HELPER FUNCTIONS
 // ============================================================================
 
-function resolvePackageBotDetection(params: {
-  patchId: string
-  existing: DetectionEntity
-}): DetectionEntity | undefined {
-  const { patchId, existing } = params
-  if (!isMothboxNextPackageOpen()) return undefined
+/**
+ * What each detection shows once the current person's identifications are taken back:
+ * the package's determination without their rows — another person's identification, or
+ * the machine's. Saving then records a withdrawal (see persist-human-classifications).
+ * Detections with nothing left to show are left out.
+ */
+function resolvePackageDeterminationsWithoutCurrentPerson(params: {
+  detectionIds: string[]
+  current: Record<string, DetectionEntity>
+}): Record<string, DetectionEntity> {
+  const { detectionIds, current } = params
+  if (!isMothboxNextPackageOpen()) return {}
 
-  const classificationFiles = mothboxNextPackageStore.get()?.loaded?.classificationFiles
-  const botRow = findBotClassificationForPatch({ patchId, classificationFiles })
-  if (!botRow) return undefined
+  const loaded = mothboxNextPackageStore.get()?.loaded
+  const occurrenceIdByPatch = occurrenceIdByPatchFromRecords(loaded?.patches)
+  const occurrenceKeyByDetection = new Map<string, string>()
+  for (const id of detectionIds) {
+    const existing = current[id]
+    if (existing) occurrenceKeyByDetection.set(id, existing.occurrenceId || occurrenceIdByPatch.get(id) || id)
+  }
 
-  const photoId = existing.photoId
-  const leafGroupId = existing.leafGroupId
-  if (!photoId || !leafGroupId) return undefined
+  // One pass over every identification, keeping only the occurrences being reset.
+  const wanted = new Set(occurrenceKeyByDetection.values())
+  const me = currentHumanClassifierId()
+  const rowsByOccurrence = new Map<string, ClassificationRowWithSource[]>()
+  for (const file of loaded?.classificationFiles ?? []) {
+    for (const row of file.rows) {
+      if (row.classifier_type !== 'bot' && row.classifier_id === me) continue
+      const key = occurrenceKeyOf(row, occurrenceIdByPatch)
+      if (!wanted.has(key)) continue
+      const bucket = rowsByOccurrence.get(key)
+      const withSource = { ...row, sourceFile: file.path }
+      if (bucket) bucket.push(withSource)
+      else rowsByOccurrence.set(key, [withSource])
+    }
+  }
 
-  const detection = detectionFromClassification({ row: botRow, leafGroupId, photoId })
-  if (typeof existing.clusterId === 'number') detection.clusterId = existing.clusterId
-  if (Array.isArray(existing.points)) detection.points = existing.points
-  if (typeof existing.direction === 'number') detection.direction = existing.direction
-  if (typeof existing.shapeType === 'string') detection.shapeType = existing.shapeType
-  return detection
+  const out: Record<string, DetectionEntity> = {}
+  for (const [id, key] of occurrenceKeyByDetection) {
+    const existing = current[id]
+    const winner = determineFromRows(rowsByOccurrence.get(key) ?? [])
+    if (!existing || !winner || !existing.photoId || !existing.leafGroupId) continue
+    out[id] = detectionShowingIdentification({ existing, row: winner })
+  }
+  return out
+}
+
+/** `existing` with its identification replaced by `row`'s; geometry and patch metadata are kept. */
+function detectionShowingIdentification(params: { existing: DetectionEntity; row: ClassificationRecord }): DetectionEntity {
+  const { existing, row } = params
+  const fromRow = detectionFromClassification({
+    // Keep the row's own id even when it was made from another detection of the occurrence.
+    row: { ...row, patch_id: existing.patchId, determined_from: identificationIdOf(row) },
+    leafGroupId: existing.leafGroupId,
+    photoId: existing.photoId,
+  })
+  const isMachine = row.classifier_type === 'bot'
+
+  return {
+    ...existing,
+    label: undefined,
+    taxon: undefined,
+    morphospecies: undefined,
+    isError: undefined,
+    classificationType: undefined,
+    humanClassifierId: undefined,
+    agreedWith: undefined,
+    speciesListId: undefined,
+    speciesListDOI: undefined,
+    speciesListExclusions: undefined,
+    identifiedAt: undefined,
+    ...fromRow,
+    // A person's row carries no machine details; keep the patch's own.
+    ...(isMachine ? {} : { botClassifierId: existing.botClassifierId, score: existing.score }),
+    ...(existing.occurrenceId ? { occurrenceId: existing.occurrenceId } : {}),
+  }
+}
+
+/**
+ * Makes an identification from a detection's history its current answer: the current
+ * person records their own identification agreeing with it (ontology: Agree), so the
+ * history shows who chose it.
+ */
+export function agreeWithIdentification(params: { detectionId: string; identification: ClassificationRecord }) {
+  const { detectionId, identification } = params
+  if (identification.classification_type === 'withdrawn') return
+
+  const current = detectionsStore.get() || {}
+  const existing = current[detectionId]
+  if (!existing) return
+  snapshotLabelForUndo([detectionId], current)
+
+  const shown = detectionShowingIdentification({ existing, row: identification })
+  const isMachine = identification.classifier_type === 'bot'
+  const next: DetectionEntity = {
+    ...shown,
+    // Agreeing with a machine identification is the Agree action; otherwise the
+    // person's identification makes the same kind of claim as the one chosen.
+    classificationType: isMachine ? 'accept' : shown.classificationType,
+    speciesListExclusions: isMachine ? shown.speciesListExclusions : undefined,
+    botClassifierId: existing.botClassifierId,
+    score: existing.score,
+    detectedBy: 'user',
+    identifiedAt: Date.now(),
+    humanClassifierId: currentHumanClassifierId(),
+    agreedWith: identificationIdOf(identification),
+    identificationId: undefined,
+  }
+
+  const updated = { ...current, [detectionId]: next }
+  detectionsStore.set(updated)
+  updateLeafGroupSummariesAndScheduleSave({ detectionIds: [detectionId], detections: updated })
 }
 
 function clearHumanIdentificationFlags(params: { existing: DetectionEntity }): DetectionEntity {

@@ -21,11 +21,13 @@ import { TaxonomyGapFillDialogContent } from './taxonomy-gap-fill-dialog'
 import { CenteredLoader } from '~/components/atomic/CenteredLoader'
 import { matchDefaultTaxa } from './default-taxa'
 import {
-  STANDARD_ERROR_REASONS,
-  addCustomErrorReason,
-  customErrorReasonsStore,
-  errorLabelForReason,
-} from './error-categories'
+  addNonTargetCategory,
+  matchNonTargetQuery,
+  nonTargetCategoriesInUse,
+  nonTargetCategoriesStore,
+  uniqueKeys,
+} from './non-target-categories'
+import { BUILT_IN_NON_TARGET_CATEGORIES, NON_TARGET, formatNonTargetPath, nonTargetLabel } from '~/models/non-target'
 
 const MAX_SPECIES_UI_RESULTS = 50
 
@@ -44,7 +46,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
   const [query, setQuery] = useState('')
   const selection = useStore(projectSpeciesSelectionStore)
   const detections = useStore(detectionsStore)
-  const customErrorReasons = useStore(customErrorReasonsStore)
+  const storedNonTargetCategories = useStore(nonTargetCategoriesStore)
   const leafGroups = useStore(leafGroupsStore)
   const isSpeciesLoading = useStore(speciesListsLoadingStore)
   const listRef = useRef<HTMLDivElement>(null)
@@ -110,22 +112,16 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
 
   const standardTaxaMatches = useMemo(() => matchDefaultTaxa(query), [query])
 
-  const errorReasons = useMemo(() => [...STANDARD_ERROR_REASONS, ...customErrorReasons], [customErrorReasons])
+  // Built-in, saved, and already-used Non-Target categories ("Error", "Error/Blur", "Plantae").
+  const nonTargetCategories = useMemo(() => {
+    if (!open) return storedNonTargetCategories
+    return uniqueKeys([...storedNonTargetCategories, ...nonTargetCategoriesInUse(Object.values(detections || {}))])
+  }, [open, storedNonTargetCategories, detections])
 
-  const errorUi = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    // "error frass" / "err blur" lets the user name a (possibly new) sub-category.
-    const prefixMatch = /^err(?:or)?\s+(.+)$/i.exec(query.trim())
-    const typedReason = prefixMatch ? prefixMatch[1]!.trim() : ''
-    const novelReason =
-      typedReason && !errorReasons.some((r) => r.toLowerCase() === typedReason.toLowerCase()) ? typedReason : ''
-    const isErrPrefix = q.startsWith('err')
-    const reasonMatches = errorReasons.filter((r) => isErrPrefix || r.toLowerCase().includes(q))
-    // Shown only for error-related queries — the empty state stays taxon-focused,
-    // and generic errors have the E hotkey.
-    const show = q !== '' && (isErrPrefix || reasonMatches.length > 0 || !!novelReason)
-    return { show, reasonMatches, novelReason }
-  }, [query, errorReasons])
+  const nonTargetUi = useMemo(
+    () => matchNonTargetQuery({ query, categories: nonTargetCategories }),
+    [query, nonTargetCategories],
+  )
 
   function submitSelection(label: string, taxon?: TaxonRecord) {
     const value = (label ?? '').trim()
@@ -311,31 +307,24 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
           <CommandList ref={listRef}>
             <CommandEmpty>No matches. Press Enter to use your text.</CommandEmpty>
 
-            {errorUi.show ? (
-              <CommandGroup heading='Errors'>
-                <CommandItem key='error-generic' onSelect={() => submitSelection('ERROR')}>
-                  <div className='flex items-center justify-between w-full'>
-                    <span className='text-13 text-red-700'>Error</span>
-                    <span className='text-11 text-neutral-500'>generic · hotkey E</span>
-                  </div>
-                </CommandItem>
-                {errorUi.reasonMatches.map((reason) => (
-                  <CommandItem key={'error-' + reason} onSelect={() => submitSelection(errorLabelForReason(reason))}>
-                    <div className='flex items-center justify-between w-full'>
-                      <span className='text-13 text-red-700'>Error: {reason}</span>
-                      <span className='text-11 text-neutral-500'>{errorLabelForReason(reason)}</span>
-                    </div>
-                  </CommandItem>
+            {nonTargetUi.show ? (
+              <CommandGroup heading='Non-Target'>
+                <NonTargetItem itemKey='non-target-generic' path={[]} onSelect={submitSelection} />
+                {nonTargetUi.matches.map((key) => (
+                  <NonTargetItem key={'non-target-' + key} itemKey={'non-target-' + key} path={key.split('/')} onSelect={submitSelection} />
                 ))}
-                {errorUi.novelReason ? (
+                {nonTargetUi.novelPath ? (
                   <CommandItem
-                    key='error-new'
+                    key='non-target-new'
                     onSelect={() => {
-                      addCustomErrorReason(errorUi.novelReason)
-                      submitSelection(errorLabelForReason(errorUi.novelReason))
+                      const path = nonTargetUi.novelPath!
+                      void addNonTargetCategory(path)
+                      submitSelection(nonTargetLabel(path))
                     }}
                   >
-                    <span className='text-13 text-red-700'>Add error type: “{errorUi.novelReason}”</span>
+                    <span className='text-13 text-red-700'>
+                      Add Non-Target category: “{formatNonTargetPath(nonTargetUi.novelPath)}”
+                    </span>
                   </CommandItem>
                 ) : null}
               </CommandGroup>
@@ -473,22 +462,20 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
               </CommandGroup>
             )}
 
-            {/* Before anything is typed, offer the common errors too — last in the list,
-                so the first (auto-highlighted) option an Enter would pick is never an error. */}
+            {/* Before anything is typed, offer Non-Target and its built-in categories too —
+                last in the list, so the first (auto-highlighted) option an Enter would pick
+                is never Non-Target. */}
             {!query.trim() ? (
-              <CommandGroup heading='Errors'>
-                <CommandItem key='empty-error-generic' onSelect={() => submitSelection('ERROR')}>
-                  <div className='flex items-center justify-between w-full'>
-                    <span className='text-13 text-red-700'>Error</span>
-                    <span className='text-11 text-neutral-500'>generic · hotkey E</span>
-                  </div>
-                </CommandItem>
-                <CommandItem key='empty-error-blur' onSelect={() => submitSelection(errorLabelForReason('Blur'))}>
-                  <div className='flex items-center justify-between w-full'>
-                    <span className='text-13 text-red-700'>Error: Blur</span>
-                    <span className='text-11 text-neutral-500'>{errorLabelForReason('Blur')}</span>
-                  </div>
-                </CommandItem>
+              <CommandGroup heading='Non-Target'>
+                <NonTargetItem itemKey='empty-non-target-generic' path={[]} onSelect={submitSelection} />
+                {BUILT_IN_NON_TARGET_CATEGORIES.map((category) => (
+                  <NonTargetItem
+                    key={'empty-non-target-' + category}
+                    itemKey={'empty-non-target-' + category}
+                    path={[category]}
+                    onSelect={submitSelection}
+                  />
+                ))}
               </CommandGroup>
             ) : null}
 
@@ -809,3 +796,16 @@ function deriveLabelFromTaxon(t: TaxonRecord): string {
   return preferred || getDisplayLabelForTaxon(t)
 }
 
+
+/** One Non-Target choice: plain Non-Target (empty path) or a category below it. */
+function NonTargetItem(props: { itemKey: string; path: string[]; onSelect: (label: string) => void }) {
+  const { itemKey, path, onSelect } = props
+  return (
+    <CommandItem key={itemKey} onSelect={() => onSelect(path.length ? nonTargetLabel(path) : NON_TARGET)}>
+      <div className='flex items-center justify-between w-full'>
+        <span className='text-13 text-red-700'>{path.length ? `Non-Target › ${formatNonTargetPath(path)}` : 'Non-Target'}</span>
+        {path.length ? null : <span className='text-11 text-neutral-500'>hotkey E</span>}
+      </div>
+    </CommandItem>
+  )
+}

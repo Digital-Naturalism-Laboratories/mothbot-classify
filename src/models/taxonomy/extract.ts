@@ -8,6 +8,7 @@ import type { TaxonIDSource } from './species-list-source'
 import { safeTaxonString, safeString } from './normalize'
 import { buildGenusSpeciesName, getDeepestTaxonomicLevel } from './rank'
 import { getSpeciesValueForExport } from './morphospecies'
+import { formatNonTargetLabel } from '~/models/non-target'
 import { buildTaxonRecordFromExtractedTaxonomy, type TaxonMetadata } from './builder'
 
 /**
@@ -131,6 +132,9 @@ export function extractTaxonMetadataFromDetection(params: { detection: Detection
 export function deriveTaxonNameFromDetection(params: { detection: DetectionLike }): string {
   const { detection } = params
   const taxon = detection?.taxon
+
+  // Non-Target shows its category, e.g. "Non-Target › Error › Blur".
+  if (detection?.isError) return formatNonTargetLabel(detection.label)
 
   // If morphospecies exists, name should be just the morphospecies
   if (detection?.morphospecies) {

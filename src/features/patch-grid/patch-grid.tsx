@@ -545,7 +545,7 @@ function buildGridBlocks(params: {
   }
 
   if (selectedBucket === 'user' && selectedTaxon?.name === 'ERROR') {
-    out.push({ kind: 'header', key: 'hdr:errors', title: 'Errors', rank: 'species', count: orderedIds.length })
+    out.push({ kind: 'header', key: 'hdr:errors', title: 'Non-Target', rank: 'species', count: orderedIds.length })
     addRowBlocks({ itemIds: orderedIds, columns, keyPrefix: 'row:errors', out })
     return out
   }
@@ -652,7 +652,7 @@ function getFlatHeaderForClusterSort(params: {
   const { selectedTaxon, selectedBucket, count, hasMachineIdentification = true } = params
 
   if (selectedBucket === 'user' && selectedTaxon?.name === 'ERROR') {
-    return { kind: 'header', key: 'hdr:cluster:errors', title: 'Errors', rank: 'species', count }
+    return { kind: 'header', key: 'hdr:cluster:errors', title: 'Non-Target', rank: 'species', count }
   }
 
   if (selectedTaxon?.name) {
