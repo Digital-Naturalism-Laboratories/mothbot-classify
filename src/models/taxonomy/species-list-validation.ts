@@ -52,7 +52,7 @@ export function validateSpeciesListCsv(params: {
     return {
       status: 'invalid',
       reason:
-        'No taxonomy columns found. A species list needs at least one of: scientificName, species, genus, family, order, or class.',
+        'No taxonomy columns found. A taxa list needs at least one of: scientificName, species, genus, family, order, or class.',
       detectedColumns,
     }
   }
@@ -81,5 +81,5 @@ export function validateSpeciesListCsv(params: {
 /** Short label for the picker row. */
 export function describeSpeciesListValidation(validation?: SpeciesListValidation) {
   if (!validation || validation.status === 'ok') return null
-  return validation.status === 'invalid' ? 'Not a species list' : 'Incomplete'
+  return validation.status === 'invalid' ? 'Not a taxa list' : 'Incomplete'
 }

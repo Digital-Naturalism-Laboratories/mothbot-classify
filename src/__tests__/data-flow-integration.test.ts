@@ -233,10 +233,10 @@ describe('Data Flow Integration Tests', () => {
       // leafGroupId: Dinacon2025/Dinacon2025_Les_BeachPalm/grupoKite_2025-06-23/2025-06-22
       // datasetID/parentEventID: Dinacon2025_Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23_2025-06-22
       // deployment: Dinacon2025_Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23 (without _2025-06-22)
-      expect(row.deployment).not.toBe('')
-      expect(row.deployment).toBe('Dinacon2025_Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23')
+      expect(row.deploymentID).not.toBe('')
+      expect(row.deploymentID).toBe('Dinacon2025_Dinacon2025_Les_BeachPalm_grupoKite_2025-06-23')
       // Should NOT end with the night date (2025-06-22)
-      expect(row.deployment).not.toContain('2025-06-22')
+      expect(row.deploymentID).not.toContain('2025-06-22')
     })
   })
 

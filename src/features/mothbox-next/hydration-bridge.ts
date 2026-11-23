@@ -11,6 +11,7 @@ import type { ClassificationRecord } from './records'
 import type { PatchMeasurementRecord } from './patch-measurements'
 import { detectionFromClassification } from './classification-to-detection'
 import { occurrenceIdOfPatch } from './identifications'
+import { parseLabelledBox } from '~/models/box-formats'
 import {
   buildDeploymentAndCameraDayRecords,
   enrichPatchesFromPatchSources,
@@ -382,6 +383,7 @@ function detectionMetadataFromPatch(params: {
   const points = cropPointsFromPatchSource(params.patchSource)
   const direction = cropDirectionFromPatchSource(params.patchSource)
   const shapeType = cropShapeTypeFromPatchSource(params.patchSource)
+  const box = parseLabelledBox(params.patchSource?.crop_box)
   const botClassifierId = params.botMetadata?.classifierId
   const botScore = params.botMetadata?.confidence
   const bot = params.botMetadata
@@ -389,10 +391,13 @@ function detectionMetadataFromPatch(params: {
   return {
     // One occurrence per detection unless the record says otherwise (ontology: Occurrence).
     occurrenceId: occurrenceIdOfPatch(params.patch),
+    ...(params.patch.session_id ? { sessionId: params.patch.session_id } : {}),
+    ...(params.patch.capture_window_id ? { captureWindowId: params.patch.capture_window_id } : {}),
     ...(clusterId !== undefined ? { clusterId } : {}),
     ...(points ? { points } : {}),
     ...(direction !== undefined ? { direction } : {}),
     ...(shapeType ? { shapeType } : {}),
+    ...(box ? { box } : {}),
     ...(botClassifierId ? { botClassifierId } : {}),
     ...(botScore !== undefined ? { score: botScore } : {}),
     ...(bot?.label ? { originalMothboxLabel: bot.label } : {}),

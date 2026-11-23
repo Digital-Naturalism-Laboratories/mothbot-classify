@@ -39,7 +39,7 @@ export function defaultDinalabHierarchy(manifest: MothboxNextDatasetManifest): H
       },
       {
         key: 'night',
-        label: 'Night',
+        label: 'Session',
         records: cameraDaysPath,
         id_field: 'camera_day_id',
         parent_field: 'deployment_id',

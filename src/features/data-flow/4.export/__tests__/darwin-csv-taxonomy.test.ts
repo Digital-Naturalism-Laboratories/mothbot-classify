@@ -210,8 +210,8 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
         ...BASE_PARAMS,
       })
 
-      expect(row.cluster_ID).toBe('1438')
-      expect(row.temporal_subcluster_ID).toBe('105')
+      expect(row.clusterID).toBe('1438')
+      expect(row.trackID).toBe('105')
       expect(row.width).toBe('302')
       expect(row.height).toBe('368')
       expect(row.area).toBe('111136')
@@ -229,8 +229,8 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
         ...BASE_PARAMS,
       })
 
-      expect(row.cluster_ID).toBe('')
-      expect(row.temporal_subcluster_ID).toBe('')
+      expect(row.clusterID).toBe('')
+      expect(row.trackID).toBe('')
       expect(row.width).toBe('')
       expect(row.height).toBe('')
       expect(row.area).toBe('')
@@ -281,7 +281,7 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
 
       expect(row.eventDate).toBe('2025-05-01')
       expect(row.eventTime).toBe('23:19:59')
-      expect(row.UTCOFFSET).toBe('+02:00')
+      expect(row.utcOffset).toBe('+02:00')
     })
 
     it('should export the bot classifier id when patch ids are opaque detection ids', () => {
@@ -302,7 +302,7 @@ describe('Darwin CSV Export - Taxonomy Columns', () => {
         } as any,
       })
 
-      expect(row.detectionBy).toBe('fastai-species')
+      expect(row.detectedBy).toBe('fastai-species')
     })
 
     it('should populate all taxonomy columns correctly with full species', () => {

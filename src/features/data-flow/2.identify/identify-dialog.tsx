@@ -282,7 +282,7 @@ export function IdentifyDialog(props: IdentifyDialogProps) {
       <DialogTitle className='hidden'>Identitfy</DialogTitle>
       {isSpeciesLoading ? (
         <div className='p-40'>
-          <CenteredLoader>🌀 Loading species lists…</CenteredLoader>
+          <CenteredLoader>🌀 Loading taxa lists…</CenteredLoader>
         </div>
       ) : (
         <Command shouldFilter={false}>

@@ -55,7 +55,7 @@ export function TaxonomySection(props: TaxonomySectionProps) {
     emptyText,
     className,
     errorsCount = 0,
-    aggregateLabel = 'All unapproved',
+    aggregateLabel = 'All unreviewed',
     aggregateCount,
     alwaysShowAggregate = false,
     availableAlgorithms,

@@ -4,7 +4,7 @@
  */
 
 import type { TaxonRecord, ExtractedTaxonomy } from './types'
-import type { TaxonIDSource } from './species-list-source'
+import { normalizeTaxonKeyStyle, type TaxonIDSource } from './species-list-source'
 import { safeTaxonString, safeString } from './normalize'
 import { buildGenusSpeciesName, getDeepestTaxonomicLevel } from './rank'
 import { getSpeciesValueForExport } from './morphospecies'
@@ -231,5 +231,5 @@ export function aggregateTaxonomyFromDetections(params: { detections: DetectionL
 }
 
 function parseTaxonIDSource(value: unknown): TaxonIDSource | undefined {
-  return value === 'gbif-backbone' || value === 'col' ? value : undefined
+  return normalizeTaxonKeyStyle(value)
 }

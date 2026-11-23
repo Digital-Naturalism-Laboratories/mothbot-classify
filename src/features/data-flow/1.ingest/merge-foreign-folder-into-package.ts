@@ -1,5 +1,7 @@
 import { toast } from 'sonner'
+import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, type SessionRecord } from '~/features/mothbox-next/sessions'
 import { parseNdjsonLines, serializeNdjsonLines } from '~/features/mothbox-next/parse-ndjson'
+import { fromFileKeys, manifestFromFile } from '~/features/mothbox-next/file-keys'
 import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRecord, CameraDayRecord } from '~/features/mothbox-next/records'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '~/features/mothbox-next/resolve-classifications'
 import { buildDinalabMothboxV1Records } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/build-dinalab-adapter-records'
@@ -46,6 +48,7 @@ export async function mergeForeignFolderIntoPackage(params: {
   const existingPatchSources = await readNdjsonFile<PatchSourceRecord>(packageDir, '02_records/patch-sources.ndjson')
   const existingDeployments = await readNdjsonFile<DeploymentRecord>(packageDir, '02_records/deployments.ndjson')
   const existingCameraDays = await readNdjsonFile<CameraDayRecord>(packageDir, '02_records/camera-days.ndjson')
+  const existingSessions = await readSessionsFile(packageDir)
   const existingBotRows = await readNdjsonFile<ClassificationRecord>(packageDir, '03_classifications/_bot.ndjson')
   // The writer rewrites patch-measurements.ndjson, so carry the existing scores over.
   const existingMeasurements = await readNdjsonFile<PatchMeasurementRecord>(packageDir, PATCH_MEASUREMENTS_RECORD)
@@ -77,6 +80,7 @@ export async function mergeForeignFolderIntoPackage(params: {
       patchSources: existingPatchSources,
       deployments: existingDeployments,
       cameraDays: existingCameraDays,
+      sessions: existingSessions,
       botRows: existingBotRows,
       humanRows: existingHumanRows,
       measurements: existingMeasurements,
@@ -115,6 +119,7 @@ function mergeRecordsByPatchId(params: {
     patchSources: PatchSourceRecord[]
     deployments: DeploymentRecord[]
     cameraDays: CameraDayRecord[]
+    sessions: SessionRecord[]
     botRows: ClassificationRecord[]
     humanRows: ClassificationRecord[]
     measurements: PatchMeasurementRecord[]
@@ -162,14 +167,28 @@ function mergeRecordsByPatchId(params: {
       measurements,
       deployments: [...deploymentsById.values()].sort((a, b) => a.deployment_id.localeCompare(b.deployment_id)),
       cameraDays: [...cameraDaysById.values()].sort((a, b) => a.camera_day_id.localeCompare(b.camera_day_id)),
+      // Existing sessions are kept as they are (people may have edited them); new ones are added.
+      sessions: [
+        ...existing.sessions,
+        ...incoming.sessions.filter((s) => !existing.sessions.some((e) => e.sessionID === s.sessionID)),
+      ],
     },
+  }
+}
+
+async function readSessionsFile(packageDir: DirectoryWithGet): Promise<SessionRecord[]> {
+  try {
+    return parseSessionRecords(await readTextFile(packageDir, PACKAGE_SESSIONS_RECORD))
+  } catch {
+    return []
   }
 }
 
 async function readNdjsonFile<T>(packageDir: DirectoryWithGet, relativePath: string): Promise<T[]> {
   try {
     const text = await readTextFile(packageDir, relativePath)
-    return parseNdjsonLines<T>(text)
+    // Either file style reads the same (see file-keys.ts).
+    return (await parseNdjsonLines<unknown>(text)).map((row) => fromFileKeys<T>(row))
   } catch {
     return []
   }
@@ -180,7 +199,7 @@ async function readDatasetIdFromManifest(packageDir: DirectoryWithGet): Promise<
     const file = await packageDir.getFileHandle?.('dataset.json', { create: false })
     const blob = await file?.getFile?.()
     if (!blob) return sanitizeDatasetFolderName((packageDir as { name?: string }).name ?? 'dataset')
-    const parsed = JSON.parse(await blob.text())
+    const parsed = manifestFromFile(JSON.parse(await blob.text()))
     const id = (parsed as { dataset_id?: unknown })?.dataset_id
     if (typeof id === 'string' && id.trim()) return id.trim()
   } catch {

@@ -311,7 +311,7 @@ function levelTitle(config: VizConfig): string {
   if (config.scope === 'selection') return 'Selected insects'
   const names = nightNames(config)
   if (names.length <= 2) return names.join(' + ')
-  return `${names[0]} + ${names.length - 1} more nights`
+  return `${names[0]} + ${names.length - 1} more sessions`
 }
 
 function levelFileStem(config: VizConfig): string {

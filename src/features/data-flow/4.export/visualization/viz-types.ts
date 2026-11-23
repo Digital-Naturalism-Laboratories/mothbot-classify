@@ -2,7 +2,8 @@ export type VizLayout = 'bar' | 'radial' | 'shape'
 export type VizSortMode = 'size' | 'time' | 'cluster' | 'taxon' | 'color' | 'none'
 export type VizTaxaRank = 'order' | 'family' | 'genus' | 'species'
 /** Selection-first with override: what set of patches to visualize. */
-export type VizScope = 'selection' | 'night' | 'dataset'
+/** 'night' is the session view: one or more sessions (all of them via Select all). */
+export type VizScope = 'selection' | 'night'
 export type VizBackground = 'transparent' | 'black' | 'white' | 'custom'
 
 export type VizConfig = {
@@ -31,6 +32,9 @@ export type VizConfig = {
   /** Leave out patches whose Process blurriness score (0 sharp .. 100 blurriest) is above this; 100 = show all. */
   blurLimit: number
 
+  /** Shape layout: fill the light/transparent part of the mask image instead of the dark/opaque part. */
+  invertMask: boolean
+
   // canvas / style
   outputWidth: number // radial is square; bar auto-heights; shape uses mask aspect
   scale: number
@@ -57,6 +61,7 @@ export function defaultVizConfig(leafGroupIds: string[], hasSelection: boolean, 
     preferNobg: true,
     requireNobg: false,
     blurLimit: 100,
+    invertMask: false,
     outputWidth: 4500,
     scale: 0.2,
     padding: 2,

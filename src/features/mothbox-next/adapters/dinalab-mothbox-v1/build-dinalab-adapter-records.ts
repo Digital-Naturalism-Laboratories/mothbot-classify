@@ -1,4 +1,7 @@
-import type { PatchRecord, PatchSourceRecord, ClassificationRecord } from '../../records'
+import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRecord } from '../../records'
+import { defaultNightlySession, findSessionForTime, parseSessionsFile, SESSIONS_FILE_NAME, type SessionRecord } from '../../sessions'
+import { parseTimestampFromText } from '~/models/detection-time'
+import { cornersRelFromPx, parseLabelledBox } from '~/models/box-formats'
 import { classificationFromBotShape, classificationFromIdentifiedShape, NO_MACHINE_ID_CLASSIFIER } from '../../bot-shape-to-classification'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
 import { extractPatchFilename } from '../../patch-path'
@@ -36,6 +39,8 @@ export type BuiltDinalabAdapterRecords = {
   resolvedClassifications: ClassificationRecord[]
   deployments: ReturnType<typeof buildDeploymentAndCameraDayRecords>['deployments']
   cameraDays: ReturnType<typeof buildDeploymentAndCameraDayRecords>['cameraDays']
+  /** Every session a patch was given, for `02_records/sessions.ndjson`. */
+  sessions: SessionRecord[]
 }
 
 export async function buildDinalabMothboxV1Records(params: {
@@ -95,6 +100,10 @@ export async function buildDinalabMothboxV1Records(params: {
     description: `Found ${botJsonPaths.length.toLocaleString()} bot + ${humanJsonPaths.length.toLocaleString()} human detection file${allDetectionPaths.length === 1 ? '' : 's'}`,
   })
 
+  const sessionsByDeploymentDir = new Map<string, SessionRecord[]>()
+  const sessionsUsed = new Map<string, SessionRecord>()
+  const deploymentMetadata = new Map<string, Partial<DeploymentRecord>>()
+
   for (let botFileIndex = 0; botFileIndex < allDetectionPaths.length; botFileIndex++) {
     const botRelativePath = allDetectionPaths[botFileIndex]
     const patchIdByPatchFileName = new Map<string, string>()
@@ -110,12 +119,20 @@ export async function buildDinalabMothboxV1Records(params: {
     }
 
     const jsonText = await io.source.readText(botRelativePath)
-    // Read the top-level `version` field as the detector identity (e.g. "Mothbot_yolo11m_..." or "HumanDetection")
+    // Read the top-level `version` field as the detector identity (e.g. "Mothbot_yolo11m_..." or "HumanDetection"),
+    // and the image size the shapes' pixel corners refer to.
     let detectorId: string | undefined
+    let imageWidth: number | undefined
+    let imageHeight: number | undefined
+    let fileDeploymentMetadata: Partial<DeploymentRecord> | undefined
     try {
-      const parsed = JSON.parse(jsonText) as { version?: unknown }
+      const parsed = JSON.parse(jsonText) as { version?: unknown; imageWidth?: unknown; imageHeight?: unknown }
       detectorId = typeof parsed.version === 'string' && parsed.version.trim() ? parsed.version.trim() : undefined
+      imageWidth = numberValue(parsed.imageWidth)
+      imageHeight = numberValue(parsed.imageHeight)
+      fileDeploymentMetadata = deploymentMetadataFromDetectionJson(parsed as Record<string, unknown>)
     } catch { /* readLegacyDetectionShapes will surface the error */ }
+    const fileSessions = await readDeploymentSessions({ io, botRelativePath, cache: sessionsByDeploymentDir })
 
     const shapes = readLegacyDetectionShapes(jsonText)
 
@@ -146,6 +163,17 @@ export async function buildDinalabMothboxV1Records(params: {
       const cameraDayId = buildCameraDayIdFromParts({ deploymentId: hierarchy.deploymentId, nightDate })
       const patchId = disambiguatePatchId({ basePatchId, cameraDayId, usedPatchIds })
       patchIdByPatchFileName.set(patchFileName, patchId)
+      if (fileDeploymentMetadata && !deploymentMetadata.has(hierarchy.deploymentId)) {
+        deploymentMetadata.set(hierarchy.deploymentId, fileDeploymentMetadata)
+      }
+      const placed = placeInSession({
+        sessions: fileSessions,
+        capturedAt: parseTimestampFromText(patchFileName),
+        deploymentID: hierarchy.deploymentId,
+        nightDate,
+        cameraDayId,
+        sessionsUsed,
+      })
 
       const assetPath = await resolvePatchAssetInPackage({
         io,
@@ -159,6 +187,8 @@ export async function buildDinalabMothboxV1Records(params: {
       const clusterId = clusterIdFromShape(shape)
       const clusteredAt = stringValue(shape.timestamp_cluster)
       const cropPoints = cropPointsFromShape(shape)
+      // Process labels its own boxes; for older files and hand labels, work it out.
+      const cropBox = parseLabelledBox(shape.box) ?? cornersRelFromPx({ points: cropPoints, imageWidth, imageHeight })
       const cropDirection = numberValue(shape.direction)
       const cropShapeType = stringValue(shape.shape_type)
 
@@ -174,6 +204,8 @@ export async function buildDinalabMothboxV1Records(params: {
         ...(clusterId !== undefined ? { cluster_id: clusterId } : {}),
         ...(clusteredAt ? { clustered_at: clusteredAt } : {}),
         ...(detectorId ? { detector_id: detectorId } : {}),
+        ...(placed.sessionId ? { session_id: placed.sessionId } : {}),
+        ...(placed.captureWindowId ? { capture_window_id: placed.captureWindowId } : {}),
       })
 
       const botAssetPath = toPackageRelativeAssetPath({
@@ -206,6 +238,7 @@ export async function buildDinalabMothboxV1Records(params: {
         ...(cropPoints ? { crop_points: cropPoints } : {}),
         ...(cropDirection !== undefined ? { crop_direction: cropDirection } : {}),
         ...(cropShapeType ? { crop_shape_type: cropShapeType } : {}),
+        ...(cropBox ? { crop_box: cropBox } : {}),
       })
 
       const identifierBot = typeof shape.identifier_bot === 'string' ? shape.identifier_bot.trim() : ''
@@ -258,7 +291,13 @@ export async function buildDinalabMothboxV1Records(params: {
       : `Copied ${patches.length.toLocaleString()} patches — preparing package records…`,
   })
 
-  const { deployments, cameraDays } = buildDeploymentAndCameraDayRecords({ datasetId, patches })
+  const built = buildDeploymentAndCameraDayRecords({ datasetId, patches })
+  const cameraDays = built.cameraDays
+  // Device, site and location details from the detection files (ontology: Deployment).
+  const deployments = built.deployments.map((deployment) => ({
+    ...deployment,
+    ...(deploymentMetadata.get(deployment.deployment_id) ?? {}),
+  }))
   const resolved = resolveCurrentClassifications({
     rows: flattenClassificationFiles({
       files: [
@@ -277,7 +316,90 @@ export async function buildDinalabMothboxV1Records(params: {
     resolvedClassifications: resolved,
     deployments,
     cameraDays,
+    sessions: [...sessionsUsed.values()],
   }
+}
+
+/** Reads `sessions.json` from the deployment folder above a night's detection file, once per folder. */
+async function readDeploymentSessions(params: {
+  io: DinalabAdapterIO
+  botRelativePath: string
+  cache: Map<string, SessionRecord[]>
+}): Promise<SessionRecord[]> {
+  const deploymentDir = dirnameRelative(dirnameRelative(params.botRelativePath))
+  const cached = params.cache.get(deploymentDir)
+  if (cached) return cached
+  const path = deploymentDir ? joinRelative(deploymentDir, SESSIONS_FILE_NAME) : SESSIONS_FILE_NAME
+  let sessions: SessionRecord[] = []
+  try {
+    if (await params.io.source.exists(path)) sessions = parseSessionsFile(await params.io.source.readText(path))
+  } catch {
+    sessions = []
+  }
+  params.cache.set(deploymentDir, sessions)
+  return sessions
+}
+
+/**
+ * The session and capture window for one patch: from the deployment's sessions file by
+ * capture time, else the default nightly session named like the night.
+ */
+function placeInSession(params: {
+  sessions: SessionRecord[]
+  capturedAt: number | null
+  deploymentID: string
+  nightDate: string
+  cameraDayId: string
+  sessionsUsed: Map<string, SessionRecord>
+}): { sessionId?: string; captureWindowId?: string } {
+  const { sessions, capturedAt, deploymentID, nightDate, cameraDayId, sessionsUsed } = params
+  const match = capturedAt != null ? findSessionForTime(sessions, capturedAt) : null
+  if (match) {
+    if (!sessionsUsed.has(match.session.sessionID)) {
+      sessionsUsed.set(match.session.sessionID, { ...match.session, deploymentID })
+    }
+    return { sessionId: match.session.sessionID, captureWindowId: match.window?.captureWindowID }
+  }
+  const fallback = defaultNightlySession({ deploymentID, nightDate, sessionID: cameraDayId })
+  if (!fallback) return {}
+  if (!sessionsUsed.has(fallback.sessionID)) sessionsUsed.set(fallback.sessionID, fallback)
+  return { sessionId: fallback.sessionID }
+}
+
+/** Device, site and location details a detection file carries (from Process's field-sheet step). */
+function deploymentMetadataFromDetectionJson(parsed: Record<string, unknown>): Partial<DeploymentRecord> | undefined {
+  const text = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = parsed[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+    }
+    return undefined
+  }
+  const coordinate = (key: string) => {
+    const value = Number(parsed[key])
+    return Number.isFinite(value) && value !== 0 ? value : undefined
+  }
+  const height = Number(parsed.ground_height)
+  const out: Partial<DeploymentRecord> = {
+    device_type: text('deviceType'),
+    device_type_id: text('deviceTypeID'),
+    firmware_version: text('firmwareVersion', 'firmware'),
+    site_name: text('siteName', 'site'),
+    site_description: text('siteDescription'),
+    land_use_type: text('landUseType'),
+    facing_direction: text('facingDirection'),
+    latitude: coordinate('latitude'),
+    longitude: coordinate('longitude'),
+    ...(Number.isFinite(height) && height >= 0 && parsed.ground_height !== null ? { height_above_ground_m: height } : {}),
+    ...(Array.isArray(parsed.attractors) && parsed.attractors.length ? { attractors: parsed.attractors as DeploymentRecord['attractors'] } : {}),
+    ...(parsed.target && typeof parsed.target === 'object' ? { target: parsed.target as Record<string, unknown> } : {}),
+    ...(parsed.sensor && typeof parsed.sensor === 'object' ? { sensor: parsed.sensor as Record<string, unknown> } : {}),
+  }
+  const device = text('deviceID', 'device')
+  if (device) out.device_name = device
+  const defined = Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined)) as Partial<DeploymentRecord>
+  return Object.keys(defined).length ? defined : undefined
 }
 
 async function resolveSourcePatchRelative(params: {

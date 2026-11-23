@@ -57,7 +57,7 @@ export async function loadWorkspaceSpeciesLists(): Promise<number> {
 export async function refreshWorkspaceSpeciesLists() {
   const count = await loadWorkspaceSpeciesLists()
   if (count > 0) {
-    toast.success('Species lists loaded', {
+    toast.success('Taxa lists loaded', {
       description: `${count} CSV/TSV file${count === 1 ? '' : 's'} found in your datasets folder`,
     })
   }

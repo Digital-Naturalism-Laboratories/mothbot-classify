@@ -1,5 +1,13 @@
 import { PATCH_MEASUREMENTS_RECORD } from '../../patch-measurements'
-import { serializeNdjsonLines } from '../../parse-ndjson'
+import { PACKAGE_SESSIONS_RECORD, serializeSessionRecords } from '../../sessions'
+import {
+  CAMEL_CASE_PACKAGE_VERSION,
+  fileKeyStyleOfManifestText,
+  manifestFromFile,
+  manifestToFile,
+  serializePackageRows,
+  type FileKeyStyle,
+} from '../../file-keys'
 import type { DinalabAdapterIO } from './adapter-io'
 import type { BuiltDinalabAdapterRecords } from './build-dinalab-adapter-records'
 import type { PackageSourceLayout } from '~/features/data-flow/1.ingest/resolve-package-source-layout'
@@ -31,11 +39,13 @@ export async function writeDinalabMothboxV1Package(params: {
     folderKind,
   } = params
 
+  // New packages are written in camelCase (package format 4; ontology: Field Names).
   const humanClassifierPaths = await writeBuiltPackageRecordFiles({
     io,
     built,
     humanClassifierId,
     clearPreviousGeneratedHumanClassifierFiles: true,
+    style: 'camel',
   })
 
   const sourcePathLabel =
@@ -47,7 +57,7 @@ export async function writeDinalabMothboxV1Package(params: {
 
   const manifestBase = {
     format: 'mothbox-next-dataset' as const,
-    version: 3,
+    version: CAMEL_CASE_PACKAGE_VERSION,
     dataset_id: datasetId,
     package_kind: (retainPatchesInSource || archiveSourceTree
       ? 'source_managed_working_dataset'
@@ -90,6 +100,7 @@ export async function writeDinalabMothboxV1Package(params: {
       patch_sources: '02_records/patch-sources.ndjson',
       deployments: '02_records/deployments.ndjson',
       camera_days: '02_records/camera-days.ndjson',
+      sessions: PACKAGE_SESSIONS_RECORD,
       morpho_links: '02_records/morpho-links.ndjson',
     },
     classification_sources: [
@@ -105,7 +116,7 @@ export async function writeDinalabMothboxV1Package(params: {
     hierarchy,
   }
 
-  await io.package.writeText('dataset.json', JSON.stringify(manifest, null, 2) + '\n')
+  await io.package.writeText('dataset.json', JSON.stringify(manifestToFile(manifest), null, 2) + '\n')
   await io.package.writeText(
     'adapter-report.json',
     JSON.stringify(
@@ -133,11 +144,19 @@ export async function writeMergedPackageRecords(params: {
 }): Promise<void> {
   const { io, built, humanClassifierId, patchCount } = params
 
+  // A merge keeps the package's own style.
+  let manifestText = ''
+  try {
+    manifestText = await io.package.readText('dataset.json')
+  } catch {
+    manifestText = ''
+  }
   await writeBuiltPackageRecordFiles({
     io,
     built,
     humanClassifierId,
     clearPreviousGeneratedHumanClassifierFiles: false,
+    style: fileKeyStyleOfManifestText(manifestText),
   })
 
   await io.package.writeText(
@@ -166,8 +185,10 @@ async function writeBuiltPackageRecordFiles(params: {
   built: BuiltDinalabAdapterRecords
   humanClassifierId: string
   clearPreviousGeneratedHumanClassifierFiles: boolean
+  style: FileKeyStyle
 }): Promise<string[]> {
-  const { io, built, clearPreviousGeneratedHumanClassifierFiles, humanClassifierId } = params
+  const { io, built, clearPreviousGeneratedHumanClassifierFiles, humanClassifierId, style } = params
+  const serialize = (rows: readonly object[]) => serializePackageRows(rows, style)
 
   const humanFiles = groupHumanRowsByClassifierFile({ rows: built.humanRows, fallbackClassifierId: humanClassifierId })
   const ownPath = humanClassifierFilePath(humanClassifierId)
@@ -178,20 +199,18 @@ async function writeBuiltPackageRecordFiles(params: {
     await clearPreviousGeneratedHumanClassifierFilesFromManifest({ io, keepPaths: humanClassifierPaths })
   }
 
-  await io.package.writeText('02_records/patches.ndjson', serializeNdjsonLines(built.patches))
-  await io.package.writeText('02_records/patch-sources.ndjson', serializeNdjsonLines(built.patchSources))
-  await io.package.writeText(PATCH_MEASUREMENTS_RECORD, serializeNdjsonLines(built.measurements))
-  await io.package.writeText('02_records/deployments.ndjson', serializeNdjsonLines(built.deployments))
-  await io.package.writeText('02_records/camera-days.ndjson', serializeNdjsonLines(built.cameraDays))
-  await io.package.writeText('03_classifications/_bot.ndjson', serializeNdjsonLines(built.botRows))
+  await io.package.writeText('02_records/patches.ndjson', serialize(built.patches))
+  await io.package.writeText('02_records/patch-sources.ndjson', serialize(built.patchSources))
+  await io.package.writeText(PATCH_MEASUREMENTS_RECORD, serialize(built.measurements))
+  await io.package.writeText('02_records/deployments.ndjson', serialize(built.deployments))
+  await io.package.writeText('02_records/camera-days.ndjson', serialize(built.cameraDays))
+  await io.package.writeText(PACKAGE_SESSIONS_RECORD, serializeSessionRecords(built.sessions ?? []))
+  await io.package.writeText('03_classifications/_bot.ndjson', serialize(built.botRows))
   for (const file of humanFiles) {
-    await io.package.writeText(file.path, serializeNdjsonLines(file.rows))
+    await io.package.writeText(file.path, serialize(file.rows))
   }
 
-  await io.package.writeText(
-    '02_records/current-classifications.ndjson',
-    serializeNdjsonLines(built.resolvedClassifications),
-  )
+  await io.package.writeText('02_records/current-classifications.ndjson', serialize(built.resolvedClassifications))
 
   return humanClassifierPaths
 }
@@ -217,7 +236,7 @@ async function readPreviousGeneratedHumanClassifierPaths(io: DinalabAdapterIO): 
     return []
   }
 
-  const sources = (raw as { classification_sources?: unknown })?.classification_sources
+  const sources = (manifestFromFile(raw) as { classification_sources?: unknown })?.classification_sources
   if (!Array.isArray(sources)) return []
 
   return uniqueStrings(

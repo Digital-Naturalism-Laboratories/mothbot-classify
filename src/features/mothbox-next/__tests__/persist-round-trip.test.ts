@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
 import { agreeWithIdentification, detectionsStore, resetDetections } from '~/stores/entities/detections'
@@ -17,6 +17,7 @@ import {
   walkFixtureFiles,
 } from './node-fixture-access'
 import { persistPackageClassifications } from '../persist/persist-human-classifications'
+import { migratePackageToCamelCase } from '../migrate-package-to-camel-case'
 import { userSessionStore } from '~/stores/ui'
 import { parseClassificationRecords } from '../parse-package-records'
 import type { ClassificationRecord } from '../records'
@@ -226,6 +227,63 @@ describe('persist round-trip (L4)', () => {
     const determination = current.find((row) => row.patch_id === foliumPatchId)
     expect(determination?.classification_type).toBe('accept')
     expect(determination?.taxon?.order).toBe('Diptera')
+  })
+
+  it('saves and reloads identifications in a package converted to camelCase', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'mothbox-next-'))
+    await cp(fixturePackageRoot('04_dinacon_lightweight_substrate'), tempRoot, { recursive: true })
+    const migrated = await migratePackageToCamelCase({
+      fs: {
+        readText: (p) => readFile(path.join(tempRoot, p), 'utf8'),
+        writeText: async (p, text) => {
+          await mkdir(path.dirname(path.join(tempRoot, p)), { recursive: true })
+          await writeFile(path.join(tempRoot, p), text)
+        },
+        exists: async () => true,
+        listNdjson: async (folder) => {
+          const rel = folder.replace(/\/+$/, '')
+          return (await readdir(path.join(tempRoot, rel))).filter((n) => n.endsWith('.ndjson')).sort().map((n) => `${rel}/${n}`)
+        },
+        remove: (p) => rm(path.join(tempRoot, p)),
+      },
+    })
+    expect(migrated.status).toBe('migrated')
+
+    const ingest = async () => {
+      const walked = await walkFixtureFiles(tempRoot)
+      const indexed = await Promise.all(
+        walked.map(async (f) => {
+          const textContent = (await readFile(path.join(tempRoot, f.path))).toString('utf8')
+          return { path: f.path, name: f.name, size: f.size, file: { text: async () => textContent } as File }
+        }),
+      )
+      await ingestMothboxNextPackageFromIndexedFiles({ files: indexed as any })
+    }
+    await ingest()
+    userSessionStore.set({ initials: 'bf' })
+
+    const foliumPatchId = 'hopeCobo_2025_06_22__04_58_06_HDR0_0_Mothbot_yolo11m_4500_imgsz1600_b1_2024-01-18.pt'
+    const before = detectionsStore.get()?.[foliumPatchId]
+    expect(before?.taxon?.species).toBe('folium')
+    detectionsStore.set({
+      ...(detectionsStore.get() || {}),
+      [foliumPatchId]: {
+        ...updateDetectionWithTaxon({ existing: before!, taxon: { kingdom: 'Animalia', class: 'Insecta', order: 'Coleoptera' }, label: 'Coleoptera' }),
+        humanClassifierId: 'bf',
+      },
+    })
+    await persistPackageClassifications({ writer: createNodePackageTextWriter(tempRoot), leafGroupId: before!.leafGroupId })
+
+    const lines = (await readFile(path.join(tempRoot, '03_classifications/bf.ndjson'), 'utf8')).trim().split('\n')
+    const last = JSON.parse(lines[lines.length - 1]!)
+    expect(last).toMatchObject({ patchID: foliumPatchId, identifierType: 'human', classificationType: 'taxon' })
+    expect(last.patch_id).toBeUndefined()
+
+    detectionsStore.set({})
+    patchesStore.set({})
+    mothboxNextPackageStore.set(null)
+    await ingest()
+    expect(detectionsStore.get()?.[foliumPatchId]?.taxon?.order).toBe('Coleoptera')
   })
 
   it('clears human taxonomy when resetting a patch-only package without bot rows', async () => {

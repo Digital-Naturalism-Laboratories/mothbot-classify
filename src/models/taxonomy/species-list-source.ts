@@ -22,11 +22,43 @@ export const GBIF_DOWNLOAD_PAGE = 'https://www.gbif.org/occurrence/download/'
 export const COL_XR_CHECKLIST_KEY = '7ddf754f-d193-4cc9-b351-99906754a03b'
 export const GBIF_SIDECAR_SUFFIX = '.gbif.json'
 
-export type TaxonIDSource = 'gbif-backbone' | 'col'
+/**
+ * Taxon key styles (ontology: Taxon Keys). A key is only meaningful with its style,
+ * because a key from one source can't be looked up in another.
+ */
+export type TaxonKeyStyle = 'gbif' | 'col' | 'bold' | 'inat' | 'fieldguide'
+
+export const TAXON_KEY_STYLES: readonly TaxonKeyStyle[] = ['gbif', 'col', 'bold', 'inat', 'fieldguide']
+
+export const TAXON_KEY_STYLE_LABELS: Record<TaxonKeyStyle, string> = {
+  gbif: 'GBIF Backbone Taxonomy',
+  col: 'Catalogue of Life (COL XR, via GBIF)',
+  bold: 'BOLD BIN',
+  inat: 'iNaturalist taxon ID',
+  fieldguide: 'Fieldguide UUID',
+}
+
+/**
+ * The key style of a record's `taxonID`. `'gbif-backbone'` is the name older versions
+ * stored for `'gbif'`; it is still read, and `normalizeTaxonKeyStyle` maps it.
+ */
+export type TaxonIDSource = TaxonKeyStyle | 'gbif-backbone'
 
 export const TAXON_ID_SOURCE_LABELS: Record<TaxonIDSource, string> = {
-  'gbif-backbone': 'GBIF Backbone Taxonomy',
-  col: 'Catalogue of Life (COL XR, via GBIF)',
+  ...TAXON_KEY_STYLE_LABELS,
+  'gbif-backbone': TAXON_KEY_STYLE_LABELS.gbif,
+}
+
+/** A key style from any stored form: `gbif-backbone`, a label, or the style name. */
+export function normalizeTaxonKeyStyle(value: unknown): TaxonKeyStyle | undefined {
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (!v) return undefined
+  if (v === 'gbif' || v === 'gbif-backbone' || v.startsWith('gbif backbone')) return 'gbif'
+  if (v === 'col' || v.startsWith('catalogue of life')) return 'col'
+  if (v === 'bold' || v.startsWith('bold')) return 'bold'
+  if (v === 'inat' || v.startsWith('inaturalist')) return 'inat'
+  if (v === 'fieldguide' || v.startsWith('fieldguide')) return 'fieldguide'
+  return undefined
 }
 
 /**
@@ -131,7 +163,7 @@ export function speciesListNameFromGbif(info: GbifDownloadInfo, fallback: string
  * Which ID system a list's taxon keys use. Backbone keys are always integers;
  * COL XR keys are alphanumeric. Majority vote over the given keys.
  */
-export function detectTaxonIDSource(keys: Iterable<unknown>): TaxonIDSource | undefined {
+export function detectTaxonIDSource(keys: Iterable<unknown>): TaxonKeyStyle | undefined {
   let numeric = 0
   let alpha = 0
   for (const key of keys) {
@@ -141,7 +173,7 @@ export function detectTaxonIDSource(keys: Iterable<unknown>): TaxonIDSource | un
     else alpha++
   }
   if (!numeric && !alpha) return undefined
-  return alpha > numeric ? 'col' : 'gbif-backbone'
+  return alpha > numeric ? 'col' : 'gbif'
 }
 
 /**
@@ -149,10 +181,10 @@ export function detectTaxonIDSource(keys: Iterable<unknown>): TaxonIDSource | un
  * before sources were tracked, which all came from integer GBIF Backbone keys
  * unless they were alphanumeric COL keys.
  */
-export function inferTaxonIDSource(taxonID: unknown): TaxonIDSource | undefined {
+export function inferTaxonIDSource(taxonID: unknown): TaxonKeyStyle | undefined {
   const k = taxonID == null ? '' : String(taxonID).trim()
   if (!k) return undefined
-  return /^\d+$/.test(k) ? 'gbif-backbone' : 'col'
+  return /^\d+$/.test(k) ? 'gbif' : 'col'
 }
 
 const COUNTRY_NAMES: Record<string, string> = {

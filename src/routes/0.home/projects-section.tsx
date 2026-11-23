@@ -280,7 +280,7 @@ function ProjectsTreeEmptyState(props: { projectName: string }) {
 
   return (
     <div className='shadow-border rounded-xl bg-white p-8 text-sm text-neutral-600'>
-      No nights or hierarchy data for {projectName} yet. Open a dataset folder or wait for ingest to finish.
+      No sessions or hierarchy data for {projectName} yet. Open a dataset folder or wait for ingest to finish.
     </div>
   )
 }
@@ -521,8 +521,8 @@ function DeploymentItem(props: DeploymentItemProps) {
                 expanded={isDeploymentExpanded}
                 panelId={deploymentPanelId}
                 onToggle={() => onToggleDeployment(deployment.id)}
-                expandAriaLabel={`Expand nights for ${deployment.name}`}
-                collapseAriaLabel={`Collapse nights for ${deployment.name}`}
+                expandAriaLabel={`Expand sessions for ${deployment.name}`}
+                collapseAriaLabel={`Collapse sessions for ${deployment.name}`}
                 titleClassName={projectsTreeDeepRowTitleClass}
               >
                 {deployment.name}
@@ -574,7 +574,7 @@ function NightsList(props: NightsListProps) {
             <Link
               to={link.to}
               params={link.params}
-              aria-label={`Open night ${night.name}`}
+              aria-label={`Open session ${night.name}`}
               className={cn(
                 'group/night block h-32 w-full cursor-pointer rounded-md bg-stone-50 hover:bg-blue-100',
                 'transition-[background-color] duration-150 ease-out',

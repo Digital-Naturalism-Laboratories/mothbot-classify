@@ -1,3 +1,4 @@
+import { fromFileKeys } from './file-keys'
 import type {
   CameraDayRecord,
   ClassificationRecord,
@@ -20,7 +21,8 @@ export function parseNdjsonObjectLines<T>(params: {
     const trimmed = lines[index]?.trim()
     if (!trimmed) continue
 
-    const parsed = JSON.parse(trimmed) as unknown
+    // Package files may be snake_case (format ≤ 3) or camelCase (format 4); see file-keys.ts.
+    const parsed = fromFileKeys(JSON.parse(trimmed) as unknown)
     const row = parseLine(parsed, index + 1)
     if (row) rows.push(row)
   }

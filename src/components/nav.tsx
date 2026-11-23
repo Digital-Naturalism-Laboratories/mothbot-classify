@@ -127,7 +127,7 @@ export function Nav() {
             isSpeciesLoading ? (
               <div className='flex items-center gap-8 px-8 py-4 text-12 text-neutral-600'>
                 <Loader size={14} className='inline-block' />
-                <span>🌀 Loading species lists…</span>
+                <span>🌀 Loading taxa lists…</span>
               </div>
             ) : (
               <button
@@ -248,7 +248,7 @@ export function Nav() {
         console.log('✅ Night summary heal report', report)
         return `✅ Summary heal complete: ${formatNightSummaryHealSummary(report)}`
       },
-      error: '🚨 Failed to heal night summaries',
+      error: '🚨 Failed to heal session summaries',
     })
     void promise.finally(() => setIsHealingSummaries(false))
   }
@@ -406,7 +406,7 @@ function getBreadcrumbs(params: {
   const nightName = nights?.[nightKey]?.name ?? leafGroupId
   items.push({
     label: nightName,
-    entityName: 'Night',
+    entityName: 'Session',
     href: `/projects/${projectId}/deployments/${deploymentId}/nights/${leafGroupId}`,
   })
 

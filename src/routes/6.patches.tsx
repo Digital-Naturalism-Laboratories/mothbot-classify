@@ -17,7 +17,7 @@ export function Patches() {
   const deployment = project.deployments.find((d) => d.name === params.deploymentId)
   if (!deployment) return <p className='text-sm text-neutral-500'>Deployment not found</p>
   const night = deployment.nights.find((n) => n.name === params.nightId)
-  if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
+  if (!night) return <p className='text-sm text-neutral-500'>Session not found</p>
 
   const photos = night.photos
   const patches = photos.flatMap((p) => p.patches)

@@ -1,3 +1,5 @@
+import { cornersPxFromBox, type LabelledBox } from './box-formats'
+
 /**
  * Geometry helpers for drawing a detection's bounding box over its source photo.
  *
@@ -15,8 +17,21 @@
  *
  * Returns null when there's nothing usable to draw.
  */
-export function buildDetectionPolygonPoints(params: { points?: number[][] }): string | null {
-  const { points } = params
+export function buildDetectionPolygonPoints(params: {
+  points?: number[][]
+  /** A labelled box, used when there are no pixel points (e.g. only relative corners). */
+  box?: LabelledBox
+  /** The photo's natural size, needed to place a relative box. */
+  imageWidth?: number
+  imageHeight?: number
+}): string | null {
+  const { box, imageWidth, imageHeight } = params
+  const points =
+    Array.isArray(params.points) && params.points.length >= 2
+      ? params.points
+      : box
+        ? cornersPxFromBox({ box, imageWidth, imageHeight })
+        : undefined
   if (!Array.isArray(points) || points.length < 2) return null
 
   const valid = points.filter(

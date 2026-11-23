@@ -1,3 +1,5 @@
+import { serializePackageRows } from './file-keys'
+import { fileKeyStyleOfPackageHandle } from './package-file-style'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import {
   morphoLinksStore,
@@ -5,7 +7,6 @@ import {
   setMorphoLinksForActiveDataset,
 } from '~/features/data-flow/3.persist/links'
 import type { MorphoLinksMap } from '~/features/data-flow/3.persist/links'
-import { serializeNdjsonLines } from './parse-ndjson'
 import { parseMorphoLinkRecords } from './parse-package-records'
 import type { MorphoLinkRecord } from './records'
 import type { PackageDataAccess } from './load-package-data'
@@ -180,7 +181,7 @@ export async function migrateLegacyMorphoLinksInPackage(params: {
   if (applyToActiveDataset) await saveMorphoLinksToIdb(linksToPersist)
 
   const rows = morphoLinksMapToRecords(linksToPersist)
-  await writeTextFile(packageHandle, PACKAGE_MORPHO_LINKS_RECORD, serializeNdjsonLines(rows))
+  await writeTextFile(packageHandle, PACKAGE_MORPHO_LINKS_RECORD, serializePackageRows(rows, await fileKeyStyleOfPackageHandle(packageHandle)))
 
   let removedLegacyFile = false
   for (const legacyPath of [LEGACY_PACKAGE_MORPHO_LINKS_JSON, DEPRECATED_MORPHO_LINKS_JSON]) {

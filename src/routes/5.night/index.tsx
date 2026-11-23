@@ -52,7 +52,7 @@ export function Night() {
     )
   }
 
-  if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
+  if (!night) return <p className='text-sm text-neutral-500'>Session not found</p>
 
   return <NightView leafGroupId={leafGroupId} />
 }

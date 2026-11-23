@@ -1,3 +1,5 @@
+import { serializePackageRows } from './file-keys'
+import { fileKeyStyleOfPackageHandle } from './package-file-style'
 import { toast } from 'sonner'
 import {
   deriveSourcePhotoAssetPathFromBotPath,
@@ -9,7 +11,6 @@ import {
 } from '~/features/data-flow/1.ingest/reserved-paths'
 import { readTextFile, writeTextFile, type FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 import { parsePatchSourceRecords } from './parse-package-records'
-import { serializeNdjsonLines } from './parse-ndjson'
 import type { PatchSourceRecord } from './records'
 
 const PATCH_SOURCES_RECORD = '02_records/patch-sources.ndjson'
@@ -169,7 +170,7 @@ export async function migratePackageSourceToArchiveIfNeeded(params: {
   const rewritten = rewritePatchSourcesForArchivePrefix({ patchSources, indexedPaths })
 
   try {
-    await writeTextFile(packageHandle, PATCH_SOURCES_RECORD, serializeNdjsonLines(rewritten))
+    await writeTextFile(packageHandle, PATCH_SOURCES_RECORD, serializePackageRows(rewritten, await fileKeyStyleOfPackageHandle(packageHandle)))
     await patchAdapterReportSourcePrefix(packageHandle)
   } catch (err) {
     console.warn('🚨 migratePackageSourceArchive: write failed', { err })

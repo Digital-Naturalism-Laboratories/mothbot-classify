@@ -19,15 +19,31 @@ import { botAlgorithmLabel } from '~/features/mothbox-next/bot-shape-to-classifi
 import { currentHumanClassifierId } from '~/features/mothbox-next/human-classifier-id'
 import { speciesListsStore } from '~/features/data-flow/2.identify/species-list.store'
 import {
-  TAXON_ID_SOURCE_LABELS,
   canonicalSpeciesListRef,
   inferTaxonIDSource,
+  normalizeTaxonKeyStyle,
 } from '~/models/taxonomy/species-list-source'
+import { taxonKeysOf } from '~/models/taxonomy/taxon-keys'
+import { nonTargetPathOf } from '~/models/non-target'
+import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { DETERMINATION_ALGORITHM } from '~/features/mothbox-next/resolve-classifications'
+import type { DeploymentRecord } from '~/features/mothbox-next/records'
+import type { SessionRecord } from '~/features/mothbox-next/sessions'
 
+/**
+ * Columns of the Darwin Core CSV export. Field names are camelCase (ontology: Field Names),
+ * keeping Darwin Core's own names where it has them. Renamed from earlier versions:
+ * species_list_doi → taxaListDOI, taxonID_source → taxonIDSource (now a key style such
+ * as `col`), detectionBy → detectedBy, detection_confidence → detectionScore,
+ * ID_confidence → identificationScore, mothbox → deviceID, filepath → filePath,
+ * original_mothbox_identifciation → machineIdentification, cluster_ID → clusterID,
+ * temporal_subcluster_ID → trackID, pixel_mass_* → pixelMass*, UTCOFFSET → utcOffset,
+ * deployment → deploymentID, image_id → imageID.
+ */
 const DARWIN_COLUMNS = [
   // Taxonomy columns
-  'species_list_doi',
-  'species_list_exclusions',
+  'taxaListDOI',
+  'taxaListExclusions',
   'kingdom',
   'phylum',
   'class',
@@ -37,37 +53,55 @@ const DARWIN_COLUMNS = [
   'species',
   'morphospecies',
   'taxonID',
-  'taxonID_source',
+  'taxonIDSource',
+  'gbifTaxonKey',
+  'colTaxonKey',
+  'boldBIN',
+  'inatTaxonID',
+  'fieldguideID',
   'commonName',
   'scientificName',
   'name',
+  'nonTarget',
+  'nonTargetCategory',
 
-  // Mothbox specific Metadata
-  'deployment',
-  'image_id',
+  // Identification
   'identifiedBy',
-  'detectionBy',
-  'detection_confidence',
-  'ID_confidence',
-  'mothbox',
-  'filepath',
-  'original_mothbox_identifciation',
-  'original_mothbox_species_list_doi',
-  'original_mothbox_species_list_exclusions',
-  'cluster_ID',
-  'temporal_subcluster_ID',
+  'identifierType',
+  'identificationScore',
+  'determinationAlgorithm',
+  'machineIdentification',
+  'machineTaxaListDOI',
+  'machineTaxaListExclusions',
+
+  // Detection and device
+  'deploymentID',
+  'imageID',
+  'detectedBy',
+  'detectionScore',
+  'deviceID',
+  'deviceType',
+  'filePath',
+  'clusterID',
+  'trackID',
   'width',
   'height',
   'area',
-  'pixel_mass_pixels',
-  'pixel_mass_mm2',
-  'pixel_mass_method',
+  'pixelMassPixels',
+  'pixelMassMm2',
+  'pixelMassMethod',
 
   // Date/Time
   'eventDate',
   'eventTime',
-  'UTCOFFSET',
+  'utcOffset',
   'verbatimEventDate',
+
+  // Events: deployment → session → capture window → capture (ontology: Events)
+  'sessionID',
+  'sessionStart',
+  'sessionEnd',
+  'captureWindowID',
 
   // Other
   'basisOfRecord',
@@ -75,8 +109,6 @@ const DARWIN_COLUMNS = [
   'parentEventID',
   'eventID',
   'occurrenceID',
-
-  // TODO. In the future we should have taxonomy at the end
 ] as const
 
 type DarwinColumn = (typeof DARWIN_COLUMNS)[number]
@@ -248,10 +280,11 @@ export async function generateNightDarwinCSVString(params: { leafGroupId: string
   if (!nightDiskPath) return null
 
   const rowObjs: DarwinRow[] = []
+  const context = buildDarwinExportContext()
   for (const d of detections) {
     const patch = allPatches[d.patchId]
     const photo = allPhotos[d.photoId]
-    const rowObj = buildDarwinShapeFromDetection({ detection: d, patch, photo, leafGroupId, nightDiskPath })
+    const rowObj = buildDarwinShapeFromDetection({ detection: d, patch, photo, leafGroupId, nightDiskPath, context })
     rowObjs.push(rowObj)
   }
 
@@ -302,8 +335,11 @@ export function buildDarwinShapeFromDetection(params: {
   photo?: PhotoEntity
   leafGroupId: string
   nightDiskPath: string
+  /** Sessions and deployment details from the open package; built once per export. */
+  context?: DarwinExportContext
 }): DarwinRow {
   const { detection, patch, photo, leafGroupId, nightDiskPath } = params
+  const context = params.context ?? buildDarwinExportContext()
   const baseName = getPhotoBaseFromPhotoId(photo?.id || '')
   const capturedAt = typeof patch?.capturedAt === 'string' ? patch.capturedAt.trim() : ''
   const verbatimEventDate = extractVerbatimEventDateFromPhotoBase({ baseName }) || capturedAt
@@ -327,17 +363,17 @@ export function buildDarwinShapeFromDetection(params: {
   const morphospecies = detection?.morphospecies || ''
   const taxonID = String(taxonMetadata.taxonID || '')
   // Lists from the GBIF Backbone and Catalogue of Life eras can be mixed in one
-  // project, and a bare taxonID doesn't say which system it's from.
-  const taxonIDSource = taxonID ? taxonMetadata.taxonIDSource ?? inferTaxonIDSource(taxonID) : undefined
-  const taxonID_source = taxonIDSource ? TAXON_ID_SOURCE_LABELS[taxonIDSource] : ''
+  // project, and a bare taxonID doesn't say which key style it is (ontology: Taxon Keys).
+  const taxonIDSource = taxonID ? normalizeTaxonKeyStyle(taxonMetadata.taxonIDSource) ?? inferTaxonIDSource(taxonID) ?? '' : ''
+  const keys = isError ? {} : taxonKeysOf(detection?.taxon)
   const commonName = taxonMetadata.vernacularName || ''
   // Each ID carries the species list it was made from: the final ID's (human or
   // bot) and, separately, the original bot ID's — they can differ when a human
   // re-identifies with another list.
-  const species_list_doi = speciesListRefForExport(taxonMetadata.speciesListDOI)
-  const species_list_exclusions = isError ? '' : detection?.speciesListExclusions || ''
-  const original_mothbox_species_list_doi = speciesListRefForExport(detection?.originalMothboxSpeciesList)
-  const original_mothbox_species_list_exclusions = detection?.originalMothboxSpeciesListExclusions || ''
+  const taxaListDOI = speciesListRefForExport(taxonMetadata.speciesListDOI)
+  const taxaListExclusions = isError ? '' : detection?.speciesListExclusions || ''
+  const machineTaxaListDOI = speciesListRefForExport(detection?.originalMothboxSpeciesList)
+  const machineTaxaListExclusions = detection?.originalMothboxSpeciesListExclusions || ''
 
   // For Non-Target, scientificName is blank and name holds the Non-Target label.
   // Use validated scientificName (no morphospecies/numbers)
@@ -353,20 +389,29 @@ export function buildDarwinShapeFromDetection(params: {
 
   const nightParts = parseNightIdParts({ leafGroupId })
   const datasetID = nightParts ? `${nightParts.project}_${nightParts.deployment}_${nightParts.night}` : leafGroupId.replaceAll('/', '_')
-  const parentEventID = nightParts ? `${nightParts.project}_${nightParts.deployment}` : datasetID
   const eventID = photo?.id || ''
   // One occurrence per detection unless tracking merged them (ontology: Occurrence).
-  const occurrenceID = detection?.occurrenceId || patch?.id || ''
+  const occurrenceID = detection?.occurrenceId || patch?.id || detection?.patchId || ''
 
   // Deployment is datasetID without the trailing night date segment
-  const deployment = extractDeploymentFromDatasetID({ datasetID })
-  const mothbox = extractMothboxFromNightDiskPath({ nightDiskPath })
-  const detectionBy = detection?.botClassifierId
+  const deploymentID = extractDeploymentFromDatasetID({ datasetID })
+  const deploymentRecord = context.deploymentByPatch.get(detection?.patchId ?? '')
+  const deviceID = deploymentRecord?.device_name || extractMothboxFromNightDiskPath({ nightDiskPath })
+  const deviceType = deploymentRecord?.device_type || ''
+
+  // Events nest: deployment → session → capture window → capture (this photo).
+  const session = detection?.sessionId ? context.sessionsById.get(detection.sessionId) : undefined
+  const sessionID = detection?.sessionId ?? ''
+  const captureWindowID = detection?.captureWindowId ?? ''
+  const parentEventID =
+    captureWindowID || sessionID || (nightParts ? `${nightParts.project}_${nightParts.deployment}` : datasetID)
+
+  const detectedBy = detection?.botClassifierId
     ? botAlgorithmLabel(detection.botClassifierId)
     : extractDetectionByFromPatchId({ patchId: patch?.id || '', photoBase: baseName })
-  const detection_confidence = detection?.score != null ? String(detection.score) : ''
-  const identifiedBy = detection?.detectedBy === 'user' ? identifiedByForDetection(detection) : ''
-  const ID_confidence = ''
+  const detectionScore = detection?.score != null ? String(detection.score) : ''
+  const isPersonsIdentification = detection?.detectedBy === 'user'
+  const identifiedBy = isPersonsIdentification ? identifiedByForDetection(detection) : ''
   const geometryFields = buildGeometryExportFields({ detection })
 
   const row: DarwinRow = {
@@ -378,11 +423,17 @@ export function buildDarwinShapeFromDetection(params: {
     verbatimEventDate,
     eventDate,
     eventTime,
-    UTCOFFSET: utcOffset,
-    detectionBy,
-    detection_confidence,
+    utcOffset,
+    sessionID,
+    sessionStart: session?.start ?? '',
+    sessionEnd: session?.end ?? '',
+    captureWindowID,
+    detectedBy,
+    detectionScore,
     identifiedBy,
-    ID_confidence,
+    identifierType: isPersonsIdentification ? 'human' : detection?.botClassifierId ? 'machine' : '',
+    identificationScore: '',
+    determinationAlgorithm: context.determinationAlgorithm,
     kingdom,
     phylum,
     class: klass,
@@ -392,25 +443,53 @@ export function buildDarwinShapeFromDetection(params: {
     species,
     morphospecies,
     taxonID,
-    taxonID_source,
+    taxonIDSource,
+    gbifTaxonKey: keys.gbif ?? '',
+    colTaxonKey: keys.col ?? '',
+    boldBIN: keys.bold ?? '',
+    inatTaxonID: keys.inat ?? '',
+    fieldguideID: keys.fieldguide ?? '',
     commonName,
     scientificName,
     name,
-    species_list_doi,
-    species_list_exclusions,
-    filepath,
-    mothbox,
-    original_mothbox_identifciation: detection?.originalMothboxLabel || '',
-    original_mothbox_species_list_doi,
-    original_mothbox_species_list_exclusions,
+    nonTarget: isError ? 'true' : '',
+    nonTargetCategory: isError ? nonTargetPathOf(detection?.label).join('/') : '',
+    taxaListDOI,
+    taxaListExclusions,
+    filePath: filepath,
+    deviceID,
+    deviceType,
+    machineIdentification: detection?.originalMothboxLabel || '',
+    machineTaxaListDOI,
+    machineTaxaListExclusions,
     ...geometryFields,
-    deployment,
-    image_id,
-    pixel_mass_pixels: detection?.pixelMassPixels != null ? String(detection.pixelMassPixels) : '',
-    pixel_mass_mm2: detection?.pixelMassMm2 != null ? String(detection.pixelMassMm2) : '',
-    pixel_mass_method: detection?.pixelMassMethod ?? '',
+    deploymentID,
+    imageID: image_id,
+    pixelMassPixels: detection?.pixelMassPixels != null ? String(detection.pixelMassPixels) : '',
+    pixelMassMm2: detection?.pixelMassMm2 != null ? String(detection.pixelMassMm2) : '',
+    pixelMassMethod: detection?.pixelMassMethod ?? '',
   }
   return row
+}
+
+export type DarwinExportContext = {
+  sessionsById: Map<string, SessionRecord>
+  deploymentByPatch: Map<string, DeploymentRecord>
+  /** The determination algorithm when a package is open (its determinations come from it). */
+  determinationAlgorithm: string
+}
+
+/** Sessions and deployment details from the open package, looked up once per export. */
+export function buildDarwinExportContext(): DarwinExportContext {
+  const loaded = mothboxNextPackageStore.get()?.loaded
+  const sessionsById = new Map((loaded?.sessions ?? []).map((s) => [s.sessionID, s]))
+  const deploymentsById = new Map((loaded?.deployments ?? []).map((d) => [d.deployment_id, d]))
+  const deploymentByPatch = new Map<string, DeploymentRecord>()
+  for (const patch of loaded?.patches ?? []) {
+    const deployment = patch.deployment_id ? deploymentsById.get(patch.deployment_id) : undefined
+    if (deployment) deploymentByPatch.set(patch.patch_id, deployment)
+  }
+  return { sessionsById, deploymentByPatch, determinationAlgorithm: loaded ? DETERMINATION_ALGORITHM : '' }
 }
 
 /**
@@ -539,8 +618,8 @@ function buildGeometryExportFields(params: { detection: DetectionEntity }) {
   const patchSizeFields = derivePatchDimensionsFromPoints({ points: detection?.points })
 
   return {
-    cluster_ID: clusterFields.clusterId,
-    temporal_subcluster_ID: clusterFields.temporalSubclusterId,
+    clusterID: clusterFields.clusterId,
+    trackID: clusterFields.temporalSubclusterId,
     width: patchSizeFields.width,
     height: patchSizeFields.height,
     area: patchSizeFields.area,

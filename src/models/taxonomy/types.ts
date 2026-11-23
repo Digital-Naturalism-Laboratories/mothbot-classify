@@ -1,4 +1,4 @@
-import type { TaxonIDSource } from './species-list-source'
+import type { TaxonIDSource, TaxonKeyStyle } from './species-list-source'
 
 /**
  * Core taxonomy types used throughout the application.
@@ -22,11 +22,17 @@ export const RANK_LABELS: Record<TaxonomyRank, string> = {
 export type TaxonRecord = {
   taxonID?: string | number
   /**
-   * Which ID system `taxonID` belongs to — GBIF Backbone integers or Catalogue
-   * of Life (COL XR) codes. Lists from both eras can be mixed in one project, so
-   * the bare ID is ambiguous without it. See species-list-source.ts.
+   * Which key style `taxonID` belongs to (ontology: Taxon Keys) — e.g. GBIF Backbone
+   * integers or Catalogue of Life (COL XR) codes. Lists from both eras can be mixed
+   * in one project, so the bare ID is ambiguous without it. Older data stores
+   * `'gbif-backbone'` for `'gbif'`. See species-list-source.ts.
    */
   taxonIDSource?: TaxonIDSource
+  /**
+   * Other keys known for the same taxon, by style — e.g. the BOLD BIN of a species
+   * from a Catalogue of Life list. `taxonKeysOf` merges in `taxonID` itself.
+   */
+  taxonKeys?: Partial<Record<TaxonKeyStyle, string>>
   scientificName: string
   taxonRank?: string
   taxonomicStatus?: string

@@ -5,6 +5,7 @@
  * Mass tab, which is often run later). Reads the detection JSONs and writes the
  * derived-only `patch-measurements.ndjson`; no other package file is touched.
  */
+import { fileKeyStyleOfManifestText, serializePackageRows } from './file-keys'
 import type { DinalabAdapterIO } from './adapters/dinalab-mothbox-v1/adapter-io'
 import { parseNdjson } from './incremental-nights'
 import {
@@ -193,8 +194,9 @@ export async function upsertPatchMeasurements(io: DinalabAdapterIO, rows: PatchM
     changed += 1
   }
   if (changed) {
-    const text = Object.values(byPatch).map((row) => JSON.stringify(row)).join('\n')
-    await io.package.writeText(PATCH_MEASUREMENTS_RECORD, `${text}\n`)
+    // In the package's own style (camelCase from format 4).
+    const style = fileKeyStyleOfManifestText(await readPackageSafe(io, 'dataset.json'))
+    await io.package.writeText(PATCH_MEASUREMENTS_RECORD, serializePackageRows(Object.values(byPatch), style))
   }
   return changed
 }

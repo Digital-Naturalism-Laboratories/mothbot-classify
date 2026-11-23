@@ -1,3 +1,5 @@
+import { migratePackageToCamelCaseIfNeeded, type CamelCaseMigrationResult } from '~/features/mothbox-next/migrate-package-to-camel-case'
+import { ensureReadWritePermission } from '~/features/data-flow/3.persist/files.persistence'
 import { toast } from 'sonner'
 import { resetAllEntityStores } from '~/stores/entities'
 import { pickerErrorStore } from '~/stores/ui'
@@ -65,6 +67,15 @@ export async function openMothboxNextPackageFromHandle(
   try {
     await persistPickedDirectory(handle)
     resetAllEntityStores()
+
+    // Older packages (format ≤ 3) are converted to camelCase field names before anything
+    // is indexed, with a checked backup that is removed only once every file reads the
+    // same as before. A failed conversion puts the originals back and keeps the backup.
+    await migratePackageToCamelCaseIfNeeded({
+      handle,
+      canWrite: () => ensureReadWritePermission(handle),
+      notify: notifyCamelCaseMigration,
+    }).catch((err) => console.warn('🚨 openMothboxNextPackage: camelCase conversion skipped', err))
 
     const indexed = await collectIndexedFromDirectoryHandle(handle, { hydrateFiles: false })
     const normalizedIndexed = normalizeIndexedPathsToPackageRoot(indexed)
@@ -205,4 +216,19 @@ async function hydrateIndexedForIngest(
 ) {
   const { hydrateIndexedHandleFiles } = await import('./files.fs')
   return hydrateIndexedHandleFiles(indexed)
+}
+
+function notifyCamelCaseMigration(result: CamelCaseMigrationResult) {
+  if (result.status === 'migrated') {
+    toast.success('Dataset files updated', {
+      description: `${result.fileCount} files now use camelCase field names. Every file was checked against a backup, which was then removed.`,
+    })
+  } else if (result.status === 'failed') {
+    toast.error('Could not update the dataset’s file format', {
+      description: `${result.error}. ${
+        result.restored ? 'The original files were put back; the dataset is unchanged.' : 'Some original files could not be put back.'
+      }${result.backupPath ? ` A backup is kept in ${result.backupPath}/.` : ''}`,
+      duration: Infinity,
+    })
+  }
 }

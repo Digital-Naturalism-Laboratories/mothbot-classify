@@ -23,7 +23,7 @@ export function NightPartsSection(props: NightPartsSectionProps) {
 
   return (
     <div className={cn('rounded-md border border-amber-300 bg-amber-50 text-amber-900 p-12', className)}>
-      <div className='text-14 font-semibold mb-4'>Large night · shown in parts</div>
+      <div className='text-14 font-semibold mb-4'>Large session · shown in parts</div>
       <p className='text-12 leading-snug mb-8'>
         {total.toLocaleString()} patches is more than Classify can show smoothly at once, so this night is split by
         capture time. Your IDs, clusters, and exports still cover the whole night.
@@ -33,7 +33,7 @@ export function NightPartsSection(props: NightPartsSectionProps) {
           <ChevronLeftIcon className='h-14 w-14' />
         </button>
         <select
-          aria-label='Night part'
+          aria-label='Session part'
           className='min-w-0 flex-1 rounded border border-amber-300 bg-white px-6 py-4 text-12 text-ink-primary'
           value={selected === 'all' ? 'all' : String(selected)}
           onChange={(e) => onChange(e.target.value === 'all' ? 'all' : Number(e.target.value))}

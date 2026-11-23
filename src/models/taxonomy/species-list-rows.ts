@@ -5,6 +5,7 @@
 import type { TaxonRecord } from './types'
 import { mapRowToTaxonRecords } from './csv-parser'
 import { stableTaxonKey } from './keys'
+import { boldBinOfRow, taxonKeysFromRowColumns } from './taxon-keys'
 import {
   type SpeciesListDoiStatus,
   detectTaxonIDSource,
@@ -61,12 +62,14 @@ export function createSpeciesListAccumulator() {
       rowCount++
       if (idSample.length < 2000) idSample.push(row.taxonKey ?? row.taxonID)
       const priority = speciesListRowPriority(row)
-      for (const record of mapRowToTaxonRecords(row)) {
+      const rowRecords = mapRowToTaxonRecords(row)
+      for (const record of rowRecords) {
         const key = stableTaxonKey(record)
         if (!key) continue
         const current = best.get(key)
         if (!current || priority < current.priority) best.set(key, { record, priority })
       }
+      addExtraTaxonKeys({ row, rowRecords, best })
     },
     finish() {
       const records = Array.from(best.values(), (entry) => entry.record)
@@ -78,6 +81,30 @@ export function createSpeciesListAccumulator() {
       return { records, headers: headers ?? [], rowCount, taxonIDSource }
     },
   }
+}
+
+/**
+ * Other keys a row gives for its own (deepest) taxon: key columns such as Antenna's
+ * `bold_taxon_bin`, and — in Catalogue of Life lists — the BOLD BIN of a BIN row that
+ * names a species (ontology: Taxon Keys). The first key seen for a style is kept.
+ */
+function addExtraTaxonKeys(params: {
+  row: Record<string, unknown>
+  rowRecords: TaxonRecord[]
+  best: Map<string, { record: TaxonRecord; priority: number }>
+}) {
+  const { row, rowRecords, best } = params
+  const deepest = rowRecords[rowRecords.length - 1]
+  if (!deepest) return
+
+  const extra = taxonKeysFromRowColumns(row)
+  const bin = boldBinOfRow(row)
+  if (bin && String(deepest.taxonRank ?? '').toLowerCase() === 'species' && !extra.bold) extra.bold = bin
+  if (!Object.keys(extra).length) return
+
+  const key = stableTaxonKey(deepest)
+  const entry = key ? best.get(key) : undefined
+  if (entry) entry.record.taxonKeys = { ...extra, ...(entry.record.taxonKeys ?? {}) }
 }
 
 /** List identity from the file name alone — GBIF metadata (if any) is applied later. */

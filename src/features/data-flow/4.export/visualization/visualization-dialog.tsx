@@ -8,7 +8,8 @@ import { Switch } from '~/components/ui/switch'
 import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { activeNightIdsStore, selectedPatchIdsStore } from '~/stores/ui'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
-import { detectionsStore } from '~/stores/entities/detections'
+import { detectionsStore, getDetectionsForLeafGroup } from '~/stores/entities/detections'
+import { HUMAN_DETECTOR_ID, newestDetectorId, sortDetectorRunsNewestFirst } from '~/features/mothbox-next/detector-runs'
 import { cn } from '~/utils/cn'
 import { buildVizDetections } from './viz-data'
 import { loadPatchImages } from './viz-images'
@@ -91,6 +92,18 @@ function VisualizationDialogBody(props: Props) {
 
   const availableTaxa = useAvailableTaxaKeys(config)
 
+  // Detection runs found in the chosen sessions, newest first (re-running Detect keeps
+  // the older run beside the new one; a visualization draws one run per session).
+  const detectorRuns = useMemo(() => {
+    if (config.scope !== 'night') return []
+    const ids = new Set<string>()
+    for (const leafGroupId of config.selectedLeafGroupIds) {
+      for (const det of getDetectionsForLeafGroup(leafGroupId)) if (det.detectorId) ids.add(det.detectorId)
+    }
+    return sortDetectorRunsNewestFirst([...ids])
+  }, [config.scope, config.selectedLeafGroupIds])
+  const chosenRun = config.detectorId && detectorRuns.includes(config.detectorId) ? config.detectorId : newestDetectorId(detectorRuns)
+
   // Debounced preview render. Runs whenever the dialog is open and the config /
   // mask changes — including the first open. The canvas-ref check lives inside
   // the timer so a not-yet-mounted ref (Radix portals the content in) doesn't
@@ -149,8 +162,7 @@ function VisualizationDialogBody(props: Props) {
   }
 
   function setScope(scope: VizScope) {
-    if (scope === 'dataset') update({ scope, selectedLeafGroupIds: allLeafGroupIds })
-    else if (scope === 'night') update({ scope, selectedLeafGroupIds: initialNights() })
+    if (scope === 'night') update({ scope, selectedLeafGroupIds: initialNights() })
     else update({ scope })
   }
 
@@ -282,19 +294,37 @@ function VisualizationDialogBody(props: Props) {
               value={config.scope}
               options={[
                 { value: 'selection', label: `Selection${selectionCount ? ` (${selectionCount})` : ''}` },
-                { value: 'night', label: 'Night(s)' },
-                { value: 'dataset', label: 'Dataset' },
+                { value: 'night', label: 'Session(s)' },
               ]}
               onChange={(v) => setScope(v as VizScope)}
             />
             {config.scope === 'selection' && selectionCount === 0 && (
-              <div className='text-12 text-ink-secondary mt-4'>Nothing selected — falling back to the active night.</div>
+              <div className='text-12 text-ink-secondary mt-4'>Nothing selected — falling back to the active session.</div>
             )}
           </Section>
 
-          {/* Night checklist (night scope) */}
+          {/* Detection run (session scope): which run's detections to draw */}
+          {config.scope === 'night' && detectorRuns.length > 1 && (
+            <Section label='Detection run'>
+              <select
+                className='w-full rounded border border-black/15 px-8 py-6 text-13 bg-transparent'
+                value={chosenRun ?? ''}
+                onChange={(e) => update({ detectorId: e.target.value })}
+              >
+                {detectorRuns.map((id) => (
+                  <option key={id} value={id}>
+                    {id === HUMAN_DETECTOR_ID ? 'Human detections' : id}
+                    {id === newestDetectorId(detectorRuns) ? ' (newest)' : ''}
+                  </option>
+                ))}
+              </select>
+              <div className='text-11 text-ink-secondary mt-4'>Sessions without this run use their newest run.</div>
+            </Section>
+          )}
+
+          {/* Session checklist (session scope) */}
           {config.scope === 'night' && allLeafGroupIds.length > 1 && (
-            <Section label='Nights'>
+            <Section label='Sessions'>
               <div className='flex items-center gap-10 mb-6'>
                 <span className='text-11 text-ink-secondary tabular-nums'>{config.selectedLeafGroupIds.length}/{allLeafGroupIds.length}</span>
                 <button type='button' className='text-11 text-blue-600 hover:underline'
@@ -326,7 +356,15 @@ function VisualizationDialogBody(props: Props) {
             {config.layout === 'shape' && (
               <div className='mt-8 flex items-center gap-8 text-13'>
                 <input type='file' accept='image/*' onChange={(e) => onMaskFile(e.target.files?.[0])} />
-                <span className='text-ink-secondary'>{baseMask ? 'mask loaded' : 'opaque/dark = fill'}</span>
+                <span className='text-ink-secondary'>
+                  {baseMask ? 'mask loaded' : config.invertMask ? 'clear/light = fill' : 'opaque/dark = fill'}
+                </span>
+              </div>
+            )}
+            {config.layout === 'shape' && (
+              <div className='mt-8'>
+                <SwitchRow label='Invert mask (fill around the shape)' checked={config.invertMask}
+                  onChange={(v) => update({ invertMask: v })} />
               </div>
             )}
           </Section>

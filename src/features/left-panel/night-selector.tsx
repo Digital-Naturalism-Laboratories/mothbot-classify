@@ -39,7 +39,7 @@ export function NightSelectorSection(props: Props) {
   return (
     <div className={cn('mb-16', className)}>
       <div className='mb-6 flex items-center justify-between'>
-        <PanelHeading>Nights</PanelHeading>
+        <PanelHeading>Sessions</PanelHeading>
         <button
           type='button'
           onClick={toggleSelectAll}

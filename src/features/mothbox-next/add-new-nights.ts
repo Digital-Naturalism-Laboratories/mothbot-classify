@@ -8,6 +8,8 @@
  * driven over a source view filtered to only the new night folders, and the
  * resulting rows are appended. Existing lines are never rewritten.
  */
+import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, serializeSessionRecords } from './sessions'
+import { fileKeyStyleOfManifestText, type FileKeyStyle } from './file-keys'
 
 import type { DinalabAdapterIO, DinalabAdapterSourceIO } from './adapters/dinalab-mothbox-v1/adapter-io'
 import { buildDinalabMothboxV1Records } from './adapters/dinalab-mothbox-v1/build-dinalab-adapter-records'
@@ -171,21 +173,33 @@ export async function addNewNightsToPackage(params: {
     originalSourceExists: params.originalSourceExists,
   })
 
-  const patches = await appendRecord({ io, path: RECORDS.patches, additions: built.patches, key: 'patch_id' })
-  await appendRecord({ io, path: RECORDS.patchSources, additions: built.patchSources, key: 'patch_id' })
-  await appendRecord({ io, path: PATCH_MEASUREMENTS_RECORD, additions: built.measurements, key: 'patch_id' })
+  // New lines are written in the package's own style (camelCase from format 4).
+  const style = fileKeyStyleOfManifestText(await readTextSafe(io, 'dataset.json'))
+  const patches = await appendRecord({ io, style, path: RECORDS.patches, additions: built.patches, key: 'patch_id' })
+  await appendRecord({ io, style, path: RECORDS.patchSources, additions: built.patchSources, key: 'patch_id' })
+  await appendRecord({ io, style, path: PATCH_MEASUREMENTS_RECORD, additions: built.measurements, key: 'patch_id' })
   const cameraDays = await appendRecord({
     io,
+    style,
     path: RECORDS.cameraDays,
     additions: built.cameraDays,
     key: 'camera_day_id',
   })
-  await appendRecord({ io, path: RECORDS.deployments, additions: built.deployments, key: 'deployment_id' })
+  await appendRecord({ io, style, path: RECORDS.deployments, additions: built.deployments, key: 'deployment_id' })
+  // New nights' sessions only; existing (possibly edited) sessions are never touched.
+  // The sessions file is always camelCase and has its own reader.
+  const sessionsText = await readTextSafe(io, PACKAGE_SESSIONS_RECORD)
+  const knownSessions = new Set(parseSessionRecords(sessionsText).map((s) => s.sessionID))
+  const newSessions = built.sessions.filter((s) => !knownSessions.has(s.sessionID))
+  if (newSessions.length) {
+    const base = sessionsText && !sessionsText.endsWith('\n') ? `${sessionsText}\n` : sessionsText
+    await io.package.writeText(PACKAGE_SESSIONS_RECORD, base + serializeSessionRecords(newSessions))
+  }
 
   // Bot classifications are an append-only log; new rows can't collide with
   // existing ones because their patch ids are new.
   const botText = await readTextSafe(io, RECORDS.botClassifications)
-  const botMerged = appendNdjsonRows({ existingText: botText, additions: built.botRows })
+  const botMerged = appendNdjsonRows({ existingText: botText, additions: built.botRows, style })
   if (botMerged.addedCount) await io.package.writeText(RECORDS.botClassifications, botMerged.text)
 
   // current-classifications is keyed by patch — appending only brand-new patch
@@ -195,6 +209,7 @@ export async function addNewNightsToPackage(params: {
     existingText: currentText,
     additions: built.botRows as Array<Record<string, unknown>>,
     key: 'patch_id',
+    style,
   })
   if (currentMerged.addedCount) await io.package.writeText(RECORDS.currentClassifications, currentMerged.text)
 
@@ -208,13 +223,14 @@ export async function addNewNightsToPackage(params: {
 
 async function appendRecord<T extends Record<string, unknown>>(params: {
   io: DinalabAdapterIO
+  style: FileKeyStyle
   path: string
   additions: T[]
   key: keyof T & string
 }): Promise<number> {
-  const { io, path, additions, key } = params
+  const { io, path, additions, key, style } = params
   const existingText = await readTextSafe(io, path)
-  const merged = appendNdjsonRowsByKey({ existingText, additions, key })
+  const merged = appendNdjsonRowsByKey({ existingText, additions, key, style })
   if (merged.addedCount) await io.package.writeText(path, merged.text)
   return merged.addedCount
 }

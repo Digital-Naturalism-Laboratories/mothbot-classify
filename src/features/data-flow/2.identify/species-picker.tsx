@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react'
+import { TAXON_KEY_STYLE_LABELS, normalizeTaxonKeyStyle } from '~/models/taxonomy/species-list-source'
 import { AlertTriangleIcon, CheckCircleIcon, FolderOpenIcon, XCircleIcon } from 'lucide-react'
 import { useMemo } from 'react'
 import { toast } from 'sonner'
@@ -46,7 +47,7 @@ export function SpeciesPicker() {
     // A CSV that isn't a species list can't be used — keep the picker open so
     // the user can choose a different one instead of silently getting nothing.
     if (validation?.status === 'invalid') {
-      toast.error(`“${chosen?.fileName ?? 'This file'}” can't be used as a species list`, {
+      toast.error(`“${chosen?.fileName ?? 'This file'}” can't be used as a taxa list`, {
         description: `${validation.reason ?? ''} Pick a different CSV.`.trim(),
       })
       return
@@ -75,9 +76,9 @@ export function SpeciesPicker() {
 
   return (
     <CommandDialog open={isOpen} onOpenChange={handleOpenChange} className='max-w-[520px] !p-0'>
-      <CommandInput placeholder='Search species lists…' withSearchIcon />
+      <CommandInput placeholder='Search taxa lists…' withSearchIcon />
       <CommandList className='p-8'>
-        <CommandEmpty>No species lists found in your datasets folder.</CommandEmpty>
+        <CommandEmpty>No taxa lists found in your datasets folder.</CommandEmpty>
 
         {options.map((opt) => (
           <ListItem key={opt.id} list={opt} isSelected={selection?.[projectId] === opt.id} onSelect={handleSelect} />
@@ -91,7 +92,7 @@ export function SpeciesPicker() {
         >
           <Icon icon={FolderOpenIcon} className='shrink-0 text-neutral-500' />
           <Column className='gap-2 min-w-0'>
-            <span>Select other species list…</span>
+            <span>Select other taxa list…</span>
             <span className='text-11 text-ink-secondary'>
               Pick a CSV/TSV from anywhere — it&apos;s copied into _processed/_specieslists/ in your datasets folder.
             </span>
@@ -139,10 +140,11 @@ function ListItem(props: { list: SpeciesList; isSelected?: boolean; onSelect: (i
   )
 }
 
-/** DOI (or "DOI pending" while offline) and which taxon-ID system the list uses. */
+/** DOI (or "DOI pending" while offline) and which key style the list's taxon keys use. */
 function SpeciesListSourceLine(props: { list: SpeciesList }) {
   const { list } = props
-  const ids = list.taxonIDSource === 'col' ? 'Catalogue of Life IDs' : list.taxonIDSource === 'gbif-backbone' ? 'GBIF Backbone IDs' : null
+  const style = normalizeTaxonKeyStyle(list.taxonIDSource)
+  const ids = style ? `${TAXON_KEY_STYLE_LABELS[style]} keys` : null
   const isPending = list.doiStatus === 'pending'
   const doi = list.doiStatus === 'resolved' || list.doiStatus === 'filename' ? list.doi.replace(/^https:\/\/doi\.org\//, '') : ''
   const parts = [doi ? `DOI ${doi}` : null, ids].filter(Boolean)

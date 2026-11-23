@@ -1,8 +1,8 @@
+import { fileKeyStyleForVersion, serializePackageRows, type FileKeyStyle } from '../file-keys'
 import { detectionsStore, getDetectionsForLeafGroup } from '~/stores/entities/detections'
 import type { DetectionEntity } from '~/models/detection.types'
 import { classificationFromDetection, withdrawalRow } from '../classification-to-detection'
 import { buildCurrentClassificationsNdjson } from './rebuild-current-classifications'
-import { serializeNdjsonLines } from '../parse-ndjson'
 import { parseClassificationRecords } from '../parse-package-records'
 import type { ClassificationRecord, PatchRecord } from '../records'
 import { mothboxNextPackageStore } from '../active-package'
@@ -67,7 +67,8 @@ export async function persistPackageClassifications(params: {
   })
   if (!appended.length) return
 
-  await writer.writeText(relClassifierPath, appendNdjsonRows(existingText, appended))
+  const style = fileKeyStyleForVersion(active.manifest.version)
+  await writer.writeText(relClassifierPath, appendNdjsonRows(existingText, appended, style))
   await rebuildCurrentClassificationsCacheFromDisk({ writer, activePackage: active })
   await refreshActivePackageLoadedFromWriter({ writer })
 
@@ -172,10 +173,10 @@ function timeOf(row: ClassificationRecord): number {
   return typeof row.classified_at === 'number' && Number.isFinite(row.classified_at) ? row.classified_at : -Infinity
 }
 
-/** Appends rows to NDJSON text without touching the existing lines. */
-export function appendNdjsonRows(existingText: string, rows: ClassificationRecord[]): string {
+/** Appends rows to NDJSON text, in the package's style, without touching the existing lines. */
+export function appendNdjsonRows(existingText: string, rows: ClassificationRecord[], style: FileKeyStyle = 'snake'): string {
   const prefix = existingText && !existingText.endsWith('\n') ? `${existingText}\n` : existingText
-  return prefix + serializeNdjsonLines(rows)
+  return prefix + serializePackageRows(rows, style)
 }
 
 export async function rebuildCurrentClassificationsCacheFromDisk(params: {
@@ -196,6 +197,7 @@ export async function rebuildCurrentClassificationsCacheFromDisk(params: {
   }
 
   const ndjson = buildCurrentClassificationsNdjson({
+    style: fileKeyStyleForVersion(activePackage.manifest.version),
     classificationFiles,
     occurrenceIdByPatch: occurrenceIdByPatchFromRecords(activePackage.loaded?.patches as PatchRecord[] | undefined),
   })

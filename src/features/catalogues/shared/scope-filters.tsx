@@ -19,7 +19,7 @@ export function ScopeFilters(props: ScopeFiltersProps) {
     { key: 'project', label: 'This Dataset', disabled: !hasProject, count: counts?.project },
     { key: 'site', label: 'This Site', disabled: !hasSite, count: counts?.site },
     { key: 'deployment', label: 'This Deployment', disabled: !hasDeployment, count: counts?.deployment },
-    { key: 'night', label: 'This Night', disabled: !hasNight, count: counts?.night },
+    { key: 'night', label: 'This Session', disabled: !hasNight, count: counts?.night },
   ]
   return (
     <div className='flex items-center gap-6'>

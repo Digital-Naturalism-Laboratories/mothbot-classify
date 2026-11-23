@@ -10,6 +10,7 @@
  * and the human classifier file, destroying existing identification work — so
  * new nights are built in isolation and appended instead.
  */
+import { fromFileKeys, packageRowLine, type FileKeyStyle } from './file-keys'
 
 const BOT_DETECTION_SUFFIX = '_botdetection.json'
 
@@ -73,7 +74,8 @@ export function parseNdjson<T = Record<string, unknown>>(text: string): T[] {
     const trimmed = line.trim()
     if (!trimmed) continue
     try {
-      out.push(JSON.parse(trimmed) as T)
+      // Either file style reads the same (see file-keys.ts).
+      out.push(fromFileKeys<T>(JSON.parse(trimmed)))
     } catch {
       // Skip malformed lines rather than losing the whole file.
     }
@@ -90,8 +92,10 @@ export function appendNdjsonRowsByKey<T extends Record<string, unknown>>(params:
   existingText: string
   additions: T[]
   key: keyof T & string
+  /** The package's file style for the new lines; existing lines are never touched. */
+  style?: FileKeyStyle
 }): { text: string; addedCount: number } {
-  const { existingText, additions, key } = params
+  const { existingText, additions, key, style = 'snake' } = params
 
   const existingKeys = new Set<string>()
   for (const row of parseNdjson<Record<string, unknown>>(existingText)) {
@@ -105,7 +109,7 @@ export function appendNdjsonRowsByKey<T extends Record<string, unknown>>(params:
     if (typeof value !== 'string' || !value) continue
     if (existingKeys.has(value)) continue
     existingKeys.add(value)
-    newLines.push(JSON.stringify(row))
+    newLines.push(packageRowLine(row, style))
   }
 
   if (!newLines.length) return { text: existingText, addedCount: 0 }
@@ -115,14 +119,14 @@ export function appendNdjsonRowsByKey<T extends Record<string, unknown>>(params:
 }
 
 /** Appends every row unconditionally (for append-only logs like `_bot.ndjson`). */
-export function appendNdjsonRows<T>(params: { existingText: string; additions: T[] }): {
+export function appendNdjsonRows<T>(params: { existingText: string; additions: T[]; style?: FileKeyStyle }): {
   text: string
   addedCount: number
 } {
-  const { existingText, additions } = params
+  const { existingText, additions, style = 'snake' } = params
   if (!additions.length) return { text: existingText, addedCount: 0 }
 
-  const lines = additions.map((row) => JSON.stringify(row))
+  const lines = additions.map((row) => packageRowLine(row as object, style))
   const base = existingText.length && !existingText.endsWith('\n') ? `${existingText}\n` : existingText
   return { text: `${base}${lines.join('\n')}\n`, addedCount: lines.length }
 }

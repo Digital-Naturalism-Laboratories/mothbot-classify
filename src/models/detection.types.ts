@@ -1,4 +1,5 @@
 import type { TaxonRecord } from '~/models/taxonomy/types'
+import type { LabelledBox } from '~/models/box-formats'
 
 export type DetectionClassificationType = 'accept' | 'taxon' | 'morphospecies' | 'error'
 
@@ -65,4 +66,10 @@ export type DetectionEntity = {
   agreedWith?: string
   /** The occurrence (individual creature) this detection belongs to; defaults to the patch id. */
   occurrenceId?: string
+  /** The box labelled with its format (ontology: Box Formats), e.g. relative corners. */
+  box?: LabelledBox
+  /** The session the capture falls in (ontology: Session). */
+  sessionId?: string
+  /** The capture window the capture falls in (ontology: Capture Window). */
+  captureWindowId?: string
 }

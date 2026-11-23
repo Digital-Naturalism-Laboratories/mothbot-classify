@@ -122,6 +122,117 @@ describe('buildDinalabMothboxV1Records', () => {
     })
   })
 
+  it('labels each box: relative corners from the image size, or the box Process wrote', async () => {
+    const files = new Map<string, string>([
+      [
+        `_processed/Deployment_A/2025-01-01/photo_botdetection.json`,
+        JSON.stringify({
+          imageWidth: 100,
+          imageHeight: 50,
+          shapes: [
+            shape({ patchFileName: 'photo_0_m.pt.jpg', label: 'ORDER_Diptera', points: [[10, 5], [30, 5], [30, 25], [10, 25]] }),
+            {
+              ...shape({ patchFileName: 'photo_1_m.pt.jpg', label: 'ORDER_Diptera', points: [[0, 0], [1, 0], [1, 1], [0, 1]] }),
+              box: { format: 'obb-corners-rel', coordinates: [0.5, 0.5, 0.6, 0.5, 0.6, 0.6, 0.5, 0.6] },
+            },
+          ],
+        }),
+      ],
+      [`_processed/Deployment_A/2025-01-01/photo_0_m.pt.jpg`, ''],
+      [`_processed/Deployment_A/2025-01-01/photo_1_m.pt.jpg`, ''],
+      [`Deployment_A/2025-01-01/photo.jpg`, ''],
+    ])
+
+    const built = await buildDinalabMothboxV1Records({
+      datasetId: 'Dataset_A',
+      io: createMemoryIo(files),
+      humanClassifierId: 'bf',
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '',
+      packageSourceLayout: 'in_place',
+      processedMirrorRoot: '_processed',
+    })
+
+    const byPatch = new Map(built.patchSources.map((s) => [s.patch_id, s]))
+    expect(byPatch.get('photo_0_m.pt')?.crop_box).toEqual({
+      format: 'obb-corners-rel',
+      coordinates: [0.1, 0.1, 0.3, 0.1, 0.3, 0.5, 0.1, 0.5],
+    })
+    expect(byPatch.get('photo_1_m.pt')?.crop_box?.coordinates).toEqual([0.5, 0.5, 0.6, 0.5, 0.6, 0.6, 0.5, 0.6])
+    // One occurrence per detection.
+    expect(built.patches.map((p) => p.occurrence_id)).toEqual(built.patches.map((p) => p.patch_id))
+  })
+
+  it('places patches in the sessions Process wrote, and records the deployment’s details', async () => {
+    const night = '_processed/Deployment_A/2026-07-27'
+    const files = new Map<string, string>([
+      [
+        `${night}/cam_2026_07_27__19_30_00_HDR0_botdetection.json`,
+        JSON.stringify({
+          deviceID: 'SnappySloth',
+          deviceType: 'Mothbox Pro',
+          deviceTypeID: 'mothbox-pro',
+          firmware: '6.1.0',
+          latitude: '9.1',
+          longitude: '-79.5',
+          ground_height: 1.5,
+          attractors: [{ attractorType: 'UV LED', attractorLocation: 'internal' }],
+          shapes: [shape({ patchFileName: 'cam_2026_07_27__19_30_00_HDR0_0_m.pt.jpg', label: 'ORDER_Diptera' })],
+        }),
+      ],
+      [`${night}/cam_2026_07_27__19_30_00_HDR0_0_m.pt.jpg`, ''],
+      [
+        `_processed/Deployment_A/sessions.json`,
+        JSON.stringify({
+          sessions: [
+            {
+              sessionID: 'night-one',
+              start: '2026-07-27T12:00:00',
+              end: '2026-07-28T11:59:59',
+              definedBy: 'manual',
+              captureWindows: [{ captureWindowID: 'night-one__w1', start: '2026-07-27T19:00:00', end: '2026-07-27T19:59:00' }],
+            },
+          ],
+        }),
+      ],
+      [`_processed/Deployment_B/2026-07-27/photo_botdetection.json`, JSON.stringify({ shapes: [shape({ patchFileName: 'photo_0_m.pt.jpg', label: 'ORDER_Diptera' })] })],
+      [`_processed/Deployment_B/2026-07-27/photo_0_m.pt.jpg`, ''],
+    ])
+
+    const built = await buildDinalabMothboxV1Records({
+      datasetId: 'Dataset_A',
+      io: createMemoryIo(files),
+      humanClassifierId: 'bf',
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '',
+      packageSourceLayout: 'in_place',
+      processedMirrorRoot: '_processed',
+    })
+
+    const a = built.patches.find((p) => p.deployment_id === 'Deployment_A')
+    const b = built.patches.find((p) => p.deployment_id === 'Deployment_B')
+    expect(a).toMatchObject({ session_id: 'night-one', capture_window_id: 'night-one__w1' })
+    // No sessions file: the default nightly session, named like the night.
+    expect(b?.session_id).toBe(b?.camera_day_id)
+    expect(b?.capture_window_id).toBeUndefined()
+    expect(built.sessions.map((s) => [s.sessionID, s.definedBy, s.deploymentID])).toEqual([
+      ['night-one', 'manual', 'Deployment_A'],
+      [b?.camera_day_id, 'nightly-noon-to-noon', 'Deployment_B'],
+    ])
+
+    const deploymentA = built.deployments.find((d) => d.deployment_id === 'Deployment_A')
+    expect(deploymentA).toMatchObject({
+      device_name: 'SnappySloth',
+      device_type: 'Mothbox Pro',
+      device_type_id: 'mothbox-pro',
+      firmware_version: '6.1.0',
+      latitude: 9.1,
+      longitude: -79.5,
+      height_above_ground_m: 1.5,
+      attractors: [{ attractorType: 'UV LED', attractorLocation: 'internal' }],
+    })
+  })
+
   it('links Mothbox _processed patches to the existing source image extension', async () => {
     const patchFileName = 'photo_0_Mothbot_model.pt.jpg'
     const files = new Map<string, string>([

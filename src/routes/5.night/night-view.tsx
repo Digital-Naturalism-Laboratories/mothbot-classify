@@ -563,7 +563,7 @@ export function NightView(props: { leafGroupId: string }) {
     }
   }, [])
 
-  if (!night) return <p className='text-sm text-neutral-500'>Night not found</p>
+  if (!night) return <p className='text-sm text-neutral-500'>Session not found</p>
 
   return (
     <Row className='w-full h-full overflow-hidden gap-x-4'>
@@ -1043,7 +1043,7 @@ function notifyNightSplitOnce(params: { key: string; total: number; parts: numbe
   const { key, total, parts } = params
   if (notifiedNightSplits.has(key)) return
   notifiedNightSplits.add(key)
-  toast.info(`Large night: ${total.toLocaleString()} patches`, {
+  toast.info(`Large session: ${total.toLocaleString()} patches`, {
     description: `Showing it in ${parts} parts by capture time so Classify stays responsive. Switch parts in the left panel.`,
     duration: 8000,
   })

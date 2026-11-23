@@ -1,3 +1,5 @@
+import { serializePackageRows } from './file-keys'
+import { fileKeyStyleOfPackageHandle } from './package-file-style'
 import { normalizeMorphoKey } from '~/models/taxonomy/morphospecies'
 import {
   readLegacyMorphoCoversFromIdb,
@@ -12,7 +14,6 @@ import {
   writeTextFile,
   type FileSystemDirectoryHandleLike,
 } from '~/utils/fs-directory-handle'
-import { serializeNdjsonLines } from './parse-ndjson'
 import { parseMorphoCoverRecords } from './parse-package-records'
 import type { MorphoCoverRecord } from './records'
 import { patchIdFromImageFileName } from './adapters/dinalab-mothbox-v1/adapter-patch-assets'
@@ -71,7 +72,11 @@ export async function syncMorphoCoversWithPackage(params: {
   if (!count) return { source: 'none', count }
 
   try {
-    await writeTextFile(packageHandle, PACKAGE_MORPHO_COVERS_RECORD, serializeNdjsonLines(morphoCoversToRecords(seeded)))
+    await writeTextFile(
+      packageHandle,
+      PACKAGE_MORPHO_COVERS_RECORD,
+      serializePackageRows(morphoCoversToRecords(seeded), await fileKeyStyleOfPackageHandle(packageHandle)),
+    )
   } catch (err) {
     // Read-only folder: covers still show from the store; they'll be written on the next change.
     console.warn('🚨 syncMorphoCoversWithPackage: could not write seeded covers', err)
@@ -109,5 +114,5 @@ export async function writeMorphoCoversToOpenPackage(covers: Record<string, Morp
   const granted = await ensureReadWritePermission(root)
   if (!granted) return
 
-  await writeTextFile(root, PACKAGE_MORPHO_COVERS_RECORD, serializeNdjsonLines(morphoCoversToRecords(covers)))
+  await writeTextFile(root, PACKAGE_MORPHO_COVERS_RECORD, serializePackageRows(morphoCoversToRecords(covers), await fileKeyStyleOfPackageHandle(root)))
 }

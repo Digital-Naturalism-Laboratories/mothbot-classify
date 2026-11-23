@@ -211,7 +211,6 @@ function scopeLabelFor(config: VizConfig, count: number): string {
     const sel = selectedPatchIdsStore.get()
     if (sel && sel.size > 0) return `selection (${sel.size})`
   }
-  if (config.scope === 'dataset') return `dataset · ${count} detections`
   const n = config.selectedLeafGroupIds.length
   return n === 1 ? (config.selectedLeafGroupIds[0]!.split('/').pop() ?? 'night') : `${n} nights`
 }

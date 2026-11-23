@@ -1,4 +1,5 @@
 import type { MothboxNextDatasetManifest } from './dataset-manifest'
+import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, type SessionRecord } from './sessions'
 import { parseDatasetManifest } from './dataset-manifest'
 import {
   parseCameraDayRecords,
@@ -35,6 +36,8 @@ export type LoadedMothboxNextPackage = {
   measurements: PatchMeasurementsById
   /** Non-Target categories people added to this dataset, as path keys ("Error/Glare"). */
   nonTargetCategories?: string[]
+  /** Sessions and capture windows (ontology: Session); empty for packages made before them. */
+  sessions?: SessionRecord[]
 }
 
 export type PackageDataAccess = {
@@ -99,6 +102,16 @@ export async function loadMothboxNextPackageData(params: {
     // no measurements file
   }
 
+  // Optional: packages made before sessions were recorded have none.
+  let sessions: SessionRecord[] = []
+  try {
+    sessions = parseSessionRecords(
+      await access.readPackageFile(joinPackagePath(packageRoot, manifest.records.sessions ?? PACKAGE_SESSIONS_RECORD)),
+    )
+  } catch {
+    // no sessions file
+  }
+
   // Optional: a missing file just means nobody added a Non-Target category yet.
   let nonTargetCategories: string[] = []
   try {
@@ -127,6 +140,7 @@ export async function loadMothboxNextPackageData(params: {
     resolvedClassifications,
     measurements,
     nonTargetCategories,
+    sessions,
   }
 }
 

@@ -103,13 +103,13 @@ describe('canonicalSpeciesListRef', () => {
 
 describe('taxon ID systems', () => {
   it('detects backbone (integer) vs Catalogue of Life (alphanumeric) keys', () => {
-    expect(detectTaxonIDSource(['1090772', 5128005, '', '1341976'])).toBe('gbif-backbone')
+    expect(detectTaxonIDSource(['1090772', 5128005, '', '1341976'])).toBe('gbif')
     expect(detectTaxonIDSource(['BOLD.AAA1580', 'B6L67', 'NSKVB', '1234'])).toBe('col')
     expect(detectTaxonIDSource([])).toBeUndefined()
   })
 
   it('infers a single ID', () => {
-    expect(inferTaxonIDSource(797)).toBe('gbif-backbone')
+    expect(inferTaxonIDSource(797)).toBe('gbif')
     expect(inferTaxonIDSource('L9SZG')).toBe('col')
     expect(inferTaxonIDSource('')).toBeUndefined()
   })

@@ -53,8 +53,8 @@ function describeDetection(detection: Awaited<ReturnType<typeof detectNewNightFo
   const nights = detection.newNightFolders.length
   const runs = detection.newRunFolders.length
   const parts: string[] = []
-  if (nights) parts.push(`${nights} new night${nights === 1 ? '' : 's'}`)
-  if (runs) parts.push(`${runs} night${runs === 1 ? '' : 's'} with a new detection run`)
+  if (nights) parts.push(`${nights} new session${nights === 1 ? '' : 's'}`)
+  if (runs) parts.push(`${runs} session${runs === 1 ? '' : 's'} with a new detection run`)
   const title = `${parts.join(' and ')} found on disk`
 
   const descriptions: string[] = []
@@ -194,7 +194,7 @@ async function runAddNewNights(params: {
     // Now we actually need to write — ask for it on the package folder itself.
     const writable = await ensureReadWritePermission(packageDir as never)
     if (!writable) {
-      toast.error('Write access is needed to add nights', {
+      toast.error('Write access is needed to add sessions', {
         id: NEW_NIGHTS_TOAST_ID,
         description: 'Grant access to the dataset folder and try again.',
         duration: 8000,
@@ -227,9 +227,9 @@ async function runAddNewNights(params: {
     await openDatasetByFolderName({ folderName, showSuccessToast: false })
 
     const merged: string[] = []
-    if (result.cameraDaysAdded) merged.push(`${result.cameraDaysAdded} new night${result.cameraDaysAdded === 1 ? '' : 's'}`)
+    if (result.cameraDaysAdded) merged.push(`${result.cameraDaysAdded} new session${result.cameraDaysAdded === 1 ? '' : 's'}`)
     const runFolders = folders.length - result.cameraDaysAdded
-    if (runFolders > 0) merged.push(`a new detection run on ${runFolders} night${runFolders === 1 ? '' : 's'}`)
+    if (runFolders > 0) merged.push(`a new detection run on ${runFolders} session${runFolders === 1 ? '' : 's'}`)
     toast.success(`Added ${result.patchesAdded.toLocaleString()} patches`, {
       id: NEW_NIGHTS_TOAST_ID,
       description: `${merged.join(' and ') || 'Records'} merged into this dataset. Pick the run from the Detection run menu.`,
@@ -238,7 +238,7 @@ async function runAddNewNights(params: {
     })
   } catch (err) {
     console.warn('🚨 checkForNewNights: merge failed', err)
-    toast.error('Could not add the new nights', {
+    toast.error('Could not add the new sessions', {
       id: NEW_NIGHTS_TOAST_ID,
       description: err instanceof Error ? err.message : 'Unknown error.',
       duration: Infinity,

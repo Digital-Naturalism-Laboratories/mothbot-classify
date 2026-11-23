@@ -21,7 +21,7 @@ export async function pickSpeciesListFile(): Promise<File | null> {
       const [handle] = await picker({
         id: 'species-list',
         multiple: false,
-        types: [{ description: 'Species list', accept: { 'text/csv': ['.csv'], 'text/tab-separated-values': ['.tsv'] } }],
+        types: [{ description: 'Taxa list', accept: { 'text/csv': ['.csv'], 'text/tab-separated-values': ['.tsv'] } }],
       })
       return handle ? await handle.getFile() : null
     } catch (err) {
@@ -53,7 +53,7 @@ function pickFileWithInput(): Promise<File | null> {
 export async function addSpeciesListFromFile(params: { file: File; projectId?: string }): Promise<string | null> {
   const { file, projectId } = params
   const toastId = 'add-species-list'
-  toast.loading('Loading species list…', { id: toastId, description: file.name })
+  toast.loading('Loading taxa list…', { id: toastId, description: file.name })
 
   try {
     const root = await requireDatasetsFolderHandle({ mode: 'readwrite', notifyOnDenied: false })
@@ -70,7 +70,7 @@ export async function addSpeciesListFromFile(params: { file: File; projectId?: s
         const { [fileName]: _removed, ...rest } = speciesListsStore.get() || {}
         speciesListsStore.set(rest)
       }
-      toast.error(`“${file.name}” can't be used as a species list`, {
+      toast.error(`“${file.name}” can't be used as a taxa list`, {
         id: toastId,
         description: list?.validation?.reason ?? 'It could not be read as a CSV/TSV of taxa. Pick a different file.',
       })
@@ -83,7 +83,7 @@ export async function addSpeciesListFromFile(params: { file: File; projectId?: s
 
     if (projectId) await saveProjectSpeciesSelection({ projectId, speciesListId: fileName })
 
-    toast.success('Species list added', {
+    toast.success('Taxa list added', {
       id: toastId,
       description: root
         ? `Saved to ${COPIED_SPECIES_LISTS_DIR}/${fileName} in your datasets folder.`
@@ -92,7 +92,7 @@ export async function addSpeciesListFromFile(params: { file: File; projectId?: s
     return fileName
   } catch (err) {
     console.warn('🚨 addSpeciesListFromFile: failed', err)
-    toast.error('Could not add species list', { id: toastId, description: err instanceof Error ? err.message : String(err) })
+    toast.error('Could not add taxa list', { id: toastId, description: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
@@ -110,7 +110,7 @@ async function chooseFileNameInSpeciesFolder(params: { root: FileSystemDirectory
     const existing = await readFileBlob(root, path).catch(() => null)
     if (!existing || (await isSameFile(existing, file))) return candidate
   }
-  throw new Error(`Too many species lists named “${file.name}” in ${COPIED_SPECIES_LISTS_DIR}/.`)
+  throw new Error(`Too many taxa lists named “${file.name}” in ${COPIED_SPECIES_LISTS_DIR}/.`)
 }
 
 async function speciesFolderHasSameFile(params: { root: FileSystemDirectoryHandleLike; relativePath: string; file: File }) {

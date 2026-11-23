@@ -29,7 +29,7 @@ describe('validateSpeciesListCsv', () => {
     })
     expect(result.status).toBe('invalid')
     expect(result.reason).toMatch(/no taxonomy columns/i)
-    expect(describeSpeciesListValidation(result)).toBe('Not a species list')
+    expect(describeSpeciesListValidation(result)).toBe('Not a taxa list')
   })
 
   it('does not treat a bare "name" column as a species list', () => {

@@ -17,7 +17,8 @@ import {
   morphoLinksMapToRecords,
   PACKAGE_MORPHO_LINKS_RECORD,
 } from '~/features/mothbox-next/morpho-links-package'
-import { serializeNdjsonLines } from '~/features/mothbox-next/parse-ndjson'
+import { serializePackageRows } from '~/features/mothbox-next/file-keys'
+import { fileKeyStyleOfPackageHandle } from '~/features/mothbox-next/package-file-style'
 
 type FileSystemDirectoryHandleLike = {
   getDirectoryHandle?: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike>
@@ -139,7 +140,7 @@ export async function writeMorphoLinksToDisk() {
 
     if (isMothboxNextIngestMode()) {
       const rows = morphoLinksMapToRecords(links)
-      await writeTextFile(root, PACKAGE_MORPHO_LINKS_RECORD, serializeNdjsonLines(rows))
+      await writeTextFile(root, PACKAGE_MORPHO_LINKS_RECORD, serializePackageRows(rows, await fileKeyStyleOfPackageHandle(root as any)))
       return
     }
 

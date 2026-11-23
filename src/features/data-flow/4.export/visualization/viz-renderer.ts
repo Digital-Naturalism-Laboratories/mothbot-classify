@@ -26,7 +26,7 @@ export async function renderMosaicFromDetections(
     scale: config.scale,
     padding: config.padding,
     background: resolveBackground(config),
-    baseMask: config.layout === 'shape' && baseMask ? buildBaseMask(baseMask, config.outputWidth) : null,
+    baseMask: config.layout === 'shape' && baseMask ? buildBaseMask(baseMask, config.outputWidth, config.invertMask) : null,
     seed: config.seed,
     onProgress,
   })

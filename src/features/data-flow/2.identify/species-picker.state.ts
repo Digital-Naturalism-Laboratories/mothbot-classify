@@ -34,8 +34,8 @@ export function ensureSpeciesListSelection(params: { projectId?: string; onReady
   }
 
   if (selectionIsUnusable) {
-    toast.error('Your saved species list can’t be used', {
-      description: selectedList?.validation?.reason ?? 'The file is missing or is no longer a valid species list. Choose a different CSV.',
+    toast.error('Your saved taxa list can’t be used', {
+      description: selectedList?.validation?.reason ?? 'The file is missing or is no longer a valid taxa list. Choose a different CSV.',
     })
   }
 

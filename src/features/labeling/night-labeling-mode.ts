@@ -1,7 +1,7 @@
 import type { DetectionEntity } from '~/stores/entities/detections'
 
 export const UNASSIGNED_AGGREGATE_LABEL = 'All unassigned'
-export const UNAPPROVED_AGGREGATE_LABEL = 'All unapproved'
+export const UNAPPROVED_AGGREGATE_LABEL = 'All unreviewed'
 
 export function nightHasMachineIdentification(params: {
   photos: Record<string, { leafGroupId?: string; botDetectionFile?: unknown }>

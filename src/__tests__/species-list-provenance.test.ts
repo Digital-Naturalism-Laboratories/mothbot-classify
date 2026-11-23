@@ -118,14 +118,14 @@ describe('species-list provenance', () => {
       context: { speciesListId: 'panama.csv', speciesListDOI: HUMAN_DOI },
     })
     const row = buildDarwinShapeFromDetection({ detection, leafGroupId: 'P/D/2026-01-01', nightDiskPath: '' }) as Record<string, string>
-    expect(row.species_list_doi).toBe(HUMAN_DOI)
-    expect(row.species_list_exclusions).toBe('')
-    expect(row.original_mothbox_identifciation).toBe('ORDER_Lepidoptera')
-    expect(row.original_mothbox_species_list_doi).toBe(BOT_DOI)
-    expect(row.original_mothbox_species_list_exclusions).toBe(EXCLUSIONS)
+    expect(row.taxaListDOI).toBe(HUMAN_DOI)
+    expect(row.taxaListExclusions).toBe('')
+    expect(row.machineIdentification).toBe('ORDER_Lepidoptera')
+    expect(row.machineTaxaListDOI).toBe(BOT_DOI)
+    expect(row.machineTaxaListExclusions).toBe(EXCLUSIONS)
 
     const untouched = buildDarwinShapeFromDetection({ detection: botDetection(), leafGroupId: 'P/D/2026-01-01', nightDiskPath: '' }) as Record<string, string>
-    expect(untouched.species_list_doi).toBe(BOT_DOI)
-    expect(untouched.species_list_exclusions).toBe(EXCLUSIONS)
+    expect(untouched.taxaListDOI).toBe(BOT_DOI)
+    expect(untouched.taxaListExclusions).toBe(EXCLUSIONS)
   })
 })

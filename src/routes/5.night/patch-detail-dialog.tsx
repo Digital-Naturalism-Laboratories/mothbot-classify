@@ -175,7 +175,7 @@ export function PatchDetailDialog(props: PatchDetailDialogProps) {
           <div className='space-y-4'>
             <h4 className='text-14 font-semibold text-neutral-800'>Links</h4>
             <div>
-              <span className='font-medium'>Night:</span> {patch?.leafGroupId ?? '—'}
+              <span className='font-medium'>Session:</span> {patch?.leafGroupId ?? '—'}
             </div>
             <div>
               <span className='font-medium'>Photo:</span> {patch?.photoId ?? '—'}
@@ -358,8 +358,14 @@ function SourcePhoto(props: { photo?: PhotoEntity; detection?: DetectionEntity }
   useEffect(() => { setNaturalSize(null) }, [photoUrl])
 
   const polygonPoints = useMemo(
-    () => buildDetectionPolygonPoints({ points: detection?.points }),
-    [detection?.points],
+    () =>
+      buildDetectionPolygonPoints({
+        points: detection?.points,
+        box: detection?.box,
+        imageWidth: naturalSize?.width,
+        imageHeight: naturalSize?.height,
+      }),
+    [detection?.points, detection?.box, naturalSize],
   )
   const showOverlay = !!photoUrl && !!polygonPoints && !!naturalSize
 

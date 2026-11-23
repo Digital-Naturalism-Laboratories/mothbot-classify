@@ -29,7 +29,7 @@ export function UsageStatsDisplay(props: { projectCount: number; nightCount: num
   return (
     <div className='mt-12 text-13 text-neutral-700'>
       <span className='mr-12'>Projects: {projectCount}</span>
-      <span className='mr-12'>Nights: {nightCount}</span>
+      <span className='mr-12'>Sessions: {nightCount}</span>
       <span>Instances: {instanceCount}</span>
     </div>
   )
@@ -72,7 +72,7 @@ export function NightsListDisplay(props: { leafGroupIds: string[]; onNavigate?: 
 
   return (
     <section className='mt-12'>
-      <h3 className='mb-6 text-14 font-semibold'>Nights</h3>
+      <h3 className='mb-6 text-14 font-semibold'>Sessions</h3>
       <ul className='space-y-6 text-13'>
         {leafGroupIds.map((n) => {
           const { projectId, deploymentId, leafGroupId } = parseNightIdParts(n)

@@ -29,7 +29,7 @@ function capitalize(text: string): string {
 /** Where the imported measurements show up. */
 function whereToFind(kinds: Kinds): string {
   return [
-    kinds.blur ? 'Sort or filter by blurriness in a night’s Layout Options.' : '',
+    kinds.blur ? 'Sort or filter by blurriness in a session’s Layout Options.' : '',
     kinds.pixelMass ? 'Pixel mass is in patch details and the Darwin CSV export.' : '',
   ].filter(Boolean).join(' ')
 }

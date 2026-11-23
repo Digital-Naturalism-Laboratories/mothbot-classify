@@ -1,4 +1,5 @@
 import { parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
+import type { LabelledBox } from '~/models/box-formats'
 import { buildTaxonRecord } from '~/models/taxonomy/builder'
 import type { ClassificationRecord, PatchRecord, PatchSourceRecord, DeploymentRecord, CameraDayRecord } from '../../records'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
@@ -185,6 +186,7 @@ export async function buildAmiAdapterRecords(params: {
       source_photo_url: representative?.url,
       crop_url: representative?.cropurl,
       crop_points: cropPointsFromAmiRow(representative),
+      ...cropBoxFromAmiRow(representative),
       source_metadata: representative
         ? {
             ami_detection_id: crop.detectionId,
@@ -255,6 +257,8 @@ export async function buildAmiAdapterRecords(params: {
     measurements: [], // AMI data has no Mothbot Process blur scores
     deployments: [...deploymentsById.values()].sort((a, b) => a.deployment_id.localeCompare(b.deployment_id)),
     cameraDays: [...cameraDaysById.values()].sort((a, b) => a.camera_day_id.localeCompare(b.camera_day_id)),
+    // AMI data comes with Antenna's own sessions, which these crops don't carry yet.
+    sessions: [],
   }
 }
 
@@ -863,6 +867,14 @@ function cropPointsFromAmiRow(row?: AmiMetadataRow) {
     [x2 as number, y2 as number],
     [x1 as number, y2 as number],
   ]
+}
+
+/** The AMI box as stored: an upright box in pixels (ontology: Box Formats, `xyxy-px`). */
+function cropBoxFromAmiRow(row?: AmiMetadataRow): { crop_box?: LabelledBox } {
+  if (!row) return {}
+  const { x1, x2, y1, y2 } = row
+  if (![x1, x2, y1, y2].every((value) => typeof value === 'number' && Number.isFinite(value))) return {}
+  return { crop_box: { format: 'xyxy-px', coordinates: [x1 as number, y1 as number, x2 as number, y2 as number] } }
 }
 
 function metadataPathsFromAmiRows(rows: AmiMetadataRow[]) {

@@ -73,7 +73,7 @@ export function TestIdentification() {
         <input ref={inputRef} type='file' accept='.csv,.tsv,text/csv,text/tab-separated-values' multiple onChange={handlePickFilesChange} />
 
         <select value={chosenListId} onChange={handleListChange} className='border px-8 py-4 rounded'>
-          <option value=''>Select species list…</option>
+          <option value=''>Select taxa list…</option>
           {listOptions.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name || l.fileName}

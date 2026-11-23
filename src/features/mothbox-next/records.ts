@@ -1,5 +1,6 @@
 import type { TaxonRecord } from '~/models/taxonomy/types'
 import type { ClassificationType, ClassifierType } from './classification-types'
+import type { LabelledBox } from '~/models/box-formats'
 
 export type PatchRecord = {
   patch_id: string
@@ -14,6 +15,10 @@ export type PatchRecord = {
   detector_id?: string
   /** The occurrence (individual creature) this detection belongs to; defaults to `patch_id`. */
   occurrence_id?: string
+  /** The session the capture falls in (ontology: Session); see `02_records/sessions.ndjson`. */
+  session_id?: string
+  /** The capture window the capture falls in, when the sessions file lists them. */
+  capture_window_id?: string
 }
 
 export type PatchSourceRecord = {
@@ -24,9 +29,12 @@ export type PatchSourceRecord = {
   original_patch_path?: string
   original_bot_detection_path?: string
   source_bot_detection_id?: string
+  /** Pixel corners from the detection JSON (`xanylabeling-rotation-px` when unlabelled). */
   crop_points?: number[][]
   crop_direction?: number
   crop_shape_type?: string
+  /** The same box, labelled with its format (ontology: Box Formats); usually `obb-corners-rel`. */
+  crop_box?: LabelledBox
   metadata_path?: string
   source_image_id?: string
   source_photo_url?: string
@@ -42,6 +50,23 @@ export type DeploymentRecord = {
   device_id_from_folder?: string
   deployment_start_from_folder?: string
   dataset_name_from_folder?: string
+  // Details from the field sheet or photo EXIF (ontology: Deployment, Device, Site, Location).
+  /** The device's own name, e.g. SnappySloth (ontology: `deviceID`). */
+  device_name?: string
+  device_type?: string
+  /** Id from the device-type list, e.g. `mothbox-pro`. */
+  device_type_id?: string
+  firmware_version?: string
+  site_name?: string
+  site_description?: string
+  land_use_type?: string
+  latitude?: number
+  longitude?: number
+  height_above_ground_m?: number
+  facing_direction?: string
+  attractors?: Array<{ attractorType?: string; attractorLocation?: string; powerW?: number; settings?: string }>
+  target?: Record<string, unknown>
+  sensor?: Record<string, unknown>
 }
 
 export type CameraDayRecord = {

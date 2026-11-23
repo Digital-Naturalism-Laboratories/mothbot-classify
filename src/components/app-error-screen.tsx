@@ -34,8 +34,8 @@ export function AppErrorScreen(props: ErrorComponentProps) {
       <pre className='whitespace-pre-wrap break-words rounded-md border border-red-300 bg-red-50 p-12 text-12 text-red-700 mb-12'>{message}</pre>
       {looksLikeSizeLimit ? (
         <p className='text-13 text-neutral-700 mb-12'>
-          This usually means something was too large for the browser to handle at once, like a night with an
-          unusually high number of detections. Your saved IDs are safe. Reloading and opening a different night, or a
+          This usually means something was too large for the browser to handle at once, like a session with an
+          unusually high number of detections. Your saved IDs are safe. Reloading and opening a different session, or a
           smaller part of this one, should work.
         </p>
       ) : (

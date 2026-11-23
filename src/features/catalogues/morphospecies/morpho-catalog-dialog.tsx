@@ -353,7 +353,7 @@ function MorphoCardActions(props: { morphoKey: string; onClose?: () => void }) {
               })
             }}
           >
-            Load in night
+            Load in session
           </DropdownMenuItem>
 
           <DropdownMenuItem className='text-13' onSelect={(e) => e.preventDefault()} onClick={() => setIdentifyDialogOpen(true)}>
@@ -387,13 +387,13 @@ function handleLoadInNight(params: {
   const firstNightId = findFirstNightForMorphoKey({ summaries, morphoKey })
 
   if (!firstNightId) {
-    toast.warning('No nights contain this morphospecies')
+    toast.warning('No sessions contain this morphospecies')
     return
   }
 
   const nightEntity = leafGroupsStore.get()?.[firstNightId]
   if (!nightEntity) {
-    toast.warning('Could not navigate to night')
+    toast.warning('Could not navigate to session')
     return
   }
 

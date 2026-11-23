@@ -45,7 +45,7 @@ export function SpeciesListControl(props: { projectId?: string; className?: stri
     >
       <Icon icon={ListChecksIcon} className='shrink-0 opacity-70' />
       <span className='truncate'>
-        {isLoading ? 'Loading species lists…' : listName ? `Species list: ${listName}` : 'No species list selected'}
+        {isLoading ? 'Loading taxa lists…' : listName ? `Taxa list: ${listName}` : 'No taxa list selected'}
       </span>
       {!isLoading ? <span className='shrink-0 font-medium text-neutral-900 underline underline-offset-2'>{listName ? 'Change' : 'Choose'}</span> : null}
     </button>

@@ -9,6 +9,7 @@
  * touching the files that hold human identifications. A missing or unreadable
  * file just means "no measurements".
  */
+import { fromFileKeys } from './file-keys'
 export const PATCH_MEASUREMENTS_RECORD = '02_records/patch-measurements.ndjson'
 
 export type PatchMeasurementRecord = {
@@ -117,7 +118,7 @@ export function parsePatchMeasurements(text: string): PatchMeasurementsById {
     const trimmed = line.trim()
     if (!trimmed) continue
     try {
-      const row = JSON.parse(trimmed) as PatchMeasurementRecord
+      const row = fromFileKeys<PatchMeasurementRecord>(JSON.parse(trimmed))
       if (row && typeof row.patch_id === 'string' && row.patch_id) byPatch[row.patch_id] = row
     } catch {
       // skip malformed line

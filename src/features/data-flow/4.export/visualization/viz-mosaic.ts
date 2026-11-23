@@ -108,7 +108,7 @@ function dilate(src: Uint8Array, w: number, h: number, m: number): Uint8Array {
 }
 
 /** Rasterize a base silhouette bitmap to a boolean fill mask sized to `width`. */
-export function buildBaseMask(bitmap: ImageBitmap, width: number): { data: Uint8Array; w: number; h: number } {
+export function buildBaseMask(bitmap: ImageBitmap, width: number, invert = false): { data: Uint8Array; w: number; h: number } {
   const w = Math.max(1, Math.floor(width))
   const h = Math.max(1, Math.round(bitmap.height * (w / bitmap.width)))
   const off = new OffscreenCanvas(w, h)
@@ -126,6 +126,8 @@ export function buildBaseMask(bitmap: ImageBitmap, width: number): { data: Uint8
       data[i] = l < 128 ? 1 : 0
     }
   }
+  // Inverted: fill the empty part of the image instead (e.g. around a silhouette).
+  if (invert) for (let i = 0; i < w * h; i++) data[i] = data[i] ? 0 : 1
   return { data, w, h }
 }
 
