@@ -260,6 +260,7 @@ export async function buildAmiAdapterRecords(params: {
     // AMI data comes with Antenna's own sessions, which these crops don't carry yet.
     sessions: [],
     deviceTypes: [],
+    powerSources: [],
   }
 }
 

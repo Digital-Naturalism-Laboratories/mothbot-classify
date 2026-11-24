@@ -1,7 +1,8 @@
 import type { MothboxNextDatasetManifest } from './dataset-manifest'
 import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, type SessionRecord } from './sessions'
 import { PACKAGE_DEVICE_TYPES_RECORD, parseDeviceTypes } from './device-types-records'
-import type { DeviceType } from '~/models/device-types'
+import { PACKAGE_POWER_SOURCES_RECORD, parsePowerSources } from './power-sources-records'
+import type { DeviceType, DeviceTypePowerSource } from '~/models/device-types'
 import { parseDatasetManifest } from './dataset-manifest'
 import {
   parseCameraDayRecords,
@@ -42,6 +43,8 @@ export type LoadedMothboxNextPackage = {
   sessions?: SessionRecord[]
   /** The dataset's own (custom) device types; built-in ones aren't stored. */
   deviceTypes?: DeviceType[]
+  /** The dataset's own power setups (`02_records/power-sources.ndjson`). */
+  powerSources?: DeviceTypePowerSource[]
 }
 
 export type PackageDataAccess = {
@@ -124,6 +127,14 @@ export async function loadMothboxNextPackageData(params: {
     // no device types file
   }
 
+  // Optional: a missing file just means the dataset has no power setups of its own.
+  let powerSources: DeviceTypePowerSource[] = []
+  try {
+    powerSources = parsePowerSources(await access.readPackageFile(joinPackagePath(packageRoot, PACKAGE_POWER_SOURCES_RECORD)))
+  } catch {
+    // no power setups file
+  }
+
   // Optional: a missing file just means nobody added a Non-Target category yet.
   let nonTargetCategories: string[] = []
   try {
@@ -154,6 +165,7 @@ export async function loadMothboxNextPackageData(params: {
     nonTargetCategories,
     sessions,
     deviceTypes,
+    powerSources,
   }
 }
 

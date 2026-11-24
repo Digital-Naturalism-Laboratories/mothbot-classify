@@ -64,7 +64,7 @@ export function deploymentDeviceFeatures(deployment: DeploymentRecord, customTyp
     attractorTypes: cleanList(ownAttractors.some(Boolean) ? ownAttractors : (type?.attractors ?? []).map((a) => a.attractorType)),
     targetTypes: cleanList(ownTarget ? [ownTarget] : (type?.targets ?? []).map((t) => t.targetType)),
     sensorTypes: cleanList(ownSensor ? [ownSensor] : (type?.sensors ?? []).map((s) => s.sensorType)),
-    powerSourceTypes: cleanList((deployment.power_sources?.length ? deployment.power_sources : (type?.powerSources ?? [])).map((p) => p.powerSourceType)),
+    powerSourceTypes: cleanList([(deployment.power_source ?? type?.powerSource)?.powerSourceType]),
   }
 }
 

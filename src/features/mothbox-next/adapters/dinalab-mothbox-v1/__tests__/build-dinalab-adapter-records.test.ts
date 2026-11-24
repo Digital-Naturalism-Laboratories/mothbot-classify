@@ -240,6 +240,7 @@ describe('buildDinalabMothboxV1Records', () => {
       derivedFrom: 'mothbox-pro',
       attractors: [{ attractorType: 'UV LED', powerW: 10 }],
       sensors: [{ sensorType: 'camera', model: 'OwlSight' }],
+      powerSource: { powerSourceType: 'battery', powerSourceID: 'custom-power-field-battery', name: 'Field battery', capacityWh: 200 },
     }
     const files = new Map<string, string>([
       [
@@ -255,7 +256,11 @@ describe('buildDinalabMothboxV1Records', () => {
       [
         `_processed/Deployment_B/2026-07-27/b_botdetection.json`,
         JSON.stringify({
-          deviceTypeDefinition: { deviceTypeID: 'mothbox-diy', deviceType: 'Standard Mothbox DIY' },
+          deviceTypeDefinition: {
+            deviceTypeID: 'mothbox-diy',
+            deviceType: 'Standard Mothbox DIY',
+            powerSource: { powerSourceType: 'grid', powerSourceID: 'grid-12v-adapter', name: 'Mains adapter, 12 V' },
+          },
           shapes: [shape({ patchFileName: 'b_0_m.pt.jpg', label: 'ORDER_Diptera' })],
         }),
       ],
@@ -276,7 +281,9 @@ describe('buildDinalabMothboxV1Records', () => {
     expect(built.deviceTypes).toMatchObject([custom])
     const byId = new Map(built.deployments.map((d) => [d.deployment_id, d]))
     expect(byId.get('Deployment_A')).toMatchObject({ device_type_id: 'custom-pro-uv-ext', device_type: 'Pro with external UV' })
-    expect(byId.get('Deployment_B')).toMatchObject({ device_type_id: 'mothbox-diy' })
+    expect(byId.get('Deployment_B')).toMatchObject({ device_type_id: 'mothbox-diy', power_source: { powerSourceType: 'grid' } })
+    // Custom power setups are kept for the dataset; standard ones aren't repeated.
+    expect(built.powerSources.map((p) => p.powerSourceID)).toEqual(['custom-power-field-battery'])
   })
 
   it('links Mothbox _processed patches to the existing source image extension', async () => {

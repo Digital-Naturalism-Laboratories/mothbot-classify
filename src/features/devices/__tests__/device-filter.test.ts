@@ -54,7 +54,7 @@ describe('device filter', () => {
   it('uses a box’s own power sources over its type’s', () => {
     const own = deviceFeaturesByDeployment(
       [
-        { deployment_id: 'on-grid', device_type_id: 'mothbox-pro', power_sources: [{ powerSourceType: 'grid' }] },
+        { deployment_id: 'on-grid', device_type_id: 'mothbox-pro', power_source: { powerSourceType: 'grid' } },
         { deployment_id: 'plain', device_type_id: 'mothbox-pro' },
       ],
       custom,

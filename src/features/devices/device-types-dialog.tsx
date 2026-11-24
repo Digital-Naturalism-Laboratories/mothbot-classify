@@ -6,13 +6,22 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Button } from '~/components/ui/button'
 import { cn } from '~/utils/cn'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
-import { saveCustomDeviceTypes, saveDeploymentDeviceTypes } from '~/features/mothbox-next/device-types-package'
+import { saveCustomDeviceTypes, saveCustomPowerSources, saveDeploymentDeviceTypes } from '~/features/mothbox-next/device-types-package'
 import {
   BUILT_IN_DEVICE_TYPES,
   DEVICE_CHOICES,
   SENSOR_TYPES,
   attractorPowerOptions,
+  customizePowerSource,
   deviceTypeProblems,
+  isStandardPowerSource,
+  isStandardPowerSourceId,
+  newCustomPowerSource,
+  POWER_SOURCE_NUMBERS,
+  POWER_SOURCE_TYPES,
+  powerSetupsOfType,
+  powerSourceProblems,
+  STANDARD_POWER_SOURCES,
   isBuiltInDeviceType,
   newCustomDeviceType,
   resolveDeviceType,
@@ -40,10 +49,15 @@ function DeviceTypesDialogBody(props: Props) {
   const { onClose } = props
   const active = useStore(mothboxNextPackageStore)
   const loaded = active?.loaded
-  const [tab, setTab] = useState<'types' | 'deployments'>('types')
+  const [tab, setTab] = useState<'types' | 'power' | 'deployments'>('types')
   const [customTypes, setCustomTypes] = useState<DeviceType[]>(() => (loaded?.deviceTypes ?? []).map(clone))
   const [selectedId, setSelectedId] = useState<string>(BUILT_IN_DEVICE_TYPES[0]!.deviceTypeID)
-  const [dirty, setDirty] = useState(false)
+  const [customPower, setCustomPower] = useState<DeviceTypePowerSource[]>(() => (loaded?.powerSources ?? []).map(clone))
+  const [selectedPowerId, setSelectedPowerId] = useState<string>(STANDARD_POWER_SOURCES[0]?.powerSourceID ?? '')
+  const [dirtyTypes, setDirtyTypes] = useState(false)
+  const [dirtyPower, setDirtyPower] = useState(false)
+  const dirty = dirtyTypes || dirtyPower
+  const setDirty = setDirtyTypes
   const [saving, setSaving] = useState(false)
 
   const allTypes = useMemo(() => [...BUILT_IN_DEVICE_TYPES, ...customTypes], [customTypes])
@@ -85,16 +99,66 @@ function DeviceTypesDialogBody(props: Props) {
     setDirty(true)
   }
 
-  const problems = customTypes.flatMap((t) => deviceTypeProblems(t).map((p) => `${t.deviceType || 'Unnamed'}: ${p}`))
+  // --- power setups ---
+  const allPower = useMemo(() => [...STANDARD_POWER_SOURCES, ...customPower], [customPower])
+  const selectedPower = allPower.find((p) => p.powerSourceID === selectedPowerId) ?? allPower[0]
+  const selectedPowerIsStandard = isStandardPowerSourceId(selectedPower?.powerSourceID)
+
+  function addPower(from?: DeviceTypePowerSource) {
+    const name = from ? `${(from.name ?? from.powerSourceType).replace(/^Standard /, '')} (custom)` : 'New power setup'
+    const setup = newCustomPowerSource({ name, from, existingIds: allPower.map((p) => p.powerSourceID ?? '') })
+    setCustomPower((list) => [...list, setup])
+    setSelectedPowerId(setup.powerSourceID!)
+    setDirtyPower(true)
+  }
+
+  function updatePower(change: Partial<DeviceTypePowerSource>) {
+    setCustomPower((list) => list.map((p) => (p.powerSourceID === selectedPower?.powerSourceID ? { ...p, ...change } : p)))
+    setDirtyPower(true)
+  }
+
+  function deletePower() {
+    const id = selectedPower?.powerSourceID
+    if (customPower.some((p) => p.derivedFrom === id)) {
+      toast.error('Other power setups are based on this one', { description: 'Delete or change those first.' })
+      return
+    }
+    setCustomPower((list) => list.filter((p) => p.powerSourceID !== id))
+    setSelectedPowerId(STANDARD_POWER_SOURCES[0]?.powerSourceID ?? '')
+    setDirtyPower(true)
+  }
+
+  const problems = [
+    ...customTypes.flatMap((t) => deviceTypeProblems(t).map((p) => `${t.deviceType || 'Unnamed'}: ${p}`)),
+    ...customPower.flatMap((s) => powerSourceProblems(s).map((p) => `${s.name || 'Unnamed power setup'}: ${p}`)),
+  ]
 
   async function onSave() {
     setSaving(true)
     try {
-      await saveCustomDeviceTypes(customTypes)
-      setDirty(false)
-      toast.success('Device types saved')
+      let types = customTypes
+      if (dirtyPower) {
+        await saveCustomPowerSources(customPower)
+        // Device types using a saved setup get its new details.
+        const byId = new Map(customPower.map((p) => [p.powerSourceID, p]))
+        const synced = types.map((t) => {
+          const saved = t.powerSource?.powerSourceID ? byId.get(t.powerSource.powerSourceID) : undefined
+          return saved && JSON.stringify(saved) !== JSON.stringify(t.powerSource) ? { ...t, powerSource: clone(saved) } : t
+        })
+        if (synced.some((t, i) => t !== types[i])) {
+          types = synced
+          setCustomTypes(synced)
+          setDirtyTypes(true)
+        }
+        setDirtyPower(false)
+      }
+      if (dirtyTypes || types !== customTypes) {
+        await saveCustomDeviceTypes(types)
+        setDirtyTypes(false)
+      }
+      toast.success('Saved')
     } catch (err) {
-      toast.error('Could not save device types', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Could not save', { description: err instanceof Error ? err.message : String(err) })
     } finally {
       setSaving(false)
     }
@@ -114,10 +178,10 @@ function DeviceTypesDialogBody(props: Props) {
         ) : (
           <>
             <div className='flex gap-4 mb-12'>
-              {(['types', 'deployments'] as const).map((t) => (
+              {(['types', 'power', 'deployments'] as const).map((t) => (
                 <button key={t} type='button' onClick={() => setTab(t)}
                   className={cn('px-12 py-4 rounded text-13 border', tab === t ? 'bg-blue-600 text-white border-blue-600' : 'border-black/15 text-ink-secondary')}>
-                  {t === 'types' ? 'Device types' : 'Deployments'}
+                  {t === 'types' ? 'Device types' : t === 'power' ? 'Power setups' : 'Deployments'}
                 </button>
               ))}
             </div>
@@ -137,9 +201,26 @@ function DeviceTypesDialogBody(props: Props) {
                       Built-in device types can’t be changed. Use <b>Customize</b> to make your own version of this one.
                     </div>
                   ) : null}
-                  <TypeEditor type={shown} readOnly={selectedIsBuiltIn} onChange={updateSelected}
+                  <TypeEditor type={shown} readOnly={selectedIsBuiltIn} onChange={updateSelected} customPower={customPower}
                     basedOn={selected.derivedFrom ? allTypes.find((t) => t.deviceTypeID === selected.derivedFrom)?.deviceType : undefined}
                     onDelete={selectedIsBuiltIn ? undefined : deleteSelected} />
+                </div>
+              </div>
+            ) : tab === 'power' ? (
+              <div className='flex gap-16 flex-1 min-h-0'>
+                <PowerList customPower={customPower} selectedId={selectedPower?.powerSourceID ?? ''} onSelect={setSelectedPowerId}
+                  onNew={() => addPower()} onCustomize={() => selectedPower && addPower(selectedPower)} />
+                <div className='flex-1 min-w-0 overflow-y-auto pr-8'>
+                  {selectedPowerIsStandard ? (
+                    <div className='mb-12 rounded bg-neutral-50 px-12 py-8 text-12 text-ink-secondary'>
+                      Standard power setups can’t be changed. Use <b>Customize</b> to make your own version of this one.
+                    </div>
+                  ) : null}
+                  {selectedPower ? (
+                    <PowerEditor setup={selectedPower} readOnly={selectedPowerIsStandard} onChange={updatePower}
+                      basedOn={selectedPower.derivedFrom ? allPower.find((p) => p.powerSourceID === selectedPower.derivedFrom)?.name ?? undefined : undefined}
+                      onDelete={selectedPowerIsStandard ? undefined : deletePower} />
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -149,13 +230,13 @@ function DeviceTypesDialogBody(props: Props) {
         )}
 
         <DialogFooter className='mt-12 items-center'>
-          {tab === 'types' && problems.length ? (
+          {tab !== 'deployments' && problems.length ? (
             <div className='mr-auto text-12 text-red-700 max-w-[640px] truncate' title={problems.join('\n')}>{problems[0]}</div>
           ) : null}
           <Button variant='outline' onClick={onClose}>{dirty ? 'Close without saving' : 'Close'}</Button>
-          {tab === 'types' && loaded ? (
+          {tab !== 'deployments' && loaded ? (
             <Button onClick={() => void onSave()} disabled={!dirty || saving || problems.length > 0}>
-              {saving ? 'Saving…' : 'Save device types'}
+              {saving ? 'Saving…' : tab === 'power' ? 'Save power setups' : 'Save device types'}
             </Button>
           ) : null}
         </DialogFooter>
@@ -196,19 +277,22 @@ function TypeList(props: {
 
 function TypeEditor(props: {
   type: DeviceType
+  customPower?: DeviceTypePowerSource[]
   readOnly: boolean
   basedOn?: string
   onChange: (change: (type: DeviceType) => DeviceType) => void
   onDelete?: () => void
 }) {
   const { type, readOnly, basedOn, onChange, onDelete } = props
+  const customPower = props.customPower ?? []
   const set = (patch: Partial<DeviceType>) => onChange((t) => ({ ...t, ...patch }))
   const attractors = type.attractors ?? []
   const targets = type.targets ?? []
   const sensors = type.sensors ?? []
-  const powerSources = type.powerSources ?? []
+  const power = type.powerSource ?? null
   const setAttractor = (i: number, a: DeviceTypeAttractor) => set({ attractors: replace(attractors, i, a) })
-  const setPower = (i: number, p: DeviceTypePowerSource) => set({ powerSources: replace(powerSources, i, p) })
+  // Editing a standard setup's details makes it a custom one.
+  const editPower = (change: Partial<DeviceTypePowerSource>) => power && set({ powerSource: customizePowerSource(power, change, customPower) })
 
   return (
     <div className='space-y-16 text-13'>
@@ -315,44 +399,58 @@ function TypeEditor(props: {
         ))}
       </ListSection>
 
-      <ListSection title='Power sources' hint='Optional: one or more.' readOnly={readOnly}
-        onAdd={() => set({ powerSources: [...powerSources, { powerSourceType: 'battery', model: null, capacityWh: null }] })}>
-        {powerSources.map((p, i) => (
-          <Row key={i} readOnly={readOnly} onRemove={() => set({ powerSources: without(powerSources, i) })}>
-            <select aria-label='Power source type' className='rounded border border-black/15 px-6 py-4 bg-transparent' value={p.powerSourceType} disabled={readOnly}
-              onChange={(e) => setPower(i, { ...p, powerSourceType: e.target.value })}>
-              {[...new Set([...DEVICE_CHOICES.powerSourceTypes, p.powerSourceType])].map((v) => <option key={v} value={v}>{v}</option>)}
+      <section>
+        <div className='flex items-baseline gap-8 mb-6'>
+          <h4 className='text-13 font-semibold'>Power source</h4>
+          <span className='text-11 text-ink-secondary'>Optional: one battery, grid or solar setup.</span>
+        </div>
+        <div className='flex flex-wrap items-center gap-6'>
+          <select aria-label='Power source type' className='rounded border border-black/15 px-6 py-4 bg-transparent' disabled={readOnly}
+            value={power?.powerSourceType ?? ''}
+            onChange={(e) => {
+              const kind = e.target.value
+              if (!kind) return set({ powerSource: null })
+              if (power?.powerSourceType === kind) return
+              const first = powerSetupsOfType(kind, customPower)[0]
+              set({ powerSource: first ? clone(first) : { powerSourceType: kind, powerSourceID: `custom-${kind}`, name: kind } })
+            }}>
+            <option value=''>Not specified</option>
+            {DEVICE_CHOICES.powerSourceTypes.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          {power ? (
+            <select aria-label='Power setup' className='rounded border border-black/15 px-6 py-4 bg-transparent min-w-0' disabled={readOnly}
+              value={power.powerSourceID ?? ''}
+              onChange={(e) => {
+                const setup = powerSetupsOfType(power.powerSourceType, customPower).find((s) => s.powerSourceID === e.target.value)
+                if (setup) set({ powerSource: clone(setup) })
+              }}>
+              {powerSetupsOfType(power.powerSourceType, customPower).map((s) => <option key={s.powerSourceID!} value={s.powerSourceID!}>{s.name}</option>)}
+              {!isStandardPowerSource(power) && !customPower.some((s) => s.powerSourceID === power.powerSourceID)
+                ? <option value={power.powerSourceID ?? ''}>{power.name ?? 'Custom'}</option> : null}
             </select>
-            <TextInput list={p.powerSourceType === 'battery' ? 'battery-models' : undefined}
-              placeholder={p.powerSourceType === 'battery' ? 'Model, e.g. Standard TalentCell PB120B1' : 'Model (optional)'}
-              value={p.model ?? ''} readOnly={readOnly}
-              onChange={(v) => {
-                // A known battery fills in its capacity and voltages (where they're empty).
-                const known = DEVICE_CHOICES.batteries.find((b) => b.model.toLowerCase() === v.trim().toLowerCase())
-                setPower(i, {
-                  ...p,
-                  model: v || null,
-                  capacityWh: p.capacityWh ?? known?.capacityWh ?? null,
-                  nominalVoltageV: p.nominalVoltageV ?? known?.nominalVoltageV ?? null,
-                  voltageAt80PercentV: p.voltageAt80PercentV ?? known?.voltageAt80PercentV ?? null,
-                  voltageAt20PercentV: p.voltageAt20PercentV ?? known?.voltageAt20PercentV ?? null,
-                })
-              }} />
-            {p.powerSourceType === 'battery' ? (
+          ) : null}
+        </div>
+        {power ? (
+          <div className='mt-6 grid grid-flow-col auto-cols-fr gap-6'>
+            <TextInput placeholder='Model' value={power.model ?? ''} readOnly={readOnly} onChange={(v) => editPower({ model: v || null })} />
+            {power.powerSourceType === 'battery' ? (
               <>
-                <NumberInput placeholder='Capacity' unit='Wh' value={p.capacityWh} readOnly={readOnly}
-                  onChange={(v) => setPower(i, { ...p, capacityWh: v })} />
-                <NumberInput placeholder='Nominal' unit='V' value={p.nominalVoltageV} readOnly={readOnly}
-                  onChange={(v) => setPower(i, { ...p, nominalVoltageV: v })} />
-                <NumberInput placeholder='At 80% full' unit='V' value={p.voltageAt80PercentV} readOnly={readOnly}
-                  onChange={(v) => setPower(i, { ...p, voltageAt80PercentV: v })} />
-                <NumberInput placeholder='At 20% full' unit='V' value={p.voltageAt20PercentV} readOnly={readOnly}
-                  onChange={(v) => setPower(i, { ...p, voltageAt20PercentV: v })} />
+                <NumberInput placeholder='Capacity' unit='Wh' value={power.capacityWh} readOnly={readOnly} onChange={(v) => editPower({ capacityWh: v })} />
+                <NumberInput placeholder='Nominal' unit='V' value={power.nominalVoltageV} readOnly={readOnly} onChange={(v) => editPower({ nominalVoltageV: v })} />
+                <NumberInput placeholder='At 80% full' unit='V' value={power.voltageAt80PercentV} readOnly={readOnly} onChange={(v) => editPower({ voltageAt80PercentV: v })} />
+                <NumberInput placeholder='At 20% full' unit='V' value={power.voltageAt20PercentV} readOnly={readOnly} onChange={(v) => editPower({ voltageAt20PercentV: v })} />
               </>
             ) : null}
-          </Row>
-        ))}
-      </ListSection>
+            {power.powerSourceType === 'grid' ? (
+              <NumberInput placeholder='Supply' unit='V' value={power.supplyVoltageV} readOnly={readOnly} onChange={(v) => editPower({ supplyVoltageV: v })} />
+            ) : null}
+            {power.powerSourceType === 'solar' ? (
+              <NumberInput placeholder='Panel' unit='W' value={power.panelPowerW} readOnly={readOnly} onChange={(v) => editPower({ panelPowerW: v })} />
+            ) : null}
+            <TextInput placeholder='Notes' value={power.notes ?? ''} readOnly={readOnly} onChange={(v) => editPower({ notes: v || null })} />
+          </div>
+        ) : null}
+      </section>
 
       <Field label='Description'>
         <textarea rows={3} className='w-full rounded border border-black/15 px-6 py-4 bg-transparent read-only:bg-neutral-50'
@@ -365,11 +463,101 @@ function TypeEditor(props: {
       <ChoiceList id='target-types' values={DEVICE_CHOICES.targetTypes} />
       <ChoiceList id='target-materials' values={DEVICE_CHOICES.targetMaterials} />
       <ChoiceList id='target-colors' values={DEVICE_CHOICES.targetColors} />
-      <ChoiceList id='battery-models' values={DEVICE_CHOICES.batteries.map((b) => b.model)} />
 
       {onDelete ? (
         <div className='pt-8'>
           <Button size='xsm' variant='outline' onClick={onDelete}>Delete this device type</Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function PowerList(props: {
+  customPower: DeviceTypePowerSource[]
+  selectedId: string
+  onSelect: (id: string) => void
+  onNew: () => void
+  onCustomize: () => void
+}) {
+  const { customPower, selectedId, onSelect, onNew, onCustomize } = props
+  const item = (p: DeviceTypePowerSource) => (
+    <button key={p.powerSourceID!} type='button' onClick={() => onSelect(p.powerSourceID!)}
+      className={cn('w-full text-left px-8 py-6 rounded text-13 truncate', p.powerSourceID === selectedId ? 'bg-blue-100 text-blue-900' : 'hover:bg-neutral-100')}>
+      {p.name || 'Unnamed'} <span className='text-11 text-ink-secondary'>· {p.powerSourceType}</span>
+    </button>
+  )
+  return (
+    <div className='w-[240px] shrink-0 flex flex-col gap-8 overflow-y-auto'>
+      <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary'>Standard</div>
+      <div className='space-y-2'>{STANDARD_POWER_SOURCES.map(item)}</div>
+      <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary mt-8'>This dataset</div>
+      <div className='space-y-2'>
+        {customPower.length ? customPower.map(item) : <p className='text-12 text-ink-secondary px-8'>None yet.</p>}
+      </div>
+      <div className='flex flex-col gap-6 mt-8'>
+        <Button size='xsm' variant='outline' onClick={onCustomize}>Customize selected</Button>
+        <Button size='xsm' variant='outline' onClick={onNew}>New power setup</Button>
+      </div>
+    </div>
+  )
+}
+
+const POWER_NUMBER_INPUTS: Record<string, { placeholder: string; unit: string }> = {
+  capacityWh: { placeholder: 'Capacity', unit: 'Wh' },
+  nominalVoltageV: { placeholder: 'Nominal', unit: 'V' },
+  voltageAt80PercentV: { placeholder: 'At 80% full', unit: 'V' },
+  voltageAt20PercentV: { placeholder: 'At 20% full', unit: 'V' },
+  supplyVoltageV: { placeholder: 'Supply', unit: 'V' },
+  panelPowerW: { placeholder: 'Panel', unit: 'W' },
+}
+
+function PowerEditor(props: {
+  setup: DeviceTypePowerSource
+  readOnly: boolean
+  basedOn?: string
+  onChange: (change: Partial<DeviceTypePowerSource>) => void
+  onDelete?: () => void
+}) {
+  const { setup, readOnly, basedOn, onChange, onDelete } = props
+  return (
+    <div className='space-y-16 text-13'>
+      <div className='grid grid-cols-2 gap-12'>
+        <Field label='Name'>
+          <TextInput value={setup.name ?? ''} readOnly={readOnly} onChange={(v) => onChange({ name: v })} />
+        </Field>
+        <Field label='Based on'>
+          <div className='py-6 text-ink-secondary'>{basedOn ?? '—'}</div>
+        </Field>
+        <Field label='Kind'>
+          <select aria-label='Power setup kind' className='w-full rounded border border-black/15 px-6 py-4 bg-transparent' disabled={readOnly}
+            value={setup.powerSourceType}
+            onChange={(e) => {
+              // Details of the old kind don't apply to the new one.
+              const cleared = Object.fromEntries(Object.values(POWER_SOURCE_NUMBERS).flat().map((k) => [k, undefined]))
+              onChange({ ...cleared, powerSourceType: e.target.value })
+            }}>
+            {POWER_SOURCE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </Field>
+        <Field label='Model'>
+          <TextInput value={setup.model ?? ''} readOnly={readOnly} onChange={(v) => onChange({ model: v || null })} />
+        </Field>
+      </div>
+      <div className='grid grid-cols-2 gap-12'>
+        {(POWER_SOURCE_NUMBERS[setup.powerSourceType] ?? []).map((key) => (
+          <Field key={key} label={POWER_NUMBER_INPUTS[key]!.placeholder}>
+            <NumberInput placeholder={POWER_NUMBER_INPUTS[key]!.placeholder} unit={POWER_NUMBER_INPUTS[key]!.unit}
+              value={setup[key] as number | null | undefined} readOnly={readOnly} onChange={(v) => onChange({ [key]: v })} />
+          </Field>
+        ))}
+      </div>
+      <Field label='Notes'>
+        <TextInput value={setup.notes ?? ''} readOnly={readOnly} onChange={(v) => onChange({ notes: v || null })} />
+      </Field>
+      {onDelete ? (
+        <div className='pt-8'>
+          <Button size='xsm' variant='outline' onClick={onDelete}>Delete this power setup</Button>
         </div>
       ) : null}
     </div>

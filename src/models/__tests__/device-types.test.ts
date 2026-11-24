@@ -50,6 +50,9 @@ describe('device types', () => {
     expect(old?.targets).toEqual([{ targetType: 'sheet', widthCm: 50, heightCm: null, distanceCm: 30 }])
     expect(old?.sensors?.[0]).toMatchObject({ sensorType: 'camera', resolution: '12 MP' })
     expect(normalizeDeviceType({ deviceType: 'no id' })).toBeNull()
+    // A list of power sources (format 3) becomes the one power source.
+    expect(normalizeDeviceType({ deviceTypeID: 'y', deviceType: 'Y', powerSources: [{ powerSourceType: 'grid' }, { powerSourceType: 'solar' }] })?.powerSource)
+      .toEqual({ powerSourceType: 'grid' })
   })
 
   it('makes new types from scratch or as a copy, with unique ids', () => {

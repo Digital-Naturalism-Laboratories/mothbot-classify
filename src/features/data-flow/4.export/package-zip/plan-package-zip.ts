@@ -13,6 +13,8 @@
  * Rows are written back in the package's own field-name style.
  */
 
+import { PACKAGE_DEVICE_TYPES_RECORD, serializeDeviceTypes } from '~/features/mothbox-next/device-types-records'
+import { PACKAGE_POWER_SOURCES_RECORD, serializePowerSources } from '~/features/mothbox-next/power-sources-records'
 import type { LoadedMothboxNextPackage } from '~/features/mothbox-next/load-package-data'
 import type { ClassificationRecord, PatchRecord } from '~/features/mothbox-next/records'
 import { fileKeyStyleForVersion, serializePackageRows } from '~/features/mothbox-next/file-keys'
@@ -90,6 +92,13 @@ export function planPackageZip(params: {
       path: PACKAGE_NON_TARGET_CATEGORIES_RECORD,
       text: serializeNonTargetCategories(loaded.nonTargetCategories.map((path) => ({ path }))),
     })
+  }
+  // The dataset's own device types and power setups (small; deployments refer to them).
+  if (loaded.deviceTypes?.length) {
+    entries.push({ kind: 'text', path: PACKAGE_DEVICE_TYPES_RECORD, text: serializeDeviceTypes(loaded.deviceTypes) })
+  }
+  if (loaded.powerSources?.length) {
+    entries.push({ kind: 'text', path: PACKAGE_POWER_SOURCES_RECORD, text: serializePowerSources(loaded.powerSources) })
   }
   for (const [path, extra] of Object.entries(params.extraRecordTexts ?? {})) {
     entries.push({ kind: 'text', path, text: extra })

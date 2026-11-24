@@ -1,5 +1,6 @@
-import { resolveDeviceType, type DeviceType } from '~/models/device-types'
+import { resolveDeviceType, type DeviceType, type DeviceTypePowerSource } from '~/models/device-types'
 import { PACKAGE_DEVICE_TYPES_RECORD, serializeDeviceTypes } from './device-types-records'
+import { PACKAGE_POWER_SOURCES_RECORD, serializePowerSources } from './power-sources-records'
 import { mothboxNextPackageStore } from './active-package'
 import { fileKeyStyleForVersion, serializePackageRows } from './file-keys'
 import type { DeploymentRecord } from './records'
@@ -24,6 +25,15 @@ export async function saveCustomDeviceTypes(types: readonly DeviceType[]): Promi
   const root = await packageRootHandle()
   await writeTextFile(root, joinPackagePath(active.packageRoot, PACKAGE_DEVICE_TYPES_RECORD), serializeDeviceTypes(types))
   mothboxNextPackageStore.set({ ...active, loaded: { ...active.loaded, deviceTypes: [...types] } })
+}
+
+/** Saves the dataset's own power setups (replacing the list) and updates the open package. */
+export async function saveCustomPowerSources(setups: readonly DeviceTypePowerSource[]): Promise<void> {
+  const active = mothboxNextPackageStore.get()
+  if (!active?.loaded) throw new Error('Open a dataset first.')
+  const root = await packageRootHandle()
+  await writeTextFile(root, joinPackagePath(active.packageRoot, PACKAGE_POWER_SOURCES_RECORD), serializePowerSources(setups))
+  mothboxNextPackageStore.set({ ...active, loaded: { ...active.loaded, powerSources: [...setups] } })
 }
 
 /**

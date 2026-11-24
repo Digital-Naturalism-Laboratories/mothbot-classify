@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeviceTypesDialog } from '~/features/devices/device-types-dialog'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { parseDeviceTypes, serializeDeviceTypes } from '~/features/mothbox-next/device-types-records'
-import { newCustomDeviceType } from '~/models/device-types'
+import { parsePowerSources, serializePowerSources } from '~/features/mothbox-next/power-sources-records'
+import { newCustomDeviceType, newCustomPowerSource } from '~/models/device-types'
 
-const saved: { types?: unknown[]; assignments?: Record<string, string | null> } = {}
+const saved: { types?: unknown[]; power?: unknown[]; assignments?: Record<string, string | null> } = {}
 vi.mock('~/features/mothbox-next/device-types-package', () => ({
   saveCustomDeviceTypes: async (types: unknown[]) => {
     saved.types = types
+  },
+  saveCustomPowerSources: async (power: unknown[]) => {
+    saved.power = power
   },
   saveDeploymentDeviceTypes: async (assignments: Record<string, string | null>) => {
     saved.assignments = assignments
@@ -30,6 +34,13 @@ function openPackage() {
   })
 }
 
+describe('power setups file', () => {
+  it('round-trips, skipping damaged lines and setups without an id', () => {
+    const setup = newCustomPowerSource({ name: 'Field battery', powerSourceType: 'battery', existingIds: [] })
+    expect(parsePowerSources(serializePowerSources([setup]) + 'not json\n{"powerSourceType":"grid"}\n')).toEqual([setup])
+  })
+})
+
 describe('device types file', () => {
   it('round-trips, skipping damaged lines', () => {
     const type = newCustomDeviceType({ name: 'Field kit', existingIds: [] })
@@ -40,6 +51,7 @@ describe('device types file', () => {
 describe('Devices dialog', () => {
   beforeEach(() => {
     saved.types = undefined
+    saved.power = undefined
     saved.assignments = undefined
     openPackage()
   })
@@ -99,9 +111,14 @@ describe('Devices dialog', () => {
     await user.type(at('Location'), 'in target')
     await user.type(screen.getAllByPlaceholderText('Color (optional)')[0]!, 'yellow')
 
-    await user.click(within(screen.getByRole('heading', { name: 'Power sources' }).closest('section')!).getByRole('button', { name: /Add/ }))
-    await user.type(screen.getByPlaceholderText('Model, e.g. Standard TalentCell PB120B1'), 'Standard TalentCell PB120B1')
+    // One power source: a battery starts as the standard TalentCell; changing a detail makes it custom.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Power source type' }), 'battery')
+    expect(screen.getByRole('combobox', { name: 'Power setup' })).toHaveDisplayValue('Standard TalentCell PB120B1')
     expect(screen.getByPlaceholderText('Capacity')).toHaveValue(142)
+    expect(screen.getByPlaceholderText('At 80% full')).toHaveValue(12)
+    await user.clear(screen.getByPlaceholderText('Capacity'))
+    await user.type(screen.getByPlaceholderText('Capacity'), '100')
+    expect(screen.getByRole('combobox', { name: 'Power setup' })).toHaveDisplayValue('TalentCell PB120B1 (custom)')
     await user.type(screen.getByPlaceholderText('Notes about the whole device'), 'Sheet hung from a tree.')
 
     await user.click(screen.getByRole('button', { name: 'Save device types' }))
@@ -116,18 +133,42 @@ describe('Devices dialog', () => {
       powerW: 3.5,
     })
     expect(savedType.targets[0].color).toBe('yellow')
-    expect(screen.getByPlaceholderText('At 80% full')).toHaveValue(12)
-    expect(savedType.powerSources).toEqual([
-      {
-        powerSourceType: 'battery',
-        model: 'Standard TalentCell PB120B1',
-        capacityWh: 142,
-        nominalVoltageV: 11.1,
-        voltageAt80PercentV: 12,
-        voltageAt20PercentV: 10.5,
-      },
-    ])
+    expect(savedType.powerSource).toMatchObject({
+      powerSourceType: 'battery',
+      powerSourceID: 'custom-battery',
+      derivedFrom: 'talentcell-pb120b1',
+      model: 'TalentCell PB120B1',
+      capacityWh: 100,
+      nominalVoltageV: 11.1,
+      voltageAt80PercentV: 12,
+      voltageAt20PercentV: 10.5,
+    })
     expect(savedType.description).toBe('Sheet hung from a tree.')
+  })
+
+  it('saves the dataset’s own power setups and offers them to device types', async () => {
+    const user = userEvent.setup()
+    render(<DeviceTypesDialog open onClose={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Power setups' }))
+    expect(screen.getByText(/Standard power setups can’t be changed/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Customize selected' }))
+
+    const name = screen.getByDisplayValue('TalentCell PB120B1 (custom)')
+    await user.clear(name)
+    await user.type(name, 'Field battery')
+    await user.clear(screen.getByPlaceholderText('Capacity'))
+    await user.type(screen.getByPlaceholderText('Capacity'), '200')
+    await user.click(screen.getByRole('button', { name: 'Save power setups' }))
+    expect(saved.power).toEqual([
+      expect.objectContaining({ name: 'Field battery', powerSourceType: 'battery', derivedFrom: 'talentcell-pb120b1', capacityWh: 200, nominalVoltageV: 11.1 }),
+    ])
+
+    // A device type can now choose it.
+    await user.click(screen.getByRole('button', { name: 'Device types' }))
+    await user.click(screen.getByRole('button', { name: 'Customize selected' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Power source type' }), 'battery')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Power setup' }), 'Field battery')
+    expect(screen.getByPlaceholderText('Capacity')).toHaveValue(200)
   })
 
   it('will not save a type without a name, and keeps at least one sensor', async () => {

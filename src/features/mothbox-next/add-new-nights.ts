@@ -10,6 +10,7 @@
  */
 import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, serializeSessionRecords } from './sessions'
 import { PACKAGE_DEVICE_TYPES_RECORD, parseDeviceTypes, serializeDeviceTypes } from './device-types-records'
+import { PACKAGE_POWER_SOURCES_RECORD, newPowerSources, parsePowerSources, serializePowerSources } from './power-sources-records'
 import { fileKeyStyleOfManifestText, type FileKeyStyle } from './file-keys'
 
 import type { DinalabAdapterIO, DinalabAdapterSourceIO } from './adapters/dinalab-mothbox-v1/adapter-io'
@@ -203,6 +204,13 @@ export async function addNewNightsToPackage(params: {
   if (newDeviceTypes.length) {
     const base = deviceTypesText && !deviceTypesText.endsWith('\n') ? `${deviceTypesText}\n` : deviceTypesText
     await io.package.writeText(PACKAGE_DEVICE_TYPES_RECORD, base + serializeDeviceTypes(newDeviceTypes))
+  }
+  // Likewise power setups.
+  const powerText = await readTextSafe(io, PACKAGE_POWER_SOURCES_RECORD)
+  const addedPower = newPowerSources(parsePowerSources(powerText), built.powerSources ?? [])
+  if (addedPower.length) {
+    const base = powerText && !powerText.endsWith('\n') ? `${powerText}\n` : powerText
+    await io.package.writeText(PACKAGE_POWER_SOURCES_RECORD, base + serializePowerSources(addedPower))
   }
 
   // Bot classifications are an append-only log; new rows can't collide with

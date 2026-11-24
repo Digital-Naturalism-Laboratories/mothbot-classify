@@ -1,7 +1,7 @@
 import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRecord } from '../../records'
 import { defaultNightlySession, findSessionForTime, parseSessionsFile, SESSIONS_FILE_NAME, type SessionRecord } from '../../sessions'
 import { parseTimestampFromText } from '~/models/detection-time'
-import { isBuiltInDeviceType, normalizeDeviceType, type DeviceType } from '~/models/device-types'
+import { isBuiltInDeviceType, isStandardPowerSourceId, normalizeDeviceType, type DeviceType, type DeviceTypePowerSource } from '~/models/device-types'
 import { cornersRelFromPx, parseLabelledBox } from '~/models/box-formats'
 import { classificationFromBotShape, classificationFromIdentifiedShape, NO_MACHINE_ID_CLASSIFIER } from '../../bot-shape-to-classification'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
@@ -48,6 +48,8 @@ export type BuiltDinalabAdapterRecords = {
    * `02_records/device-types.ndjson`. Built-in types are not repeated here.
    */
   deviceTypes: DeviceType[]
+  /** Custom power setups the detection files' devices use, for `02_records/power-sources.ndjson`. */
+  powerSources: DeviceTypePowerSource[]
 }
 
 export async function buildDinalabMothboxV1Records(params: {
@@ -111,6 +113,7 @@ export async function buildDinalabMothboxV1Records(params: {
   const sessionsUsed = new Map<string, SessionRecord>()
   const deploymentMetadata = new Map<string, Partial<DeploymentRecord>>()
   const deviceTypesById = new Map<string, DeviceType>()
+  const powerSourcesById = new Map<string, DeviceTypePowerSource>()
 
   for (let botFileIndex = 0; botFileIndex < allDetectionPaths.length; botFileIndex++) {
     const botRelativePath = allDetectionPaths[botFileIndex]
@@ -142,6 +145,10 @@ export async function buildDinalabMothboxV1Records(params: {
       const definition = normalizeDeviceType((parsed as Record<string, unknown>).deviceTypeDefinition)
       if (definition && !isBuiltInDeviceType(definition.deviceTypeID) && !deviceTypesById.has(definition.deviceTypeID)) {
         deviceTypesById.set(definition.deviceTypeID, definition)
+      }
+      const power = definition?.powerSource
+      if (power?.powerSourceID && !isStandardPowerSourceId(power.powerSourceID) && !powerSourcesById.has(power.powerSourceID)) {
+        powerSourcesById.set(power.powerSourceID, power)
       }
     } catch { /* readLegacyDetectionShapes will surface the error */ }
     const fileSessions = await readDeploymentSessions({ io, botRelativePath, cache: sessionsByDeploymentDir })
@@ -330,6 +337,7 @@ export async function buildDinalabMothboxV1Records(params: {
     cameraDays,
     sessions: [...sessionsUsed.values()],
     deviceTypes: [...deviceTypesById.values()],
+    powerSources: [...powerSourcesById.values()],
   }
 }
 
@@ -410,7 +418,7 @@ function deploymentMetadataFromDetectionJson(parsed: Record<string, unknown>): P
     ...(parsed.target && typeof parsed.target === 'object' ? { target: parsed.target as Record<string, unknown> } : {}),
     ...(parsed.sensor && typeof parsed.sensor === 'object' ? { sensor: parsed.sensor as Record<string, unknown> } : {}),
     // Power is often set per box (battery, grid, solar), so keep it even for a standard type.
-    ...(definition?.powerSources?.length ? { power_sources: definition.powerSources } : {}),
+    ...(definition?.powerSource ? { power_source: definition.powerSource } : {}),
   }
   const device = text('deviceID', 'device')
   if (device) out.device_name = device

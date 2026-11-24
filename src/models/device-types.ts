@@ -6,8 +6,9 @@ import deviceTypesFile from '~/config/device-types.json'
  * `device-types/device-types.json`; after editing that file, run its
  * `device-types/sync-copies.py` to update this copy (and Process's and the firmware's).
  *
- * A device has 0 or more attractors, 0 or more targets, 1 or more sensors and 0 or more
- * power sources, plus hardware and firmware versions and a free-text description. A customized type names the type it came from in
+ * A device has 0 or more attractors, 0 or more targets, 1 or more sensors and at most one
+ * power source (a battery, grid or solar setup), plus hardware and firmware versions and a
+ * free-text description. A customized type names the type it came from in
  * `derivedFrom`; its own fields replace its parent's (lists are replaced whole).
  */
 
@@ -45,7 +46,17 @@ export type DeviceTypeSensor = {
 export type DeviceTypePowerSource = {
   /** `battery`, `grid` or `solar`. */
   powerSourceType: string
+  /** Which setup: a standard one (`DEVICE_CHOICES.powerSources`) or a customized one. */
+  powerSourceID?: string | null
+  name?: string | null
+  /** The standard setup a customized one came from. */
+  derivedFrom?: string | null
   model?: string | null
+  notes?: string | null
+  /** Grid: the supply's output voltage. */
+  supplyVoltageV?: number | null
+  /** Solar: the panel's rated power. */
+  panelPowerW?: number | null
   /** Batteries: energy capacity in watt hours. */
   capacityWh?: number | null
   /** Batteries: the voltage printed on the battery. */
@@ -65,7 +76,8 @@ export type DeviceType = {
   attractors?: DeviceTypeAttractor[]
   targets?: DeviceTypeTarget[]
   sensors?: DeviceTypeSensor[]
-  powerSources?: DeviceTypePowerSource[]
+  /** What powers it: one setup, or null when not specified. */
+  powerSource?: DeviceTypePowerSource | null
   computer?: string | null
   customFields?: Record<string, unknown>
   /** Notes about the whole device. */
@@ -85,12 +97,114 @@ export type DeviceChoices = {
   targetColors: string[]
   sensorTypes: string[]
   powerSourceTypes: string[]
-  batteries: Array<{ model: string; capacityWh?: number; nominalVoltageV?: number; voltageAt80PercentV?: number; voltageAt20PercentV?: number }>
+  /** Standard power setups, one or more per type. */
+  powerSources: DeviceTypePowerSource[]
 }
 
 export const DEVICE_CHOICES: DeviceChoices = (deviceTypesFile as unknown as { choices: DeviceChoices }).choices
 
 export const SENSOR_TYPES: readonly string[] = DEVICE_CHOICES.sensorTypes
+
+/*
+ * Power setups (ontology: Device → powerSource). A device has one: a battery, grid or solar
+ * setup. Standard setups are in the shared file (`DEVICE_CHOICES.powerSources`); a dataset
+ * can save its own (`02_records/power-sources.ndjson`), each naming the setup it came from.
+ */
+
+export const POWER_SOURCE_TYPES = ['battery', 'grid', 'solar'] as const
+
+/** The details each kind of power source has (beyond name, model and notes). */
+export const POWER_SOURCE_NUMBERS: Record<string, ReadonlyArray<keyof DeviceTypePowerSource>> = {
+  battery: ['capacityWh', 'nominalVoltageV', 'voltageAt80PercentV', 'voltageAt20PercentV'],
+  grid: ['supplyVoltageV'],
+  solar: ['panelPowerW'],
+}
+
+export const STANDARD_POWER_SOURCES: readonly DeviceTypePowerSource[] = DEVICE_CHOICES.powerSources
+
+export function isStandardPowerSourceId(id: string | null | undefined): boolean {
+  return !!id && STANDARD_POWER_SOURCES.some((s) => s.powerSourceID === id)
+}
+
+/** The setups of one kind: standard ones, then the dataset's own. */
+export function powerSetupsOfType(powerSourceType: string, custom: readonly DeviceTypePowerSource[] = []): DeviceTypePowerSource[] {
+  return [...STANDARD_POWER_SOURCES, ...custom].filter((p) => p.powerSourceType === powerSourceType)
+}
+
+/** The standard power setups of one type (battery, grid, solar). */
+export function standardPowerSources(powerSourceType: string): DeviceTypePowerSource[] {
+  return powerSetupsOfType(powerSourceType)
+}
+
+export function isStandardPowerSource(p: DeviceTypePowerSource | null | undefined): boolean {
+  return isStandardPowerSourceId(p?.powerSourceID)
+}
+
+/**
+ * A changed copy of a device's power setup. A saved setup (standard, or one of the dataset's,
+ * listed in `known`) becomes an unsaved custom one that names where it came from.
+ */
+export function customizePowerSource(
+  p: DeviceTypePowerSource,
+  change: Partial<DeviceTypePowerSource>,
+  known: readonly DeviceTypePowerSource[] = [],
+): DeviceTypePowerSource {
+  const saved = isStandardPowerSource(p) || known.some((k) => k.powerSourceID === p.powerSourceID)
+  if (!saved) return { ...p, ...change }
+  return {
+    ...p,
+    ...change,
+    powerSourceID: `custom-${p.powerSourceType}`,
+    name: `${(p.name ?? p.powerSourceType).replace(/^Standard /, '').replace(/ \(custom\)$/, '')} (custom)`,
+    derivedFrom: p.powerSourceID,
+  }
+}
+
+/** A new power setup for the dataset: a copy of `from`, or a blank one of `powerSourceType`. */
+export function newCustomPowerSource(params: {
+  name: string
+  powerSourceType?: string
+  from?: DeviceTypePowerSource
+  existingIds: Iterable<string>
+}): DeviceTypePowerSource {
+  const taken = new Set(params.existingIds)
+  const base = `custom-power-${params.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'setup'}`
+  let id = base
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`
+  const kind = params.from?.powerSourceType ?? params.powerSourceType ?? 'battery'
+  return {
+    ...(params.from ? structuredCloneSafe(params.from) : { model: null, notes: null }),
+    powerSourceType: kind,
+    powerSourceID: id,
+    name: params.name,
+    derivedFrom: params.from?.powerSourceID ?? null,
+  }
+}
+
+/** Problems that stop a saved power setup from being used; empty when it is fine. */
+export function powerSourceProblems(p: DeviceTypePowerSource, needsName = true): string[] {
+  const problems: string[] = []
+  if (needsName && !p.name?.trim()) problems.push('Give the power setup a name.')
+  if (!(POWER_SOURCE_TYPES as readonly string[]).includes(p.powerSourceType)) problems.push('A power setup is a battery, grid or solar.')
+  for (const key of POWER_SOURCE_NUMBERS[p.powerSourceType] ?? []) {
+    const v = p[key] as number | null | undefined
+    if (v != null && (!Number.isFinite(v) || v < 0)) {
+      problems.push('Power setup numbers (capacity, voltages, panel power) must be 0 or more.')
+      break
+    }
+  }
+  if (p.voltageAt80PercentV != null && p.voltageAt20PercentV != null && p.voltageAt80PercentV <= p.voltageAt20PercentV) {
+    problems.push('The battery’s 80% voltage has to be higher than its 20% voltage.')
+  }
+  return problems
+}
+
+export function normalizePowerSource(raw: unknown): DeviceTypePowerSource | null {
+  if (!raw || typeof raw !== 'object') return null
+  const p = raw as DeviceTypePowerSource
+  if (typeof p.powerSourceType !== 'string' || !p.powerSourceType) return null
+  return { ...p }
+}
 
 /** The power choices for an attractor type (matched ignoring case), or undefined. */
 export function attractorPowerOptions(attractorType: string | null | undefined) {
@@ -136,10 +250,13 @@ export function normalizeDeviceType(raw: unknown): DeviceType | null {
       })
     : undefined
 
-  const { target: _oldTarget, ...rest } = r
+  // Older files listed power sources; a device has one.
+  const { target: _oldTarget, powerSources: oldPower, ...rest } = r as typeof r & { powerSources?: DeviceTypePowerSource[] }
   void _oldTarget
+  const powerSource = 'powerSource' in r ? (r.powerSource as DeviceTypePowerSource | null) : Array.isArray(oldPower) ? (oldPower[0] ?? null) : undefined
   return {
     ...(rest as unknown as DeviceType),
+    ...(powerSource !== undefined ? { powerSource } : {}),
     ...(targets ? { targets } : {}),
     ...(sensors ? { sensors } : {}),
   }
@@ -188,16 +305,7 @@ export function deviceTypeProblems(type: DeviceType): string[] {
   for (const a of type.attractors ?? []) {
     if (a.powerW != null && (!Number.isFinite(a.powerW) || a.powerW < 0)) problems.push('Attractor power must be a number of watts, 0 or more.')
   }
-  for (const p of type.powerSources ?? []) {
-    if (!p.powerSourceType?.trim()) problems.push('Every power source needs a type (battery, grid or solar).')
-    if (p.capacityWh != null && (!Number.isFinite(p.capacityWh) || p.capacityWh < 0)) problems.push('Battery capacity must be a number of watt hours, 0 or more.')
-    for (const v of [p.nominalVoltageV, p.voltageAt80PercentV, p.voltageAt20PercentV]) {
-      if (v != null && (!Number.isFinite(v) || v < 0)) problems.push('Battery voltages must be numbers of volts, 0 or more.')
-    }
-    if (p.voltageAt80PercentV != null && p.voltageAt20PercentV != null && p.voltageAt80PercentV <= p.voltageAt20PercentV) {
-      problems.push('The battery’s 80% voltage has to be higher than its 20% voltage.')
-    }
-  }
+  for (const p of type.powerSource ? powerSourceProblems(type.powerSource, false) : []) problems.push(p)
   for (const t of type.targets ?? []) {
     for (const v of [t.widthCm, t.heightCm, t.distanceCm]) {
       if (v != null && (!Number.isFinite(v) || v < 0)) {
@@ -224,7 +332,7 @@ export function newCustomDeviceType(params: { name: string; from?: DeviceType; e
       attractors: [],
       targets: [],
       sensors: [{ sensorType: 'camera', model: null, resolution: null, notes: null }],
-      powerSources: [],
+      powerSource: null,
       computer: null,
       customFields: {},
       description: null,
