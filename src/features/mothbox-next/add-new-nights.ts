@@ -9,6 +9,7 @@
  * resulting rows are appended. Existing lines are never rewritten.
  */
 import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, serializeSessionRecords } from './sessions'
+import { PACKAGE_DEVICE_TYPES_RECORD, parseDeviceTypes, serializeDeviceTypes } from './device-types-records'
 import { fileKeyStyleOfManifestText, type FileKeyStyle } from './file-keys'
 
 import type { DinalabAdapterIO, DinalabAdapterSourceIO } from './adapters/dinalab-mothbox-v1/adapter-io'
@@ -194,6 +195,14 @@ export async function addNewNightsToPackage(params: {
   if (newSessions.length) {
     const base = sessionsText && !sessionsText.endsWith('\n') ? `${sessionsText}\n` : sessionsText
     await io.package.writeText(PACKAGE_SESSIONS_RECORD, base + serializeSessionRecords(newSessions))
+  }
+  // Custom device types the new nights describe; the dataset's own (possibly edited) types win.
+  const deviceTypesText = await readTextSafe(io, PACKAGE_DEVICE_TYPES_RECORD)
+  const knownDeviceTypes = new Set(parseDeviceTypes(deviceTypesText).map((t) => t.deviceTypeID))
+  const newDeviceTypes = (built.deviceTypes ?? []).filter((t) => !knownDeviceTypes.has(t.deviceTypeID))
+  if (newDeviceTypes.length) {
+    const base = deviceTypesText && !deviceTypesText.endsWith('\n') ? `${deviceTypesText}\n` : deviceTypesText
+    await io.package.writeText(PACKAGE_DEVICE_TYPES_RECORD, base + serializeDeviceTypes(newDeviceTypes))
   }
 
   // Bot classifications are an append-only log; new rows can't collide with

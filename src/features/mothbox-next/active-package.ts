@@ -11,6 +11,12 @@ export type ActiveMothboxNextPackage = {
 
 export const mothboxNextPackageStore = atom<ActiveMothboxNextPackage | null>(null)
 
+/**
+ * The original source folder of a package kept in a `_processed` mirror (full-size photos
+ * stay there); null when the photos are inside the package folder.
+ */
+export const originalSourceFolderStore = atom<unknown | null>(null)
+
 export function isMothboxNextPackageOpen(): boolean {
   return mothboxNextPackageStore.get() !== null
 }

@@ -1,5 +1,6 @@
 import { PATCH_MEASUREMENTS_RECORD } from '../../patch-measurements'
 import { PACKAGE_SESSIONS_RECORD, serializeSessionRecords } from '../../sessions'
+import { PACKAGE_DEVICE_TYPES_RECORD, serializeDeviceTypes } from '../../device-types-records'
 import {
   CAMEL_CASE_PACKAGE_VERSION,
   fileKeyStyleOfManifestText,
@@ -205,6 +206,7 @@ async function writeBuiltPackageRecordFiles(params: {
   await io.package.writeText('02_records/deployments.ndjson', serialize(built.deployments))
   await io.package.writeText('02_records/camera-days.ndjson', serialize(built.cameraDays))
   await io.package.writeText(PACKAGE_SESSIONS_RECORD, serializeSessionRecords(built.sessions ?? []))
+  if (built.deviceTypes?.length) await io.package.writeText(PACKAGE_DEVICE_TYPES_RECORD, serializeDeviceTypes(built.deviceTypes))
   await io.package.writeText('03_classifications/_bot.ndjson', serialize(built.botRows))
   for (const file of humanFiles) {
     await io.package.writeText(file.path, serialize(file.rows))

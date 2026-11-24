@@ -5,13 +5,14 @@ import { ArchiveIcon } from 'lucide-react'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { Button } from '~/components/ui/button'
 import { Switch } from '~/components/ui/switch'
-import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
+import { mothboxNextPackageStore, originalSourceFolderStore } from '~/features/mothbox-next/active-package'
 import { leafGroupsStore } from '~/stores/entities/leaf-groups'
 import { idbGet } from '~/utils/index-db'
 import { ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
 import { getFileHandle, readFileBlob, readTextFile, type FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
 import { PACKAGE_MORPHO_LINKS_RECORD } from '~/features/mothbox-next/morpho-links-package'
 import { PACKAGE_MORPHO_COVERS_RECORD } from '~/features/mothbox-next/morpho-covers-package'
+import { PACKAGE_DEVICE_TYPES_RECORD } from '~/features/mothbox-next/device-types-records'
 import { formatTodayYyyyMm_Dd, PACKAGE_EXPORTS_FOLDER, sanitizeForFileName } from '../export-utils'
 import { planPackageZip, sessionsForExport } from './plan-package-zip'
 import { writePackageZip, type PackageZipProgress } from './write-package-zip'
@@ -43,6 +44,7 @@ function PackageZipDialogBody(props: Props) {
     const initial = (props.initialLeafGroupIds ?? []).filter((id) => sessions.some((s) => s.id === id))
     return new Set(initial.length ? initial : sessions.map((s) => s.id))
   })
+  const [includeNobg, setIncludeNobg] = useState(true)
   const [includePhotos, setIncludePhotos] = useState(false)
   const [progress, setProgress] = useState<PackageZipProgress | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -75,7 +77,7 @@ function PackageZipDialogBody(props: Props) {
     if (!target) return
 
     const extraRecordTexts: Record<string, string> = {}
-    for (const path of [PACKAGE_MORPHO_LINKS_RECORD, PACKAGE_MORPHO_COVERS_RECORD]) {
+    for (const path of [PACKAGE_MORPHO_LINKS_RECORD, PACKAGE_MORPHO_COVERS_RECORD, PACKAGE_DEVICE_TYPES_RECORD]) {
       try {
         extraRecordTexts[path] = await readTextFile(root, path)
       } catch {
@@ -94,6 +96,7 @@ function PackageZipDialogBody(props: Props) {
       loaded,
       manifestText,
       cameraDayIds: chosen.size === sessions.length ? undefined : [...chosen],
+      includeNobgPatches: includeNobg,
       includeSourcePhotos: includePhotos,
       extraRecordTexts,
     })
@@ -108,13 +111,20 @@ function PackageZipDialogBody(props: Props) {
           try {
             return await readFileBlob(root, path)
           } catch {
-            return null
+            // Full-size photos of a `_processed` package stay in the original source folder.
+            const source = originalSourceFolderStore.get() as FileSystemDirectoryHandleLike | null
+            if (!source) return null
+            try {
+              return await readFileBlob(source, path)
+            } catch {
+              return null
+            }
           }
         },
         writable: target.writable,
         onProgress: setProgress,
         signal: controller.signal,
-        report: { datasetID: active.manifest.dataset_id, includesSourcePhotos: includePhotos },
+        report: { datasetID: active.manifest.dataset_id, includesNobgPatches: includeNobg, includesSourcePhotos: includePhotos },
       })
       toast.success('Export saved', {
         description:
@@ -178,7 +188,15 @@ function PackageZipDialogBody(props: Props) {
 
             <label className='flex items-center gap-12 cursor-pointer'>
               <span className='flex-1'>
-                Include full-size photos
+                Include transparent background-removed patches
+                <span className='block text-11 text-ink-secondary'>The <code>_nobg.png</code> silhouettes, where Process made them.</span>
+              </span>
+              <Switch checked={includeNobg} onCheckedChange={setIncludeNobg} disabled={running} />
+            </label>
+
+            <label className='flex items-center gap-12 cursor-pointer'>
+              <span className='flex-1'>
+                Include original full-size source images
                 <span className='block text-11 text-ink-secondary'>Usually much larger; leave off unless the collaborator needs them.</span>
               </span>
               <Switch checked={includePhotos} onCheckedChange={setIncludePhotos} disabled={running} />

@@ -1,3 +1,4 @@
+import { originalSourceFolderStore } from '~/features/mothbox-next/active-package'
 import { migratePackageToCamelCaseIfNeeded, type CamelCaseMigrationResult } from '~/features/mothbox-next/migrate-package-to-camel-case'
 import { ensureReadWritePermission } from '~/features/data-flow/3.persist/files.persistence'
 import { toast } from 'sonner'
@@ -56,6 +57,7 @@ export async function openMothboxNextPackageFromHandle(
   const folderName = (handle as { name?: string }).name?.trim() || 'dataset'
   const showSuccessToast = options?.showSuccessToast !== false
   const originalSourceHandle = options?.originalSourceHandle
+  originalSourceFolderStore.set(originalSourceHandle ?? null)
 
   toast.loading('Opening dataset…', {
     id: OPEN_PACKAGE_TOAST_ID,

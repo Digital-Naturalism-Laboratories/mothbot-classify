@@ -43,7 +43,7 @@ export async function writePackageZip(params: {
       }
       const file = await readFile(entry.path)
       if (!file) {
-        missing.push(entry.path)
+        if (!entry.optional) missing.push(entry.path)
         continue
       }
       fileCount++

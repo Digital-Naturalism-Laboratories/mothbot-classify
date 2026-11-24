@@ -1,5 +1,7 @@
 import { toast } from 'sonner'
 import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, type SessionRecord } from '~/features/mothbox-next/sessions'
+import { PACKAGE_DEVICE_TYPES_RECORD, parseDeviceTypes } from '~/features/mothbox-next/device-types-records'
+import type { DeviceType } from '~/models/device-types'
 import { parseNdjsonLines, serializeNdjsonLines } from '~/features/mothbox-next/parse-ndjson'
 import { fromFileKeys, manifestFromFile } from '~/features/mothbox-next/file-keys'
 import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRecord, CameraDayRecord } from '~/features/mothbox-next/records'
@@ -49,6 +51,7 @@ export async function mergeForeignFolderIntoPackage(params: {
   const existingDeployments = await readNdjsonFile<DeploymentRecord>(packageDir, '02_records/deployments.ndjson')
   const existingCameraDays = await readNdjsonFile<CameraDayRecord>(packageDir, '02_records/camera-days.ndjson')
   const existingSessions = await readSessionsFile(packageDir)
+  const existingDeviceTypes = await readDeviceTypesFile(packageDir)
   const existingBotRows = await readNdjsonFile<ClassificationRecord>(packageDir, '03_classifications/_bot.ndjson')
   // The writer rewrites patch-measurements.ndjson, so carry the existing scores over.
   const existingMeasurements = await readNdjsonFile<PatchMeasurementRecord>(packageDir, PATCH_MEASUREMENTS_RECORD)
@@ -81,6 +84,7 @@ export async function mergeForeignFolderIntoPackage(params: {
       deployments: existingDeployments,
       cameraDays: existingCameraDays,
       sessions: existingSessions,
+      deviceTypes: existingDeviceTypes,
       botRows: existingBotRows,
       humanRows: existingHumanRows,
       measurements: existingMeasurements,
@@ -120,6 +124,7 @@ function mergeRecordsByPatchId(params: {
     deployments: DeploymentRecord[]
     cameraDays: CameraDayRecord[]
     sessions: SessionRecord[]
+    deviceTypes: DeviceType[]
     botRows: ClassificationRecord[]
     humanRows: ClassificationRecord[]
     measurements: PatchMeasurementRecord[]
@@ -172,6 +177,11 @@ function mergeRecordsByPatchId(params: {
         ...existing.sessions,
         ...incoming.sessions.filter((s) => !existing.sessions.some((e) => e.sessionID === s.sessionID)),
       ],
+      // Likewise the dataset's own device types; new ones from the folder are added.
+      deviceTypes: [
+        ...existing.deviceTypes,
+        ...incoming.deviceTypes.filter((t) => !existing.deviceTypes.some((e) => e.deviceTypeID === t.deviceTypeID)),
+      ],
     },
   }
 }
@@ -179,6 +189,14 @@ function mergeRecordsByPatchId(params: {
 async function readSessionsFile(packageDir: DirectoryWithGet): Promise<SessionRecord[]> {
   try {
     return parseSessionRecords(await readTextFile(packageDir, PACKAGE_SESSIONS_RECORD))
+  } catch {
+    return []
+  }
+}
+
+async function readDeviceTypesFile(packageDir: DirectoryWithGet): Promise<DeviceType[]> {
+  try {
+    return parseDeviceTypes(await readTextFile(packageDir, PACKAGE_DEVICE_TYPES_RECORD))
   } catch {
     return []
   }

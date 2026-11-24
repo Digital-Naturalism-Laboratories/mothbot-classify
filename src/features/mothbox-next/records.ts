@@ -67,6 +67,8 @@ export type DeploymentRecord = {
   attractors?: Array<{ attractorType?: string; attractorLocation?: string; powerW?: number; settings?: string }>
   target?: Record<string, unknown>
   sensor?: Record<string, unknown>
+  /** What powered this device (from its photos' device description), over its type's. */
+  power_sources?: Array<{ powerSourceType: string; model?: string | null; capacityWh?: number | null }>
 }
 
 export type CameraDayRecord = {

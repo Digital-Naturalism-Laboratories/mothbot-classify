@@ -37,6 +37,15 @@ import { shouldSkipSiteLevelInProjectsTree } from '~/features/mothbox-next/hiera
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import { ManifestHierarchyTree } from './hierarchy-tree'
 import { SpeciesListControl } from '~/features/data-flow/2.identify/species-list-control'
+import { DeviceFilterControl } from '~/features/devices/device-filter-control'
+import { useDeploymentDeviceFeatures } from '~/features/devices/use-deployment-device-features'
+import {
+  deploymentIdsMatching,
+  deviceViewStore,
+  EMPTY_DEVICE_FILTER,
+  groupDeploymentsByDeviceType,
+  isDeviceFilterActive,
+} from '~/features/devices/device-filter'
 
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
 const projectsTreeDeepRowTitleClass = 'text-neutral-900'
@@ -83,6 +92,27 @@ export function ProjectsSection(props: ProjectsSectionProps) {
   const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
 
+  // Devices filter (ontology: Device Type): only the deployments, and their sessions, it keeps.
+  const deviceView = useStore(deviceViewStore)
+  const deviceFeatures = useDeploymentDeviceFeatures()
+  const deviceFilterOn = isDeviceFilterActive(deviceView.filter)
+  const visible = useMemo(() => {
+    if (!deviceFilterOn) return { sites, deployments, nights }
+    const keep = deploymentIdsMatching({
+      deploymentIds: Object.keys(deployments ?? {}),
+      features: deviceFeatures,
+      filter: deviceView.filter,
+    })
+    const keptDeployments = Object.fromEntries(Object.entries(deployments ?? {}).filter(([id]) => keep.has(id)))
+    const keptSiteIds = new Set(Object.values(keptDeployments).map((d) => d.siteId))
+    return {
+      deployments: keptDeployments,
+      sites: Object.fromEntries(Object.entries(sites ?? {}).filter(([id]) => keptSiteIds.has(id))),
+      nights: Object.fromEntries(Object.entries(nights ?? {}).filter(([, n]) => keep.has(n.deploymentId))),
+    }
+  }, [deviceFilterOn, deviceView.filter, deviceFeatures, sites, deployments, nights])
+  const nothingMatches = deviceFilterOn && !Object.keys(visible.deployments).length
+
   const expandAll = useCallback(() => {
     setCollapsed({ sites: {}, deployments: {} })
   }, [])
@@ -125,6 +155,7 @@ export function ProjectsSection(props: ProjectsSectionProps) {
                 Morphospecies
               </Button>
               <SpeciesListControl projectId={datasetProjectId} />
+              <DeviceFilterControl />
               <SpeciesCatalogDialog
                 open={isSpeciesOpen}
                 onOpenChange={setIsSpeciesOpen}
@@ -152,12 +183,23 @@ export function ProjectsSection(props: ProjectsSectionProps) {
       </div>
       {isLoading ? (
         <CenteredLoader>🌀 Loading</CenteredLoader>
+      ) : nothingMatches ? (
+        <p className='text-sm text-neutral-500 text-pretty'>
+          No deployments match the devices filter.{' '}
+          <button
+            type='button'
+            className='font-medium text-neutral-900 underline underline-offset-2'
+            onClick={() => deviceViewStore.set({ ...deviceViewStore.get(), filter: EMPTY_DEVICE_FILTER })}
+          >
+            Show all devices
+          </button>
+        </p>
       ) : hasProjects ? (
         <ProjectsList
           projects={projects}
-          sites={sites}
-          deployments={deployments}
-          nights={nights}
+          sites={visible.sites}
+          deployments={visible.deployments}
+          nights={visible.nights}
           detections={detections}
           nightSummaries={nightSummaries}
           collapsed={collapsed}
@@ -468,29 +510,51 @@ function DeploymentsList(props: DeploymentsListProps) {
     if (deploymentFilter === 'project') return getDeploymentsForProject({ deployments, projectId })
     return getDeploymentsForSite({ deployments, siteId })
   }, [deploymentFilter, deployments, projectId, siteId])
+  const { groupByDeviceType } = useStore(deviceViewStore)
+  const deviceFeatures = useDeploymentDeviceFeatures()
+  const groups = useMemo(
+    () => (groupByDeviceType && deviceFeatures.size ? groupDeploymentsByDeviceType(list, deviceFeatures) : null),
+    [groupByDeviceType, deviceFeatures, list],
+  )
   if (!list.length) return null
 
-  return (
-    <div className='flex w-full flex-col gap-1'>
-      {list.map((dep) => (
-        <DeploymentItem
-          key={dep.id}
-          projectId={projectId}
-          deployment={dep}
-          nights={nights}
-          progressIndex={progressIndex}
-          collapsed={collapsed}
-          onToggleDeployment={onToggleDeployment}
-          isTopLevel={isTopLevel}
-        />
-      ))}
-    </div>
+  const item = (dep: DeploymentEntity) => (
+    <DeploymentItem
+      key={dep.id}
+      projectId={projectId}
+      deployment={dep}
+      deviceType={groups ? undefined : deviceFeatures.get(dep.id)?.deviceType}
+      nights={nights}
+      progressIndex={progressIndex}
+      collapsed={collapsed}
+      onToggleDeployment={onToggleDeployment}
+      isTopLevel={isTopLevel}
+    />
   )
+
+  if (groups) {
+    return (
+      <div className='flex w-full flex-col gap-4'>
+        {groups.map((group) => (
+          <div key={group.deviceTypeID} className='flex w-full flex-col gap-1'>
+            <div className={cn('pt-4 text-12 font-medium text-neutral-500', !isTopLevel && projectsTreeIndentDeploymentClass)}>
+              {group.deviceType} <span className='font-normal text-neutral-400'>· {group.items.length}</span>
+            </div>
+            {group.items.map(item)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return <div className='flex w-full flex-col gap-1'>{list.map(item)}</div>
 }
 
 type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
   projectId: string
   deployment: DeploymentEntity
+  /** The deployment's device type name, shown after its name. */
+  deviceType?: string
   progressIndex: ProgressIndex
   collapsed: CollapsedState
   onToggleDeployment: (deploymentId: string) => void
@@ -498,7 +562,7 @@ type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
 }
 
 function DeploymentItem(props: DeploymentItemProps) {
-  const { projectId, deployment, nights, progressIndex, collapsed, onToggleDeployment, isTopLevel = false } = props
+  const { projectId, deployment, deviceType, nights, progressIndex, collapsed, onToggleDeployment, isTopLevel = false } = props
   const prog = progressIndex.byDeployment[deployment.id] ?? { total: 0, identified: 0 }
   const nightsForDep = useMemo(() => getNightsForDeployment({ nights, deploymentId: deployment.id }), [nights, deployment.id])
   const hasNights = nightsForDep.length > 0
@@ -526,6 +590,7 @@ function DeploymentItem(props: DeploymentItemProps) {
                 titleClassName={projectsTreeDeepRowTitleClass}
               >
                 {deployment.name}
+                {deviceType ? <span className='ml-8 text-12 font-normal text-neutral-400'>{deviceType}</span> : null}
               </ProjectsTreeExpandTitle>
             </div>
           </div>

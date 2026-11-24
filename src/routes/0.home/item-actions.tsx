@@ -1,4 +1,4 @@
-import { ArchiveIcon, DownloadIcon, FoldVerticalIcon, ImageIcon, MoreHorizontal, UnfoldVerticalIcon } from 'lucide-react'
+import { ArchiveIcon, CpuIcon, DownloadIcon, FoldVerticalIcon, ImageIcon, MoreHorizontal, UnfoldVerticalIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Button } from '~/components/ui/button'
 import {
@@ -17,6 +17,7 @@ import {
 import { exportScopeDarwinCSV } from '~/features/data-flow/4.export/export-orchestrator'
 import { VisualizationDialog } from '~/features/data-flow/4.export/visualization/visualization-dialog'
 import { PackageZipDialog } from '~/features/data-flow/4.export/package-zip/package-zip-dialog'
+import { DeviceTypesDialog } from '~/features/devices/device-types-dialog'
 import type { LeafGroupEntity } from '~/stores/entities/leaf-groups'
 import { toast } from 'sonner'
 // import { exportScopeRS } from '~/features/data-flow/4.export/export-orchestrator'
@@ -85,6 +86,7 @@ export function DatasetHeaderMenu(props: DatasetHeaderMenuProps) {
   const { projectId, nights, onExpandAll, onCollapseAll, menuAlign = 'start' } = props
   const [vizOpen, setVizOpen] = useState(false)
   const [zipOpen, setZipOpen] = useState(false)
+  const [devicesOpen, setDevicesOpen] = useState(false)
 
   return (
     <>
@@ -100,6 +102,10 @@ export function DatasetHeaderMenu(props: DatasetHeaderMenuProps) {
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onCollapseAll}>
             <DropdownMenuItemLabel icon={<FoldVerticalIcon className='h-14 w-14' />} label='Collapse all' />
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setDevicesOpen(true)}>
+            <DropdownMenuItemLabel icon={<CpuIcon className='h-14 w-14' />} label='Devices…' />
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -124,6 +130,7 @@ export function DatasetHeaderMenu(props: DatasetHeaderMenuProps) {
         initialLeafGroupIds={Object.keys(nights)}
       />
       <PackageZipDialog open={zipOpen} onClose={() => setZipOpen(false)} initialLeafGroupIds={Object.keys(nights)} />
+      <DeviceTypesDialog open={devicesOpen} onClose={() => setDevicesOpen(false)} />
     </>
   )
 }

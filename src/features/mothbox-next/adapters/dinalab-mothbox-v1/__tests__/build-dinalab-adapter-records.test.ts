@@ -233,6 +233,52 @@ describe('buildDinalabMothboxV1Records', () => {
     })
   })
 
+  it('keeps the custom device types the detection files describe', async () => {
+    const custom = {
+      deviceTypeID: 'custom-pro-uv-ext',
+      deviceType: 'Pro with external UV',
+      derivedFrom: 'mothbox-pro',
+      attractors: [{ attractorType: 'UV LED', powerW: 10 }],
+      sensors: [{ sensorType: 'camera', model: 'OwlSight' }],
+    }
+    const files = new Map<string, string>([
+      [
+        `_processed/Deployment_A/2026-07-27/a_botdetection.json`,
+        JSON.stringify({
+          deviceType: 'Mothbox Pro',
+          deviceTypeID: 'mothbox-pro',
+          deviceTypeDefinition: custom,
+          shapes: [shape({ patchFileName: 'a_0_m.pt.jpg', label: 'ORDER_Diptera' })],
+        }),
+      ],
+      [`_processed/Deployment_A/2026-07-27/a_0_m.pt.jpg`, ''],
+      [
+        `_processed/Deployment_B/2026-07-27/b_botdetection.json`,
+        JSON.stringify({
+          deviceTypeDefinition: { deviceTypeID: 'mothbox-diy', deviceType: 'Standard Mothbox DIY' },
+          shapes: [shape({ patchFileName: 'b_0_m.pt.jpg', label: 'ORDER_Diptera' })],
+        }),
+      ],
+      [`_processed/Deployment_B/2026-07-27/b_0_m.pt.jpg`, ''],
+    ])
+
+    const built = await buildDinalabMothboxV1Records({
+      datasetId: 'Dataset_A',
+      io: createMemoryIo(files),
+      humanClassifierId: 'bf',
+      retainPatchesInSource: true,
+      packageRelativeSourcePrefix: '',
+      packageSourceLayout: 'in_place',
+      processedMirrorRoot: '_processed',
+    })
+
+    // The full description wins over the plain name; built-in types aren't repeated.
+    expect(built.deviceTypes).toMatchObject([custom])
+    const byId = new Map(built.deployments.map((d) => [d.deployment_id, d]))
+    expect(byId.get('Deployment_A')).toMatchObject({ device_type_id: 'custom-pro-uv-ext', device_type: 'Pro with external UV' })
+    expect(byId.get('Deployment_B')).toMatchObject({ device_type_id: 'mothbox-diy' })
+  })
+
   it('links Mothbox _processed patches to the existing source image extension', async () => {
     const patchFileName = 'photo_0_Mothbot_model.pt.jpg'
     const files = new Map<string, string>([

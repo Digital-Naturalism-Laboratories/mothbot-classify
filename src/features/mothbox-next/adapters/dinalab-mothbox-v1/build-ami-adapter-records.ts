@@ -259,6 +259,7 @@ export async function buildAmiAdapterRecords(params: {
     cameraDays: [...cameraDaysById.values()].sort((a, b) => a.camera_day_id.localeCompare(b.camera_day_id)),
     // AMI data comes with Antenna's own sessions, which these crops don't carry yet.
     sessions: [],
+    deviceTypes: [],
   }
 }
 

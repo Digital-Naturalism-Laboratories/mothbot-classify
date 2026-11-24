@@ -71,6 +71,24 @@ describe('zipped export for a collaborator', () => {
     expect(report.missingFiles).toEqual(result.missing)
   })
 
+  it('adds background-removed patches as optional files', async () => {
+    const loaded = (await loadFrom(root))!
+    const plan = planPackageZip({ loaded, manifestText: '{}', includeNobgPatches: true })
+    const nobg = plan.entries.filter((e) => e.kind === 'file' && e.role === 'nobg')
+    expect(nobg.length).toBeGreaterThan(0)
+    expect(nobg.every((e) => e.kind === 'file' && e.optional && e.path.endsWith('_nobg.png'))).toBe(true)
+
+    const chunks: Uint8Array[] = []
+    const result = await writePackageZip({
+      plan,
+      readFile: async () => null,
+      writable: new WritableStream<Uint8Array>({ write: (c) => void chunks.push(c) }),
+    })
+    // Absent silhouettes aren't problems; absent patches are.
+    expect(result.missing.some((p) => p.endsWith('_nobg.png'))).toBe(false)
+    expect(result.missing.length).toBeGreaterThan(0)
+  })
+
   it('exports every session when none are chosen', async () => {
     const loaded = (await loadFrom(root))!
     const plan = planPackageZip({ loaded, manifestText: '{}' })

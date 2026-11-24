@@ -1,6 +1,7 @@
 import type { PatchRecord, PatchSourceRecord, ClassificationRecord, DeploymentRecord } from '../../records'
 import { defaultNightlySession, findSessionForTime, parseSessionsFile, SESSIONS_FILE_NAME, type SessionRecord } from '../../sessions'
 import { parseTimestampFromText } from '~/models/detection-time'
+import { isBuiltInDeviceType, normalizeDeviceType, type DeviceType } from '~/models/device-types'
 import { cornersRelFromPx, parseLabelledBox } from '~/models/box-formats'
 import { classificationFromBotShape, classificationFromIdentifiedShape, NO_MACHINE_ID_CLASSIFIER } from '../../bot-shape-to-classification'
 import { flattenClassificationFiles, resolveCurrentClassifications } from '../../resolve-classifications'
@@ -41,6 +42,12 @@ export type BuiltDinalabAdapterRecords = {
   cameraDays: ReturnType<typeof buildDeploymentAndCameraDayRecords>['cameraDays']
   /** Every session a patch was given, for `02_records/sessions.ndjson`. */
   sessions: SessionRecord[]
+  /**
+   * Custom device types the detection files describe (`deviceTypeDefinition`, from the
+   * settings editor via the photos' EXIF or from Process's device chooser), for
+   * `02_records/device-types.ndjson`. Built-in types are not repeated here.
+   */
+  deviceTypes: DeviceType[]
 }
 
 export async function buildDinalabMothboxV1Records(params: {
@@ -103,6 +110,7 @@ export async function buildDinalabMothboxV1Records(params: {
   const sessionsByDeploymentDir = new Map<string, SessionRecord[]>()
   const sessionsUsed = new Map<string, SessionRecord>()
   const deploymentMetadata = new Map<string, Partial<DeploymentRecord>>()
+  const deviceTypesById = new Map<string, DeviceType>()
 
   for (let botFileIndex = 0; botFileIndex < allDetectionPaths.length; botFileIndex++) {
     const botRelativePath = allDetectionPaths[botFileIndex]
@@ -131,6 +139,10 @@ export async function buildDinalabMothboxV1Records(params: {
       imageWidth = numberValue(parsed.imageWidth)
       imageHeight = numberValue(parsed.imageHeight)
       fileDeploymentMetadata = deploymentMetadataFromDetectionJson(parsed as Record<string, unknown>)
+      const definition = normalizeDeviceType((parsed as Record<string, unknown>).deviceTypeDefinition)
+      if (definition && !isBuiltInDeviceType(definition.deviceTypeID) && !deviceTypesById.has(definition.deviceTypeID)) {
+        deviceTypesById.set(definition.deviceTypeID, definition)
+      }
     } catch { /* readLegacyDetectionShapes will surface the error */ }
     const fileSessions = await readDeploymentSessions({ io, botRelativePath, cache: sessionsByDeploymentDir })
 
@@ -317,6 +329,7 @@ export async function buildDinalabMothboxV1Records(params: {
     deployments,
     cameraDays,
     sessions: [...sessionsUsed.values()],
+    deviceTypes: [...deviceTypesById.values()],
   }
 }
 
@@ -381,9 +394,10 @@ function deploymentMetadataFromDetectionJson(parsed: Record<string, unknown>): P
     return Number.isFinite(value) && value !== 0 ? value : undefined
   }
   const height = Number(parsed.ground_height)
+  const definition = normalizeDeviceType(parsed.deviceTypeDefinition)
   const out: Partial<DeploymentRecord> = {
-    device_type: text('deviceType'),
-    device_type_id: text('deviceTypeID'),
+    device_type: definition?.deviceType ?? text('deviceType'),
+    device_type_id: definition?.deviceTypeID ?? text('deviceTypeID'),
     firmware_version: text('firmwareVersion', 'firmware'),
     site_name: text('siteName', 'site'),
     site_description: text('siteDescription'),
@@ -395,6 +409,8 @@ function deploymentMetadataFromDetectionJson(parsed: Record<string, unknown>): P
     ...(Array.isArray(parsed.attractors) && parsed.attractors.length ? { attractors: parsed.attractors as DeploymentRecord['attractors'] } : {}),
     ...(parsed.target && typeof parsed.target === 'object' ? { target: parsed.target as Record<string, unknown> } : {}),
     ...(parsed.sensor && typeof parsed.sensor === 'object' ? { sensor: parsed.sensor as Record<string, unknown> } : {}),
+    // Power is often set per box (battery, grid, solar), so keep it even for a standard type.
+    ...(definition?.powerSources?.length ? { power_sources: definition.powerSources } : {}),
   }
   const device = text('deviceID', 'device')
   if (device) out.device_name = device

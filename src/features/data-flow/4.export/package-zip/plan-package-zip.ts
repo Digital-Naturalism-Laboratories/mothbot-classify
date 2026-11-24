@@ -23,7 +23,13 @@ import { resolveSourcePhotoAssetPathForPatchSource } from '~/features/mothbox-ne
 
 export type ZipTextEntry = { kind: 'text'; path: string; text: string }
 /** A file copied from the package folder, by its path relative to the package. */
-export type ZipFileEntry = { kind: 'file'; path: string; role: 'patch' | 'detection' | 'photo' | 'extra' }
+export type ZipFileEntry = {
+  kind: 'file'
+  path: string
+  role: 'patch' | 'nobg' | 'detection' | 'photo' | 'extra'
+  /** Not every patch has one (e.g. background-removed patches); absent ones aren't reported. */
+  optional?: boolean
+}
 export type ZipEntry = ZipTextEntry | ZipFileEntry
 
 export type PackageZipPlan = {
@@ -39,11 +45,13 @@ export function planPackageZip(params: {
   manifestText: string
   /** Camera-day (session) ids to include; all sessions when omitted. */
   cameraDayIds?: readonly string[]
+  /** Background-removed patches (`<patch>_nobg.png` beside each patch). */
+  includeNobgPatches?: boolean
   includeSourcePhotos?: boolean
   /** Extra record files read from the package (e.g. morpho links), copied as they are. */
   extraRecordTexts?: Record<string, string>
 }): PackageZipPlan {
-  const { loaded, manifestText, includeSourcePhotos = false } = params
+  const { loaded, manifestText, includeSourcePhotos = false, includeNobgPatches = false } = params
   const style = fileKeyStyleForVersion(loaded.manifest.version)
   const records = loaded.manifest.records
   const chosen = params.cameraDayIds ? new Set(params.cameraDayIds) : null
@@ -94,12 +102,15 @@ export function planPackageZip(params: {
   }
 
   // The files the records point to.
-  const files = new Map<string, ZipFileEntry['role']>()
-  const add = (path: string | undefined | null, role: ZipFileEntry['role']) => {
+  const files = new Map<string, Omit<ZipFileEntry, 'kind' | 'path'>>()
+  const add = (path: string | undefined | null, role: ZipFileEntry['role'], optional = false) => {
     const clean = normalizeRelative(path)
-    if (clean && !files.has(clean)) files.set(clean, role)
+    if (clean && !files.has(clean)) files.set(clean, { role, ...(optional ? { optional } : {}) })
   }
-  for (const patch of patches) add(patch.asset_path, 'patch')
+  for (const patch of patches) {
+    add(patch.asset_path, 'patch')
+    if (includeNobgPatches && /\.jpe?g$/i.test(patch.asset_path)) add(nobgPathFor(patch.asset_path), 'nobg', true)
+  }
   const photos = new Set<string>()
   for (const source of patchSources) {
     add(source.original_bot_detection_path ?? source.metadata_path, 'detection')
@@ -107,7 +118,7 @@ export function planPackageZip(params: {
     if (photo) photos.add(normalizeRelative(photo))
   }
   if (includeSourcePhotos) for (const photo of photos) add(photo, 'photo')
-  for (const [path, role] of files) entries.push({ kind: 'file', path, role })
+  for (const [path, info] of files) entries.push({ kind: 'file', path, ...info })
 
   return { entries, patchCount: patches.length, sessionCount: cameraDays.length, photoCount: photos.size }
 }
@@ -119,6 +130,11 @@ export function sessionsForExport(loaded: LoadedMothboxNextPackage): Array<{ id:
     if (patch.camera_day_id) counts.set(patch.camera_day_id, (counts.get(patch.camera_day_id) ?? 0) + 1)
   }
   return loaded.cameraDays.map((d) => ({ id: d.camera_day_id, patchCount: counts.get(d.camera_day_id) ?? 0 }))
+}
+
+/** The background-removed version of a patch image, as Mothbot Process names it. */
+export function nobgPathFor(patchPath: string): string {
+  return patchPath.replace(/\.jpe?g$/i, '_nobg.png')
 }
 
 function normalizeRelative(path: string | undefined | null): string {

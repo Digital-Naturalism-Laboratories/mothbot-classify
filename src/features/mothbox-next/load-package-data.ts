@@ -1,5 +1,7 @@
 import type { MothboxNextDatasetManifest } from './dataset-manifest'
 import { PACKAGE_SESSIONS_RECORD, parseSessionRecords, type SessionRecord } from './sessions'
+import { PACKAGE_DEVICE_TYPES_RECORD, parseDeviceTypes } from './device-types-records'
+import type { DeviceType } from '~/models/device-types'
 import { parseDatasetManifest } from './dataset-manifest'
 import {
   parseCameraDayRecords,
@@ -38,6 +40,8 @@ export type LoadedMothboxNextPackage = {
   nonTargetCategories?: string[]
   /** Sessions and capture windows (ontology: Session); empty for packages made before them. */
   sessions?: SessionRecord[]
+  /** The dataset's own (custom) device types; built-in ones aren't stored. */
+  deviceTypes?: DeviceType[]
 }
 
 export type PackageDataAccess = {
@@ -112,6 +116,14 @@ export async function loadMothboxNextPackageData(params: {
     // no sessions file
   }
 
+  // Optional: a missing file just means the dataset has no custom device types.
+  let deviceTypes: DeviceType[] = []
+  try {
+    deviceTypes = parseDeviceTypes(await access.readPackageFile(joinPackagePath(packageRoot, PACKAGE_DEVICE_TYPES_RECORD)))
+  } catch {
+    // no device types file
+  }
+
   // Optional: a missing file just means nobody added a Non-Target category yet.
   let nonTargetCategories: string[] = []
   try {
@@ -141,6 +153,7 @@ export async function loadMothboxNextPackageData(params: {
     measurements,
     nonTargetCategories,
     sessions,
+    deviceTypes,
   }
 }
 
