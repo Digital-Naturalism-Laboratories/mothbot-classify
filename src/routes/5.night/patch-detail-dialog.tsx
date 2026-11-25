@@ -388,7 +388,7 @@ function SourcePhoto(props: { photo?: PhotoEntity; detection?: DetectionEntity }
             <div className='w-full h-[300px] rounded-md border border-black/10 bg-neutral-50 flex items-center justify-center p-16 text-center'>
               <p className='text-13 text-neutral-500'>
                 {sourceUnavailable
-                  ? 'Source image was not found in this dataset. It may only have been shared with the processed data, without the original source photos.'
+                  ? 'Source image was not found in this project. It may only have been shared with the processed data, without the original source photos.'
                   : 'No source photo linked to this patch.'}
               </p>
             </div>
@@ -448,7 +448,7 @@ function SourcePhoto(props: { photo?: PhotoEntity; detection?: DetectionEntity }
         </div>
         <div className='mt-4'>
           <span className='font-medium'>File path:</span>{' '}
-          {photo?.imageFile?.path ?? (sourceUnavailable ? 'Not available in this dataset' : '—')}
+          {photo?.imageFile?.path ?? (sourceUnavailable ? 'Not available in this project' : '—')}
         </div>
       </div>
     </div>

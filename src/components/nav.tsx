@@ -99,7 +99,7 @@ export function Nav() {
   })
   // Show a stop control whenever the previous dataset is auto-loading, including
   // the background warm phase (not covered by getFolderStatusMessage).
-  const loadingDatasetMessage = folderStatus ?? (isWarmingDataset ? '🌀 Opening previous dataset…' : null)
+  const loadingDatasetMessage = folderStatus ?? (isWarmingDataset ? '🌀 Opening previous project…' : null)
   const canStopAutoLoad = restoreQuery.isLoading || isWarmingDataset
 
   return (
@@ -151,7 +151,7 @@ export function Nav() {
               <button
                 className='shrink-0 rounded border border-red-300 px-6 py-2 text-11 font-medium text-red-600 hover:bg-red-50'
                 onClick={() => cancelDatasetAutoLoad()}
-                title="Stop loading and don't auto-open this dataset next time"
+                title="Stop loading and don't auto-open this project next time"
               >
                 Stop
               </button>
@@ -197,7 +197,7 @@ export function Nav() {
               <DropdownMenuItem onClick={clearSelections}>Clear</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={isAuditingDataset} onClick={onAuditDataset}>
-                {isAuditingDataset ? 'Auditing Dataset…' : 'Audit Dataset'}
+                {isAuditingDataset ? 'Auditing Project…' : 'Audit Project'}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isHealingSummaries || !!activePackage}
@@ -217,12 +217,12 @@ export function Nav() {
     setIsAuditingDataset(true)
     const promise = runDatasetHealthAudit()
     toast.promise(promise, {
-      loading: '🧪 Auditing dataset health…',
+      loading: '🧪 Auditing project health…',
       success: (report) => {
-        console.log('✅ Dataset audit report', report)
-        return `✅ Dataset audit complete: ${formatDatasetHealthAuditSummary(report)}`
+        console.log('✅ Project audit report', report)
+        return `✅ Project audit complete: ${formatDatasetHealthAuditSummary(report)}`
       },
-      error: '🚨 Failed to audit dataset health',
+      error: '🚨 Failed to audit project health',
     })
     void promise.finally(() => setIsAuditingDataset(false))
   }
@@ -270,7 +270,7 @@ export function FolderPicking() {
 
   async function onChooseDatasets() {
     if (busy) return
-    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'projects folder' })
     if (!handle) return
     void datasetsMutation.mutateAsync(handle)
   }
@@ -286,18 +286,18 @@ export function FolderPicking() {
         <p className='font-medium text-neutral-900'>Migrate to Mothbox Next (recommended)</p>
         <ol className='mt-8 list-decimal space-y-6 pl-20'>
           <li>
-            <span className='font-medium'>Datasets folder</span> — parent folder that will contain{' '}
+            <span className='font-medium'>Projects folder</span> — parent folder that will contain{' '}
             <span className='font-medium'>all</span> datasets (e.g.{' '}
             <code className='text-12'>~/Mothbox/datasets/</code> on macOS/Linux,{' '}
-            <code className='text-12'>C:\Users\You\Mothbox\datasets\</code> on Windows).
+            <code className='text-12'>C:\Users\You\Mothbox\projects\</code> on Windows).
           </li>
           <li>
-            <span className='font-medium'>Add a dataset</span> — copy or move a legacy folder (bot JSON +{' '}
+            <span className='font-medium'>Add a project</span> — copy or move a legacy folder (bot JSON +{' '}
             <code className='text-12'>patches/</code>) or an existing package into your datasets folder with your file
             manager.
           </li>
           <li>
-            Reload the app or click <span className='font-medium'>Refresh datasets</span> after adding new dataset
+            Reload the app or click <span className='font-medium'>Refresh projects</span> after adding new project
             folders.
           </li>
         </ol>
@@ -310,7 +310,7 @@ export function FolderPicking() {
               <Loader size={14} /> Choosing…
             </span>
           ) : (
-            '1. Choose datasets folder…'
+            '1. Choose projects folder…'
           )}
         </Button>
         <Button variant='outline' onClick={onRefreshDatasets} disabled={busy || !canPick || !hasDatasetsFolder}>
@@ -319,7 +319,7 @@ export function FolderPicking() {
               <Loader size={14} /> Scanning…
             </span>
           ) : (
-            '2. Refresh datasets'
+            '2. Refresh projects'
           )}
         </Button>
         <span className='text-12 text-neutral-600'>
@@ -328,7 +328,7 @@ export function FolderPicking() {
               Datasets folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
             </>
           ) : (
-            'Set the datasets folder, then drop dataset folders into it.'
+            'Set the projects folder, then drop project folders into it.'
           )}
         </span>
       </div>
@@ -343,7 +343,7 @@ export function FolderPicking() {
             'Open legacy folder (old mode)'
           )}
         </Button>
-        <span className='text-12 text-neutral-500'>For datasets outside your datasets folder. Prefer drag-and-drop + refresh.</span>
+        <span className='text-12 text-neutral-500'>For projects outside your projects folder. Prefer drag-and-drop + refresh.</span>
       </div>
     </section>
   )
@@ -356,7 +356,7 @@ function getFolderStatusMessage(params: {
 }): string | null {
   const { restoring, scanning, opening } = params
   if (restoring) return '🌀 Restoring previously picked folder…'
-  if (scanning) return '🌀 Scanning datasets folder…'
+  if (scanning) return '🌀 Scanning projects folder…'
   if (opening) return '🌀 Processing selected folder…'
   return null
 }

@@ -40,7 +40,7 @@ export function packageSourceLocationLabel(params: {
 
   if (packageSourceLayout === 'archive') return `${PACKAGE_ARCHIVE_DIR}/`
   if (packageRelativeSourcePrefix) return `${packageRelativeSourcePrefix}/`
-  return 'dataset folder'
+  return 'project folder'
 }
 
 export async function resolvePatchAssetInPackage(params: {

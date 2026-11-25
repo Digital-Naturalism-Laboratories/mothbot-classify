@@ -109,6 +109,7 @@ describe('Devices dialog', () => {
     await user.selectOptions(switches, '1 and 2 switches')
     expect(at('Power')).toHaveValue(3.5)
     await user.type(at('Location'), 'in target')
+    await user.clear(screen.getAllByPlaceholderText('Color (optional)')[0]!)
     await user.type(screen.getAllByPlaceholderText('Color (optional)')[0]!, 'yellow')
 
     // One power source: a battery starts as the standard TalentCell; changing a detail makes it custom.
@@ -119,6 +120,7 @@ describe('Devices dialog', () => {
     await user.clear(screen.getByPlaceholderText('Capacity'))
     await user.type(screen.getByPlaceholderText('Capacity'), '100')
     expect(screen.getByRole('combobox', { name: 'Power setup' })).toHaveDisplayValue('TalentCell PB120B1 (custom)')
+    await user.clear(screen.getByPlaceholderText('Notes about the whole device'))
     await user.type(screen.getByPlaceholderText('Notes about the whole device'), 'Sheet hung from a tree.')
 
     await user.click(screen.getByRole('button', { name: 'Save device types' }))

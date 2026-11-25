@@ -13,10 +13,10 @@ export type DatasetsWorkspaceSetupResult = {
 }
 
 const DATASETS_PERMISSION_MESSAGE =
-  'Could not read the saved datasets folder. Choose it again and grant access.'
+  'Could not read the saved projects folder. Choose it again and grant access.'
 
 const DATASETS_SCAN_FAILED_MESSAGE =
-  'Could not scan the datasets folder. Try choosing the folder again.'
+  'Could not scan the projects folder. Try choosing the folder again.'
 
 export async function hydrateDatasetsWorkspaceFromDisk(): Promise<boolean> {
   const handle = await loadDatasetsDirectory()

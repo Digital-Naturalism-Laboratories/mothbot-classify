@@ -23,7 +23,7 @@ export async function runForeignContentMerge(params: {
 
   const datasetsRoot = await requireDatasetsFolderHandle({ mode: 'readwrite' })
   if (!datasetsRoot) {
-    throw new Error('Choose your datasets folder from the menu, then try again.')
+    throw new Error('Choose your projects folder from the menu, then try again.')
   }
 
   let packageHandle: FileSystemDirectoryHandleLike | undefined

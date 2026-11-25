@@ -51,7 +51,7 @@ export async function ingestMothboxNextPackageFromIndexedFiles(params: {
     const manifestProblem = await describeInvalidManifest(manifestEntry)
     if (manifestProblem) return { ok: false as const, message: `Invalid mothbox-next dataset.json (${manifestProblem}).` }
     const reason = err instanceof Error ? err.message : String(err)
-    return { ok: false as const, message: `Could not load this dataset: ${reason}` }
+    return { ok: false as const, message: `Could not load this project: ${reason}` }
   }
 }
 

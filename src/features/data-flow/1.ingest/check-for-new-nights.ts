@@ -58,7 +58,7 @@ function describeDetection(detection: Awaited<ReturnType<typeof detectNewNightFo
   const title = `${parts.join(' and ')} found on disk`
 
   const descriptions: string[] = []
-  if (nights) descriptions.push(`${previewList(detection.newNightFolders.map(nightName))} — not yet in this dataset.`)
+  if (nights) descriptions.push(`${previewList(detection.newNightFolders.map(nightName))} — not yet in this project.`)
   if (runs) {
     const detectors = [...new Set(detection.newRunFolders.flatMap((entry) => entry.newDetectors))]
     descriptions.push(
@@ -182,7 +182,7 @@ async function runAddNewNights(params: {
   const { io, packageDir, folders, datasetId, sourcePrefix, folderName } = params
   const humanClassifierId = (userSessionStore.get()?.initials || 'user').trim().toLowerCase() || 'user'
 
-  toast.loading('Adding to dataset…', {
+  toast.loading('Adding to project…', {
     id: NEW_NIGHTS_TOAST_ID,
     description: `Building records for ${folders.length} night folder${folders.length === 1 ? '' : 's'}.`,
     duration: Infinity,
@@ -196,7 +196,7 @@ async function runAddNewNights(params: {
     if (!writable) {
       toast.error('Write access is needed to add sessions', {
         id: NEW_NIGHTS_TOAST_ID,
-        description: 'Grant access to the dataset folder and try again.',
+        description: 'Grant access to the project folder and try again.',
         duration: 8000,
         action: undefined,
       })
@@ -232,7 +232,7 @@ async function runAddNewNights(params: {
     if (runFolders > 0) merged.push(`a new detection run on ${runFolders} session${runFolders === 1 ? '' : 's'}`)
     toast.success(`Added ${result.patchesAdded.toLocaleString()} patches`, {
       id: NEW_NIGHTS_TOAST_ID,
-      description: `${merged.join(' and ') || 'Records'} merged into this dataset. Pick the run from the Detection run menu.`,
+      description: `${merged.join(' and ') || 'Records'} merged into this project. Pick the run from the Detection run menu.`,
       duration: 6000,
       action: undefined,
     })

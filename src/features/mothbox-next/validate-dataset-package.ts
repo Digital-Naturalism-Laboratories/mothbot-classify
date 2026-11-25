@@ -73,7 +73,7 @@ export async function validateDatasetPackage(params: {
           : ''
       return {
         ok: false,
-        message: `Missing patch image: ${row.asset_path}. If you moved folders after setup, run Set up or Refresh datasets again.${staleLayoutHint}`,
+        message: `Missing patch image: ${row.asset_path}. If you moved folders after setup, run Set up or Refresh projects again.${staleLayoutHint}`,
       }
     }
   }

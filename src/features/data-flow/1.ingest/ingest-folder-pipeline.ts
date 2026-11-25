@@ -27,7 +27,7 @@ export async function ingestIndexedFolderFiles(params: {
       ok: false,
       message:
         normalized.message ??
-        `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so dataset/deployment/night are included.`,
+        `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so project/deployment/night are included.`,
       levelsUp: normalized.levelsUp,
     }
   }

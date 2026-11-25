@@ -28,7 +28,7 @@ export async function migratePendingDatasetFolders(
   try {
     const root = (await requireDatasetsFolderHandle({ mode: 'readwrite' })) as DirectoryHandleWithIter | null
     if (!root) {
-      const message = 'Could not access the datasets folder. Choose it again from the menu.'
+      const message = 'Could not access the projects folder. Choose it again from the menu.'
       toast.error(message, { duration: 8000 })
       return { migrated: [], errors: pending.map((item) => ({ folderName: item.folderName, message })) }
     }
@@ -40,7 +40,7 @@ export async function migratePendingDatasetFolders(
       })
     })
 
-    toast.loading('Setting up dataset…', {
+    toast.loading('Setting up project…', {
       id: MIGRATE_PENDING_LOADING_TOAST_ID,
       description: `Preparing ${pending.length} folder${pending.length === 1 ? '' : 's'}…`,
     })
@@ -52,7 +52,7 @@ export async function migratePendingDatasetFolders(
       const item = pending[index]
       reportProgress({
         phase: 'relocate',
-        message: 'Setting up dataset…',
+        message: 'Setting up project…',
         description: `Preparing ${item.folderName} (${index + 1}/${pending.length})…`,
       })
 
@@ -103,8 +103,8 @@ export async function migratePendingDatasetFolders(
     toast.dismiss(MIGRATE_PENDING_LOADING_TOAST_ID)
 
     if (migrated.length > 0) {
-      toast.success('Dataset ready', {
-        description: `Prepared ${migrated.length} dataset${migrated.length === 1 ? '' : 's'} (legacy files referenced in place).`,
+      toast.success('Project ready', {
+        description: `Prepared ${migrated.length} project${migrated.length === 1 ? '' : 's'} (legacy files referenced in place).`,
       })
     }
 

@@ -59,7 +59,7 @@ export async function openMothboxNextPackageFromHandle(
   const originalSourceHandle = options?.originalSourceHandle
   originalSourceFolderStore.set(originalSourceHandle ?? null)
 
-  toast.loading('Opening dataset…', {
+  toast.loading('Opening project…', {
     id: OPEN_PACKAGE_TOAST_ID,
     description: `Reading ${folderName} from disk.`,
     duration: Infinity,
@@ -135,7 +135,7 @@ export async function openMothboxNextPackageFromHandle(
       }
 
       if (showSuccessToast) {
-        toast.success('Dataset opened', {
+        toast.success('Project opened', {
           id: OPEN_PACKAGE_TOAST_ID,
           description: `Restored from cache · ${folderName}`,
           ...SUCCESS_TOAST_OPTIONS,
@@ -147,7 +147,7 @@ export async function openMothboxNextPackageFromHandle(
       return { ok: true, fromCache: true }
     }
 
-    toast.loading('Opening dataset…', {
+    toast.loading('Opening project…', {
       id: OPEN_PACKAGE_TOAST_ID,
       description: `Loading ${normalizedIndexed.length.toLocaleString()} file${normalizedIndexed.length === 1 ? '' : 's'}…`,
       duration: Infinity,
@@ -166,7 +166,7 @@ export async function openMothboxNextPackageFromHandle(
     if (!ingest.ok) {
       const message = formatFilesystemError(ingest.message)
       pickerErrorStore.set(message)
-      toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
+      toast.error('Could not open project', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
       return { ok: false, message }
     }
 
@@ -184,7 +184,7 @@ export async function openMothboxNextPackageFromHandle(
     }
 
     if (showSuccessToast) {
-      toast.success('Dataset opened', {
+      toast.success('Project opened', {
         id: OPEN_PACKAGE_TOAST_ID,
         description: `Mothbox-next package · ${folderName}`,
         ...SUCCESS_TOAST_OPTIONS,
@@ -197,7 +197,7 @@ export async function openMothboxNextPackageFromHandle(
   } catch (err) {
     const message = formatFilesystemError(err)
     pickerErrorStore.set(message)
-    toast.error('Could not open dataset', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
+    toast.error('Could not open project', { id: OPEN_PACKAGE_TOAST_ID, description: message, ...ERROR_TOAST_OPTIONS })
     return { ok: false, message }
   }
 }
@@ -207,7 +207,7 @@ async function syncMorphoCoversForOpenedPackage(handle: FileSystemDirectoryHandl
   try {
     const patches = patchesStore.get()
     const covers = await syncMorphoCoversWithPackage({ packageHandle: handle, findPatch: (patchId) => patches[patchId] })
-    if (covers.source === 'seeded') console.log('✅ openPackage: moved morpho covers into the dataset', covers)
+    if (covers.source === 'seeded') console.log('✅ openPackage: moved morpho covers into the project', covers)
   } catch (err) {
     console.warn('🚨 openPackage: could not load morpho covers', err)
   }
@@ -222,13 +222,13 @@ async function hydrateIndexedForIngest(
 
 function notifyCamelCaseMigration(result: CamelCaseMigrationResult) {
   if (result.status === 'migrated') {
-    toast.success('Dataset files updated', {
+    toast.success('Project files updated', {
       description: `${result.fileCount} files now use camelCase field names. Every file was checked against a backup, which was then removed.`,
     })
   } else if (result.status === 'failed') {
-    toast.error('Could not update the dataset’s file format', {
+    toast.error('Could not update the project’s file format', {
       description: `${result.error}. ${
-        result.restored ? 'The original files were put back; the dataset is unchanged.' : 'Some original files could not be put back.'
+        result.restored ? 'The original files were put back; the project is unchanged.' : 'Some original files could not be put back.'
       }${result.backupPath ? ` A backup is kept in ${result.backupPath}/.` : ''}`,
       duration: Infinity,
     })

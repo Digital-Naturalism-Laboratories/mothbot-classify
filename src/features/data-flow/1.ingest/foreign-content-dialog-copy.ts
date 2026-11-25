@@ -8,12 +8,12 @@ export function buildForeignContentDialogCopy(params: {
   const { packageFolderName, foreignFolders, photosOnly } = params
   const count = foreignFolders.length
   const folderList = foreignFolders.map((folder) => folder.folderName).join(', ')
-  const title = count === 1 ? 'Add new folder to dataset?' : `Add ${count} new folders?`
+  const title = count === 1 ? 'Add new folder to project?' : `Add ${count} new folders?`
 
   const lead =
     count === 1
-      ? `New detection data in ${packageFolderName} — ${folderList}. Add merges it into this dataset and reloads.`
-      : `New detection data in ${packageFolderName} — ${folderList}. Add merges them into this dataset and reloads.`
+      ? `New detection data in ${packageFolderName} — ${folderList}. Add merges it into this project and reloads.`
+      : `New detection data in ${packageFolderName} — ${folderList}. Add merges them into this project and reloads.`
 
   const photosOnlyNote =
     photosOnly.length > 0

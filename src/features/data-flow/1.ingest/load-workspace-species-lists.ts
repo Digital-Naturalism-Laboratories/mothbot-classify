@@ -37,7 +37,7 @@ export async function loadWorkspaceSpeciesLists(): Promise<number> {
       skipUnreadableDirectories: true,
     })
   } catch (err) {
-    console.warn('🚨 species: failed to scan datasets folder for CSV/TSV files', err)
+    console.warn('🚨 species: failed to scan projects folder for CSV/TSV files', err)
     return 0
   }
 
@@ -46,7 +46,7 @@ export async function loadWorkspaceSpeciesLists(): Promise<number> {
   const gbifSidecars = indexed.filter((entry) => isGbifSidecarPath(entry.path))
 
   if (!speciesFiles.length) {
-    console.log('🌀 species: no CSV/TSV files found under the datasets folder')
+    console.log('🌀 species: no CSV/TSV files found under the projects folder')
     return 0
   }
 
@@ -58,7 +58,7 @@ export async function refreshWorkspaceSpeciesLists() {
   const count = await loadWorkspaceSpeciesLists()
   if (count > 0) {
     toast.success('Taxa lists loaded', {
-      description: `${count} CSV/TSV file${count === 1 ? '' : 's'} found in your datasets folder`,
+      description: `${count} CSV/TSV file${count === 1 ? '' : 's'} found in your projects folder`,
     })
   }
   return count

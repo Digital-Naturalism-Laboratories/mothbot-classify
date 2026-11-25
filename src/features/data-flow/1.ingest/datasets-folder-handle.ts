@@ -28,8 +28,8 @@ export async function requireDatasetsFolderHandle(
     if (notifyOnDenied) {
       toast.error(
         mode === 'readwrite'
-          ? 'Could not access the saved datasets folder. Choose it again.'
-          : 'Could not read the saved datasets folder. Choose it again.',
+          ? 'Could not access the saved projects folder. Choose it again.'
+          : 'Could not read the saved projects folder. Choose it again.',
       )
     }
     return null

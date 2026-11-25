@@ -51,7 +51,7 @@ export async function buildMothboxPackageFromFolder(params: {
 
   reportProgress({
     phase: 'scan',
-    message: 'Setting up dataset…',
+    message: 'Setting up project…',
     description: `Indexing ${folderName}…`,
   })
 

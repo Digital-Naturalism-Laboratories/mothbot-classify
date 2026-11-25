@@ -78,7 +78,7 @@ export function SpeciesPicker() {
     <CommandDialog open={isOpen} onOpenChange={handleOpenChange} className='max-w-[520px] !p-0'>
       <CommandInput placeholder='Search taxa lists…' withSearchIcon />
       <CommandList className='p-8'>
-        <CommandEmpty>No taxa lists found in your datasets folder.</CommandEmpty>
+        <CommandEmpty>No taxa lists found in your projects folder.</CommandEmpty>
 
         {options.map((opt) => (
           <ListItem key={opt.id} list={opt} isSelected={selection?.[projectId] === opt.id} onSelect={handleSelect} />

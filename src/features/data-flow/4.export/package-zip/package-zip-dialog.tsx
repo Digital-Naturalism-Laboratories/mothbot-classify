@@ -65,7 +65,7 @@ function PackageZipDialogBody(props: Props) {
       | FileSystemDirectoryHandleLike
       | null
     if (!root) {
-      toast.error('The dataset folder is not available — reopen the dataset and try again.')
+      toast.error('The project folder is not available — reopen the project and try again.')
       return
     }
 
@@ -155,7 +155,7 @@ function PackageZipDialogBody(props: Props) {
         </DialogHeader>
 
         {!loaded ? (
-          <p className='text-13 text-ink-secondary'>Open a dataset first.</p>
+          <p className='text-13 text-ink-secondary'>Open a project first.</p>
         ) : (
           <div className='space-y-12 text-13'>
             <p className='text-ink-secondary'>

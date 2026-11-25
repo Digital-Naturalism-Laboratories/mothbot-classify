@@ -11,7 +11,7 @@ describe('buildForeignContentDialogCopy', () => {
       photosOnly: [],
     })
 
-    expect(copy.title).toBe('Add new folder to dataset?')
+    expect(copy.title).toBe('Add new folder to project?')
     expect(copy.lead).toContain('my-dataset')
     expect(copy.lead).toContain('night-2')
     expect(copy.photosOnlyNote).toBeNull()
@@ -39,7 +39,7 @@ describe('buildPendingDatasetSetupCopy', () => {
   it('counts folders when setting up several datasets', () => {
     const copy = buildPendingDatasetSetupCopy({ count: 3, folderNames: ['a', 'b', 'c'] })
 
-    expect(copy.title).toBe('Set up 3 new datasets?')
+    expect(copy.title).toBe('Set up 3 new projects?')
     expect(copy.lead).toContain('3 folders')
   })
 })

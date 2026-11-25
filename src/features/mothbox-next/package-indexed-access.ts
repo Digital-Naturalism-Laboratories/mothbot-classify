@@ -257,7 +257,7 @@ function toIndexedFileReadError(params: { path: string; err: unknown }) {
   const { path, err } = params
   if (isFilesystemNotFoundError(err)) {
     return new Error(
-      `File not found on disk: ${path}. The dataset may be out of date — try Set up or Refresh datasets again.`,
+      `File not found on disk: ${path}. The project may be out of date — try Set up or Refresh projects again.`,
     )
   }
   return new Error(`Cannot read ${path}: ${formatFilesystemError(err)}`)

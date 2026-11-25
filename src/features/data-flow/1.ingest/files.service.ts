@@ -53,7 +53,7 @@ export async function openDirectory() {
     retries++
     const msg =
       normalized.message ??
-      `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so dataset/deployment/night are included.`
+      `Selected folder is too deep. Please pick ${normalized.levelsUp} level(s) up so project/deployment/night are included.`
     pickerErrorStore.set(msg)
     if (retries >= maxRetries) {
       await forgetSavedDirectory()

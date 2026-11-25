@@ -37,9 +37,9 @@ function ActivityLabel(props: { activity?: ProgressCounts }) {
   const runs = a.detectorIds ?? []
   const title = [
     runs.length ? `Detection runs: ${runs.map(shortDetector).join(', ')}${runs.length > 1 ? ' (newest shown)' : ''}` : '',
-    a.clusteredAt ? `Clustered by Mothbot Process: ${new Date(a.clusteredAt).toLocaleString()} (as of when the dataset was loaded)` : '',
+    a.clusteredAt ? `Clustered by Mothbot Process: ${new Date(a.clusteredAt).toLocaleString()} (as of when the project was loaded)` : '',
     a.machineIdentified
-      ? `Machine-identified by Mothbot Process${a.machineIdentifiedAt ? `: ${new Date(a.machineIdentifiedAt).toLocaleString()}` : ' (date not recorded for this dataset yet)'}`
+      ? `Machine-identified by Mothbot Process${a.machineIdentifiedAt ? `: ${new Date(a.machineIdentifiedAt).toLocaleString()}` : ' (date not recorded for this project yet)'}`
       : '',
     a.lastIdentifiedAt ? `Last identification in Classify: ${new Date(a.lastIdentifiedAt).toLocaleString()}` : '',
   ].filter(Boolean).join('\n')

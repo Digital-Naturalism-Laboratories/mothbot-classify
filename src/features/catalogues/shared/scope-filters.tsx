@@ -15,8 +15,8 @@ export type ScopeFiltersProps = {
 export function ScopeFilters(props: ScopeFiltersProps) {
   const { scope, onScopeChange, hasProject, hasSite, hasDeployment, hasNight, counts } = props
   const items: Array<{ key: ScopeType; label: string; disabled?: boolean; count?: number }> = [
-    { key: 'all', label: 'All Datasets', count: counts?.all },
-    { key: 'project', label: 'This Dataset', disabled: !hasProject, count: counts?.project },
+    { key: 'all', label: 'All Projects', count: counts?.all },
+    { key: 'project', label: 'This Project', disabled: !hasProject, count: counts?.project },
     { key: 'site', label: 'This Site', disabled: !hasSite, count: counts?.site },
     { key: 'deployment', label: 'This Deployment', disabled: !hasDeployment, count: counts?.deployment },
     { key: 'night', label: 'This Session', disabled: !hasNight, count: counts?.night },

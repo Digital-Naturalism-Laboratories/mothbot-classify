@@ -30,7 +30,7 @@ export async function resetDataset(params: { folderName: string }): Promise<void
     | null
 
   if (!datasetsRoot) {
-    throw new Error('Datasets folder is not available. Choose your datasets folder and try again.')
+    throw new Error('Projects folder is not available. Choose your projects folder and try again.')
   }
 
   // Resolve the actual package folder (may be under _processed for the

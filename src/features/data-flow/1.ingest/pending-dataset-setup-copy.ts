@@ -3,12 +3,12 @@ export function buildPendingDatasetSetupCopy(params: {
   folderNames: string[]
 }) {
   const { count, folderNames } = params
-  const title = count === 1 ? `Set up "${folderNames[0]}"?` : `Set up ${count} new datasets?`
+  const title = count === 1 ? `Set up "${folderNames[0]}"?` : `Set up ${count} new projects?`
 
   if (count === 1) {
     return {
       title,
-      lead: `"${folderNames[0]}" is in your datasets folder but is not ready to open yet.`,
+      lead: `"${folderNames[0]}" is in your projects folder but is not ready to open yet.`,
       detail: 'Setup indexes detections and processed patches in place, then adds it to the sidebar.',
       confirmLabel: 'Set up',
     }
@@ -16,7 +16,7 @@ export function buildPendingDatasetSetupCopy(params: {
 
   return {
     title,
-    lead: `${count} folders in your datasets directory are not ready to open yet.`,
+    lead: `${count} folders in your projects directory are not ready to open yet.`,
     detail: 'Setup indexes detections and processed patches in place, then adds them to the sidebar.',
     confirmLabel: 'Set up',
   }

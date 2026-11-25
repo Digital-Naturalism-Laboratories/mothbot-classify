@@ -11,7 +11,7 @@ export async function resolveDatasetSetupKind(params: {
   const classified = await classifyDatasetFolder({ directory, folderName })
 
   if (classified === 'package') {
-    throw new Error('This folder is already a Mothbox dataset package (dataset.json exists).')
+    throw new Error('This folder is already a Mothbox project package (dataset.json exists).')
   }
 
   if (classified === 'skip') {

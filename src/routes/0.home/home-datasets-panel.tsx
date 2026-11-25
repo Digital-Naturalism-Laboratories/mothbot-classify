@@ -49,7 +49,7 @@ export function HomeDatasetsPanel() {
 
   async function onChooseFolder() {
     if (isChoosing) return
-    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'projects folder' })
     if (!handle) return
     setupMutation.mutate(handle)
   }
@@ -72,7 +72,7 @@ export function HomeDatasetsPanel() {
   return (
     <div className='shadow-border flex min-h-0 flex-1 flex-col rounded-2xl bg-white p-0 pb-16'>
       <div className='mb-8 flex shrink-0 items-center justify-between gap-8 px-16 pt-16'>
-        <h3 className='text-16 font-semibold text-balance'>Datasets</h3>
+        <h3 className='text-16 font-semibold text-balance'>Projects</h3>
         <DatasetsPanelActions
           hasDatasetsFolder={!!workspace?.folderName}
           isScanning={isScanning}
@@ -92,7 +92,7 @@ export function HomeDatasetsPanel() {
                 to the app to set it up.
               </>
             ) : (
-              <>Click the folder icon above to choose your datasets folder, then drop dataset folders into it.</>
+              <>Click the folder icon above to choose your projects folder, then drop project folders into it.</>
             )}
           </p>
         ) : (
@@ -133,14 +133,14 @@ function DatasetsPanelActions(props: DatasetsPanelActionsProps) {
   return (
     <div className='flex shrink-0 items-center gap-2'>
       <IconActionButton
-        label={isChoosing ? 'Choosing…' : hasDatasetsFolder ? 'Change datasets folder' : 'Choose datasets folder'}
+        label={isChoosing ? 'Choosing…' : hasDatasetsFolder ? 'Change projects folder' : 'Choose projects folder'}
         disabled={busy || !canPick}
         onClick={onChooseFolder}
         icon={isChoosing ? <Loader size={14} /> : <FolderOpenIcon className='h-16 w-16' />}
         highlight={!hasDatasetsFolder}
       />
       <IconActionButton
-        label={isScanning ? 'Scanning…' : 'Refresh datasets'}
+        label={isScanning ? 'Scanning…' : 'Refresh projects'}
         disabled={busy || !canPick || !hasDatasetsFolder}
         onClick={onRefresh}
         icon={isScanning ? <Loader size={14} /> : <RefreshCwIcon className='h-16 w-16' />}
@@ -292,7 +292,7 @@ function ResetDatasetConfirmDialog(props: { folderName: string; onConfirm: () =>
               Resetting…
             </span>
           ) : (
-            'Reset dataset'
+            'Reset project'
           )}
         </Button>
       </DialogFooter>

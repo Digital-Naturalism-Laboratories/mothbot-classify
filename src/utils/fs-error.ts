@@ -4,7 +4,7 @@ const NOT_FOUND_MESSAGE =
 const NOT_FOUND_ON_DISK = 'not found on disk'
 
 const MISSING_ON_DISK_HINT =
-  'A file or folder in this dataset is missing on disk (moved, deleted, or still downloading from iCloud). Re-select the datasets folder in the menu, then run Set up or Refresh datasets on this package.'
+  'A file or folder in this project is missing on disk (moved, deleted, or still downloading from iCloud). Re-select the projects folder in the menu, then run Set up or Refresh projects on this package.'
 
 export function isFilesystemNotFoundError(err: unknown): boolean {
   const name = (err as { name?: string })?.name

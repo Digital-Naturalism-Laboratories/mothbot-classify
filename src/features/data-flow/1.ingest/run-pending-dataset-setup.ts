@@ -17,7 +17,7 @@ export async function runPendingDatasetSetup(
 ): Promise<RunPendingDatasetSetupResult> {
   const datasetsHandle = await requireDatasetsFolderHandle({ mode: 'readwrite' })
   if (!datasetsHandle) {
-    const message = 'Choose your datasets folder from the menu, then try again.'
+    const message = 'Choose your projects folder from the menu, then try again.'
     return {
       migrated: [],
       errors: pending.map((item) => ({ folderName: item.folderName, message })),

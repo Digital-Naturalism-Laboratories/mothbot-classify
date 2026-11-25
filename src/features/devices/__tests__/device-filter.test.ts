@@ -60,8 +60,10 @@ describe('device filter', () => {
       custom,
     )
     expect(own.get('on-grid')!.powerSourceTypes).toEqual(['grid'])
-    expect(own.get('plain')!.powerSourceTypes).toEqual([])
+    // Without its own, a box uses its type's (the standard Pro runs on a battery).
+    expect(own.get('plain')!.powerSourceTypes).toEqual(['battery'])
     expect([...deploymentIdsMatching({ deploymentIds: ['on-grid', 'plain'], features: own, filter: { ...EMPTY_DEVICE_FILTER, powerSourceTypes: ['grid'] } })]).toEqual(['on-grid'])
+    expect([...deploymentIdsMatching({ deploymentIds: ['on-grid', 'plain'], features: own, filter: { ...EMPTY_DEVICE_FILTER, powerSourceTypes: ['battery'] } })]).toEqual(['plain'])
   })
 
   it('offers the choices present, with counts, and describes a filter', () => {

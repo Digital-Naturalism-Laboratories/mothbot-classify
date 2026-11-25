@@ -77,6 +77,6 @@ function enrichMissingPatchMessage(params: {
 
   return {
     ok: false as const,
-    message: `${result.message} Indexed patch files on disk look like: ${indexedPatchSamples.join(', ')}. Run Set up or Refresh datasets to rebuild records.`,
+    message: `${result.message} Indexed patch files on disk look like: ${indexedPatchSamples.join(', ')}. Run Set up or Refresh projects to rebuild records.`,
   }
 }

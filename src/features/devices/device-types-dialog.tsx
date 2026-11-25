@@ -174,7 +174,7 @@ function DeviceTypesDialogBody(props: Props) {
         </DialogHeader>
 
         {!loaded ? (
-          <p className='text-13 text-ink-secondary'>Open a dataset first: device types are saved with the dataset.</p>
+          <p className='text-13 text-ink-secondary'>Open a project first: device types are saved with the project.</p>
         ) : (
           <>
             <div className='flex gap-4 mb-12'>
@@ -263,7 +263,7 @@ function TypeList(props: {
     <div className='w-[240px] shrink-0 flex flex-col gap-8 overflow-y-auto'>
       <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary'>Built-in</div>
       <div className='space-y-2'>{BUILT_IN_DEVICE_TYPES.map(item)}</div>
-      <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary mt-8'>This dataset</div>
+      <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary mt-8'>This project</div>
       <div className='space-y-2'>
         {customTypes.length ? customTypes.map(item) : <p className='text-12 text-ink-secondary px-8'>None yet.</p>}
       </div>
@@ -491,7 +491,7 @@ function PowerList(props: {
     <div className='w-[240px] shrink-0 flex flex-col gap-8 overflow-y-auto'>
       <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary'>Standard</div>
       <div className='space-y-2'>{STANDARD_POWER_SOURCES.map(item)}</div>
-      <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary mt-8'>This dataset</div>
+      <div className='text-11 font-semibold uppercase tracking-wide text-ink-secondary mt-8'>This project</div>
       <div className='space-y-2'>
         {customPower.length ? customPower.map(item) : <p className='text-12 text-ink-secondary px-8'>None yet.</p>}
       </div>
@@ -621,7 +621,7 @@ function DeploymentAssignments(props: { allTypes: DeviceType[]; unsavedTypes: bo
           ))}
         </tbody>
       </table>
-      {!deployments.length ? <p className='text-ink-secondary'>This dataset has no deployment records.</p> : null}
+      {!deployments.length ? <p className='text-ink-secondary'>This project has no deployment records.</p> : null}
       <div className='mt-12'>
         <Button size='xsm' onClick={() => void onSave()} disabled={!changed.length || saving}>
           {saving ? 'Saving…' : `Save device types for ${changed.length} deployment${changed.length === 1 ? '' : 's'}`}

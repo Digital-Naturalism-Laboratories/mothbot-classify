@@ -83,16 +83,16 @@ function ProcessHandoffDialog(props: {
   const { handoff, hasSavedRoot, currentRootName } = props
   const [busy, setBusy] = useState<Busy>(null)
   const name = handoff.folderName
-  const target = name ?? handoff.rootPath?.split('/').filter(Boolean).pop() ?? 'your dataset'
+  const target = name ?? handoff.rootPath?.split('/').filter(Boolean).pop() ?? 'your project'
   const pickerUnsupported = !isDirectoryPickerAvailable()
 
   const explanation = !hasSavedRoot
-    ? 'Classify hasn’t been pointed at your datasets folder on this computer yet.'
+    ? 'Classify hasn’t been pointed at your projects folder on this computer yet.'
     : currentRootName
       ? name
-        ? `Classify’s datasets folder is currently “${currentRootName}”, which doesn’t contain “${name}” — or its access needs re-granting.`
-        : `Classify’s datasets folder is currently “${currentRootName}”, not the folder you chose in Process.`
-      : 'Classify needs access to your datasets folder again.'
+        ? `Classify’s projects folder is currently “${currentRootName}”, which doesn’t contain “${name}” — or its access needs re-granting.`
+        : `Classify’s projects folder is currently “${currentRootName}”, not the folder you chose in Process.`
+      : 'Classify needs access to your projects folder again.'
 
   async function copyPath() {
     if (!handoff.rootPath) return
@@ -135,7 +135,7 @@ function ProcessHandoffDialog(props: {
 
   /** Opens the native picker first thing (must stay inside the click gesture). */
   async function chooseFolder() {
-    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+    const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'projects folder' })
     if (!handle) return
     setBusy('pick')
     try {

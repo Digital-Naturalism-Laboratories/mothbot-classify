@@ -24,9 +24,9 @@ type DocTocGroup = {
 const APP_DOCS_TOC: DocTocGroup[] = [
   {
     id: 'datasets',
-    label: 'How datasets work',
+    label: 'How projects work',
     entries: [
-      { id: 'datasets-folder', label: 'Datasets folder' },
+      { id: 'datasets-folder', label: 'Projects folder' },
       { id: 'datasets-package', label: 'Folder layout' },
       { id: 'datasets-setup', label: 'First-time setup' },
     ],
@@ -273,31 +273,31 @@ export function AppDocsPeekTrigger(props: { onOpen: () => void }) {
 
 function DatasetsSection() {
   return (
-    <DocSection id='datasets' title='How datasets work'>
+    <DocSection id='datasets' title='How projects work'>
       <DocParagraph>
-        Mothbox Classify works with <strong>dataset folders</strong> on your computer. Nothing is uploaded — your
+        Mothbox Classify works with <strong>project folders</strong> on your computer. Nothing is uploaded — your
         photos, records, and labels stay on your machine.
       </DocParagraph>
 
-      <DocSubheading id='datasets-folder'>Datasets folder</DocSubheading>
+      <DocSubheading id='datasets-folder'>Projects folder</DocSubheading>
       <DocList
         items={[
           <>
-            On the home screen, pick one folder where you'll keep all your datasets. For example{' '}
+            On the home screen, pick one folder where you'll keep all your projects. For example{' '}
             <DocCode>~/Mothbox/datasets/</DocCode> on Mac or Linux, or{' '}
-            <DocCode>{`C:\\Users\\You\\Mothbox\\datasets\\`}</DocCode> on Windows.
+            <DocCode>{`C:\\Users\\You\\Mothbox\\projects\\`}</DocCode> on Windows.
           </>,
           <>
             Each subfolder inside that — one with a <DocCode>dataset.json</DocCode> file — is one dataset.
           </>,
           <>
-            After you add or move folders in Finder or File Explorer, click <strong>Refresh datasets</strong> and open
+            After you add or move folders in Finder or File Explorer, click <strong>Refresh projects</strong> and open
             the dataset you want to work on.
           </>,
         ]}
       />
 
-      <DocSubheading id='datasets-package'>What is inside a dataset</DocSubheading>
+      <DocSubheading id='datasets-package'>What is inside a project</DocSubheading>
       <DocCodeBlock>
         {`my-dataset/
   dataset.json
@@ -334,7 +334,7 @@ function DatasetsSection() {
             folder.
           </>,
           <>
-            Click <strong>Refresh datasets</strong>. The app organizes everything into the standard layout for you.
+            Click <strong>Refresh projects</strong>. The app organizes everything into the standard layout for you.
           </>,
           <>
             On a team, one person usually keeps the original photos in <DocCode>00_source/</DocCode>; everyone else
@@ -375,7 +375,7 @@ function CollaborationSection() {
             If you'd like them to continue from where you left off, include your own file from{' '}
             <DocCode>03_classifications/</DocCode> too.
           </>,
-          <>Tell them which group to focus on — for example, all Orthoptera in the dataset.</>,
+          <>Tell them which group to focus on — for example, all Orthoptera in the project.</>,
         ]}
       />
       <DocPlatformZipHint />
@@ -383,12 +383,12 @@ function CollaborationSection() {
       <DocSubheading id='collab-receive'>2. Collaborator — receive</DocSubheading>
       <DocList
         items={[
-          <>If you haven't already, click the <strong>folder icon</strong> next to Datasets on the home screen to choose your datasets folder.</>,
+          <>If you haven't already, click the <strong>folder icon</strong> next to Projects on the home screen to choose your projects folder.</>,
           <>
             Unzip the file (double-click usually works) and move the dataset folder into your datasets folder.
           </>,
           <>
-            Click <strong>Refresh datasets</strong> and open the dataset.
+            Click <strong>Refresh projects</strong> and open the project.
           </>,
           <>
             Set your initials in the avatar menu. Your labels will be saved to{' '}
@@ -421,7 +421,7 @@ function CollaborationSection() {
             Drop their file into your dataset's <DocCode>03_classifications/</DocCode> folder. If they're sending an
             update, just replace the previous version.
           </>,
-          <>Go back to the home screen and open the dataset again — their labels will load in.</>,
+          <>Go back to the home screen and open the project again — their labels will load in.</>,
         ]}
       />
 
@@ -487,10 +487,10 @@ function DocPlatformZipHint() {
       <p className='font-medium text-neutral-800'>How to make the zip</p>
       <ul className='mt-8 list-disc space-y-6 pl-20'>
         <li>
-          <strong>Mac:</strong> right-click the dataset folder → <em>Compress “folder name”</em>.
+          <strong>Mac:</strong> right-click the project folder → <em>Compress “folder name”</em>.
         </li>
         <li>
-          <strong>Windows:</strong> right-click the dataset folder → <em>Send to</em> →{' '}
+          <strong>Windows:</strong> right-click the project folder → <em>Send to</em> →{' '}
           <em>Compressed (zipped) folder</em>.
         </li>
         <li>

@@ -37,7 +37,7 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
     setErrorMessage(null)
 
     try {
-      const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'datasets folder' })
+      const handle = await pickDirectoryHandle({ mode: 'readwrite', title: 'projects folder' })
       if (!handle) return
       const ok = await chooseMutation.mutateAsync(handle)
       if (ok) closeGlobalDialog()
@@ -50,7 +50,7 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
   return (
     <div>
       <DialogHeader>
-        <DialogTitle>Choose datasets folder</DialogTitle>
+        <DialogTitle>Choose projects folder</DialogTitle>
       </DialogHeader>
 
       <p className='mt-12 text-13 text-neutral-700 text-pretty'>

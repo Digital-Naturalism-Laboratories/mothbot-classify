@@ -25,7 +25,7 @@ export function UnsupportedBrowserBanner() {
 
   return (
     <div className='mb-12 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 text-pretty'>
-      <b>This browser can’t open dataset folders.</b> Classify needs the File System Access API, which
+      <b>This browser can’t open project folders.</b> Classify needs the File System Access API, which
       only Chrome, Edge, and other Chromium-based browsers support (Firefox and Safari don’t). Open
       this page in Chrome to load your data.{' '}
       <button type='button' onClick={() => void copyLink()} className='underline underline-offset-2 font-medium'>

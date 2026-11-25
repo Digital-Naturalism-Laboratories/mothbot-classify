@@ -79,7 +79,7 @@ export async function collectFilesWithPathsRecursively(params: {
   } catch (err) {
     const folderLabel = [...pathToDirectory, (directoryHandle as { name?: string }).name]
       .filter(Boolean)
-      .join('/') || 'dataset root'
+      .join('/') || 'project root'
     if (skipUnreadableDirectories) {
       console.warn(`🌀 skipping unreadable folder “${folderLabel}”: ${formatFilesystemError(err)}`)
       return

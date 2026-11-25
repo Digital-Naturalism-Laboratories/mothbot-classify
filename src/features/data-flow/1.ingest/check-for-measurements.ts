@@ -69,9 +69,9 @@ export async function checkForMeasurementsInOpenPackage(): Promise<number> {
   toast.info(adding ? `${capitalize(what)} available` : `Updated ${what} available`, {
     id: MEASUREMENTS_TOAST_ID,
     description: adding
-      ? `Mothbot Process has measured ${what} for patches in this dataset. Add ${what} for up to ` +
+      ? `Mothbot Process has measured ${what} for patches in this project. Add ${what} for up to ` +
         `${missing.toLocaleString()} patches? Identifications are untouched.`
-      : `Mothbot Process has re-measured ${what} for this dataset (a newer method or new results). Update them? ` +
+      : `Mothbot Process has re-measured ${what} for this project (a newer method or new results). Update them? ` +
         'Identifications are untouched.',
     duration: Infinity,
     action: {
@@ -103,7 +103,7 @@ async function runImport(params: {
     if (!writable) {
       toast.error('Write access is needed to add measurements', {
         id: MEASUREMENTS_TOAST_ID,
-        description: 'Grant access to the dataset folder and try again.',
+        description: 'Grant access to the project folder and try again.',
         duration: 8000,
         action: undefined,
       })

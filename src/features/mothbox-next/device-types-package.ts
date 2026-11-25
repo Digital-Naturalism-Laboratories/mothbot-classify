@@ -13,15 +13,15 @@ async function packageRootHandle(): Promise<FileSystemDirectoryHandleLike> {
   const root = (await idbGet(persistenceConstants.IDB_NAME, persistenceConstants.IDB_STORE, 'projectsRoot')) as
     | FileSystemDirectoryHandleLike
     | null
-  if (!root) throw new Error('The dataset folder is not available — reopen the dataset.')
-  if (!(await ensureReadWritePermission(root))) throw new Error('Write access to the dataset folder is needed.')
+  if (!root) throw new Error('The project folder is not available — reopen the project.')
+  if (!(await ensureReadWritePermission(root))) throw new Error('Write access to the project folder is needed.')
   return root
 }
 
 /** Saves the dataset's custom device types (replacing the list) and updates the open package. */
 export async function saveCustomDeviceTypes(types: readonly DeviceType[]): Promise<void> {
   const active = mothboxNextPackageStore.get()
-  if (!active?.loaded) throw new Error('Open a dataset first.')
+  if (!active?.loaded) throw new Error('Open a project first.')
   const root = await packageRootHandle()
   await writeTextFile(root, joinPackagePath(active.packageRoot, PACKAGE_DEVICE_TYPES_RECORD), serializeDeviceTypes(types))
   mothboxNextPackageStore.set({ ...active, loaded: { ...active.loaded, deviceTypes: [...types] } })
@@ -30,7 +30,7 @@ export async function saveCustomDeviceTypes(types: readonly DeviceType[]): Promi
 /** Saves the dataset's own power setups (replacing the list) and updates the open package. */
 export async function saveCustomPowerSources(setups: readonly DeviceTypePowerSource[]): Promise<void> {
   const active = mothboxNextPackageStore.get()
-  if (!active?.loaded) throw new Error('Open a dataset first.')
+  if (!active?.loaded) throw new Error('Open a project first.')
   const root = await packageRootHandle()
   await writeTextFile(root, joinPackagePath(active.packageRoot, PACKAGE_POWER_SOURCES_RECORD), serializePowerSources(setups))
   mothboxNextPackageStore.set({ ...active, loaded: { ...active.loaded, powerSources: [...setups] } })
@@ -43,7 +43,7 @@ export async function saveCustomPowerSources(setups: readonly DeviceTypePowerSou
 export async function saveDeploymentDeviceTypes(assignments: Record<string, string | null>): Promise<void> {
   const active = mothboxNextPackageStore.get()
   const loaded = active?.loaded
-  if (!active || !loaded) throw new Error('Open a dataset first.')
+  if (!active || !loaded) throw new Error('Open a project first.')
   const deployments: DeploymentRecord[] = loaded.deployments.map((d) => {
     if (!(d.deployment_id in assignments)) return d
     const id = assignments[d.deployment_id]

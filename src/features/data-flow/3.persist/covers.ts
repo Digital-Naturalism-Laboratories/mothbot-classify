@@ -128,7 +128,7 @@ async function saveMorphoCoversToOpenPackage(covers: Record<string, MorphoCover>
     const { writeMorphoCoversToOpenPackage } = await import('~/features/mothbox-next/morpho-covers-package')
     await writeMorphoCoversToOpenPackage(covers)
   } catch {
-    console.error('Error saving morpho covers to the dataset')
+    console.error('Error saving morpho covers to the project')
   }
   return true
 }

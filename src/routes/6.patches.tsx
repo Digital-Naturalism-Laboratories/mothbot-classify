@@ -11,7 +11,7 @@ export function Patches() {
   const params = useParams({ from: '/projects/$projectId/deployments/$deploymentId/nights/$nightId' })
 
   if (isBlockingLoading) return <CenteredLoader>🌀 Loading patches</CenteredLoader>
-  if (!dataset) return <p className='text-sm text-neutral-500'>No dataset loaded</p>
+  if (!dataset) return <p className='text-sm text-neutral-500'>No project loaded</p>
   const project = dataset.projects.find((p) => p.id === params.projectId)
   if (!project) return <p className='text-sm text-neutral-500'>Project not found</p>
   const deployment = project.deployments.find((d) => d.name === params.deploymentId)

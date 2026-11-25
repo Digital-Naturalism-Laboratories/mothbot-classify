@@ -15,7 +15,7 @@ export async function openDatasetByFolderName(params: {
   const { folderName, showSuccessToast } = params
   const root = (await requireDatasetsFolderHandle({ mode: 'read' })) as DirectoryHandleWithIter | null
   if (!root) {
-    toast.error('Datasets folder is not set.')
+    toast.error('Projects folder is not set.')
     return false
   }
 
@@ -38,7 +38,7 @@ export async function openDatasetByFolderName(params: {
   }
 
   if (!subdir) {
-    toast.error(`Could not open dataset folder “${folderName}”.`)
+    toast.error(`Could not open project folder “${folderName}”.`)
     return false
   }
 

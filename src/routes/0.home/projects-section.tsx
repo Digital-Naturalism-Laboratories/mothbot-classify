@@ -45,6 +45,7 @@ import {
   EMPTY_DEVICE_FILTER,
   groupDeploymentsByDeviceType,
   isDeviceFilterActive,
+  UNKNOWN_DEVICE_TYPE,
 } from '~/features/devices/device-filter'
 
 const PROJECTS_TREE_DISCLOSURE_NS = 'projects-tree'
@@ -207,7 +208,7 @@ export function ProjectsSection(props: ProjectsSectionProps) {
           onToggleDeployment={onToggleDeployment}
         />
       ) : (
-        <p className='text-sm text-neutral-500 text-pretty'>Select a dataset on the left, or add a new one below the list.</p>
+        <p className='text-sm text-neutral-500 text-pretty'>Select a project on the left, or add a new one below the list.</p>
       )}
     </Column>
   )
@@ -523,7 +524,7 @@ function DeploymentsList(props: DeploymentsListProps) {
       key={dep.id}
       projectId={projectId}
       deployment={dep}
-      deviceType={groups ? undefined : deviceFeatures.get(dep.id)?.deviceType}
+      deviceType={groups ? undefined : knownDeviceType(deviceFeatures.get(dep.id))}
       nights={nights}
       progressIndex={progressIndex}
       collapsed={collapsed}
@@ -682,6 +683,11 @@ function NightsList(props: NightsListProps) {
       })}
     </div>
   )
+}
+
+/** A deployment's device type name, or undefined when it isn't set (nothing is shown then). */
+function knownDeviceType(features: { deviceTypeID: string; deviceType: string } | undefined) {
+  return features && features.deviceTypeID !== UNKNOWN_DEVICE_TYPE ? features.deviceType : undefined
 }
 
 function getSitesForProject(params: { sites: Record<string, SiteEntity>; projectId: string }) {

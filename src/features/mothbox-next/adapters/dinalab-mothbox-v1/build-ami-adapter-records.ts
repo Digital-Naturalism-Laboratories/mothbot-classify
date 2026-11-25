@@ -94,7 +94,7 @@ export async function buildAmiAdapterRecords(params: {
   onProgress?: DinalabAdapterProgressCallback
 }): Promise<BuiltDinalabAdapterRecords> {
   const { datasetId, io, packageRelativeSourcePrefix, onProgress } = params
-  const progressMessage = 'Converting AMI dataset...'
+  const progressMessage = 'Converting AMI project...'
 
   onProgress?.({
     phase: 'scan',

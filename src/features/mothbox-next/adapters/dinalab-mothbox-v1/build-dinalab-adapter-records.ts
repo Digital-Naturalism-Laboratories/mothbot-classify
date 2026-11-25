@@ -84,7 +84,7 @@ export async function buildDinalabMothboxV1Records(params: {
     originalSourceExists,
   } = params
   const humanClassifierId = params.humanClassifierId?.trim() || 'bf'
-  const progressMessage = 'Setting up dataset…'
+  const progressMessage = 'Setting up project…'
 
   const patches: PatchRecord[] = []
   const patchSources: PatchSourceRecord[] = []

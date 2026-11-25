@@ -27,7 +27,7 @@ export async function pickDatasetsFolderHandle(): Promise<FileSystemDirectoryHan
 
   return pickDirectoryHandle({
     mode: 'readwrite',
-    title: 'datasets folder',
+    title: 'projects folder',
   })
 }
 
@@ -38,7 +38,7 @@ export async function pickDatasetsFolderHandle(): Promise<FileSystemDirectoryHan
 export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike): Promise<boolean> {
   const granted = await ensureReadWritePermission(handle)
   if (!granted) {
-    toast.error('Write permission is required on the datasets folder.')
+    toast.error('Write permission is required on the projects folder.')
     return false
   }
 
@@ -51,15 +51,15 @@ export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike)
     speciesFileCount = setup.speciesFileCount
   } catch (err) {
     console.warn('🚨 setupDatasetsFolder: workspace setup failed', err)
-    toast.error('Datasets folder saved, but scanning packages failed. Try reopening the folder.')
+    toast.error('Projects folder saved, but scanning packages failed. Try reopening the folder.')
     return false
   }
 
-  toast.success('Datasets folder set', {
+  toast.success('Projects folder set', {
     description:
       speciesFileCount > 0
         ? `Packages live here; ${speciesFileCount} taxa list${speciesFileCount === 1 ? '' : 's'} loaded from CSVs in ${name}/.`
-        : `Legacy datasets will be converted into subfolders here (e.g. ${name}/my-dataset/). Drop a CSV anywhere under ${name}/ to use it as an identify list.`,
+        : `Legacy projects will be converted into subfolders here (e.g. ${name}/my-dataset/). Drop a CSV anywhere under ${name}/ to use it as an identify list.`,
   })
   return true
 }
@@ -82,12 +82,12 @@ export async function getOrCreateDatasetPackageHandle(params: {
     create: true,
   })) as FileSystemDirectoryHandleLike
 
-  if (!packageHandle) throw new Error(`Could not create dataset folder: ${safeName}`)
+  if (!packageHandle) throw new Error(`Could not create project folder: ${safeName}`)
 
   const alreadyPackage = await directoryHasDatasetManifest(packageHandle)
   if (alreadyPackage) {
     throw new Error(
-      `"${safeName}" already exists under your datasets folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
+      `"${safeName}" already exists under your projects folder and contains dataset.json. Pick a different legacy folder or remove/rename that package first.`,
     )
   }
 

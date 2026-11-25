@@ -86,8 +86,8 @@ export async function addSpeciesListFromFile(params: { file: File; projectId?: s
     toast.success('Taxa list added', {
       id: toastId,
       description: root
-        ? `Saved to ${COPIED_SPECIES_LISTS_DIR}/${fileName} in your datasets folder.`
-        : 'Choose a datasets folder to keep it for next time.',
+        ? `Saved to ${COPIED_SPECIES_LISTS_DIR}/${fileName} in your projects folder.`
+        : 'Choose a projects folder to keep it for next time.',
     })
     return fileName
   } catch (err) {

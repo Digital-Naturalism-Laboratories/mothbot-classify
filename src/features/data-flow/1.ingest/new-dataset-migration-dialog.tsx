@@ -74,7 +74,7 @@ export function NewDatasetMigrationDialogContent(props: NewDatasetMigrationDialo
         return
       }
 
-      setErrorMessage('Setup did not complete. Try Refresh datasets.')
+      setErrorMessage('Setup did not complete. Try Refresh projects.')
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setErrorMessage(message)
@@ -91,7 +91,7 @@ export function NewDatasetMigrationDialogContent(props: NewDatasetMigrationDialo
   return (
     <div>
       <DialogHeader>
-        <DialogTitle>{count === 1 ? copy.title : `Set up new datasets?`}</DialogTitle>
+        <DialogTitle>{count === 1 ? copy.title : `Set up new projects?`}</DialogTitle>
       </DialogHeader>
 
       {count > 1 ? (
