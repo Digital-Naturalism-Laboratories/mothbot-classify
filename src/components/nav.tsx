@@ -117,7 +117,7 @@ export function Nav() {
 
         {breadcrumbs.length === 0 && workspace?.folderName ? (
           <span className='text-12 text-neutral-600'>
-            Datasets folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
+            Projects folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
           </span>
         ) : null}
 
@@ -287,13 +287,13 @@ export function FolderPicking() {
         <ol className='mt-8 list-decimal space-y-6 pl-20'>
           <li>
             <span className='font-medium'>Projects folder</span> — parent folder that will contain{' '}
-            <span className='font-medium'>all</span> datasets (e.g.{' '}
-            <code className='text-12'>~/Mothbox/datasets/</code> on macOS/Linux,{' '}
+            <span className='font-medium'>all</span> projects (e.g.{' '}
+            <code className='text-12'>~/Mothbox/projects/</code> on macOS/Linux,{' '}
             <code className='text-12'>C:\Users\You\Mothbox\projects\</code> on Windows).
           </li>
           <li>
             <span className='font-medium'>Add a project</span> — copy or move a legacy folder (bot JSON +{' '}
-            <code className='text-12'>patches/</code>) or an existing package into your datasets folder with your file
+            <code className='text-12'>patches/</code>) or an existing package into your projects folder with your file
             manager.
           </li>
           <li>
@@ -325,7 +325,7 @@ export function FolderPicking() {
         <span className='text-12 text-neutral-600'>
           {hasDatasetsFolder ? (
             <>
-              Datasets folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
+              Projects folder: <span className='font-medium text-neutral-800'>{workspace.folderName}</span>
             </>
           ) : (
             'Set the projects folder, then drop project folders into it.'

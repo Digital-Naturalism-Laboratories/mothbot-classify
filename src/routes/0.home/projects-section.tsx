@@ -323,7 +323,7 @@ function ProjectsTreeEmptyState(props: { projectName: string }) {
 
   return (
     <div className='shadow-border rounded-xl bg-white p-8 text-sm text-neutral-600'>
-      No sessions or hierarchy data for {projectName} yet. Open a dataset folder or wait for ingest to finish.
+      No sessions or hierarchy data for {projectName} yet. Open a project folder or wait for ingest to finish.
     </div>
   )
 }

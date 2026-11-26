@@ -160,7 +160,7 @@ function PackageZipDialogBody(props: Props) {
           <div className='space-y-12 text-13'>
             <p className='text-ink-secondary'>
               A zip of the chosen sessions’ processed data — patches, detections, identifications (with their history)
-              and records. Unzipped, it opens in Classify as a dataset.
+              and records. Unzipped, it opens in Classify as a project.
             </p>
 
             <div>

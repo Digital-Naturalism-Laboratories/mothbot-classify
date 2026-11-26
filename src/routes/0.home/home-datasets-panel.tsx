@@ -87,7 +87,7 @@ export function HomeDatasetsPanel() {
           <p className='mx-8 px-8 text-13 text-neutral-500 text-pretty'>
             {workspace?.folderName ? (
               <>
-                Drag a dataset folder into{' '}
+                Drag a project folder into{' '}
                 <span className='font-medium text-neutral-700'>{workspace.folderName}</span>, then refresh or return
                 to the app to set it up.
               </>
@@ -242,7 +242,7 @@ function DatasetListItem(props: DatasetListItemProps) {
           >
             <span className='inline-flex items-center gap-8'>
               <RotateCcwIcon className='h-14 w-14' />
-              Reset dataset
+              Reset project
             </span>
           </ContextMenuItem>
         </ContextMenuContent>
@@ -267,11 +267,11 @@ function ResetDatasetConfirmDialog(props: { folderName: string; onConfirm: () =>
       </DialogHeader>
 
       <p className='mt-12 text-13 text-neutral-700 text-pretty'>
-        This removes all files Classify added to this dataset — the manifest, records, and classifications. Your
+        This removes all files Classify added to this project — the manifest, records, and classifications. Your
         original source images, patches, and detection JSON files are not affected.
       </p>
       <p className='mt-8 text-13 text-neutral-500 text-pretty'>
-        After resetting, you can run Set up again to re-index the dataset from scratch. This is useful if the
+        After resetting, you can run Set up again to re-index the project from scratch. This is useful if the
         underlying processed data has changed.
       </p>
 

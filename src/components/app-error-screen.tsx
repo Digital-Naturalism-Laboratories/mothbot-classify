@@ -44,7 +44,7 @@ export function AppErrorScreen(props: ErrorComponentProps) {
       <div className='flex flex-wrap gap-8'>
         <Button onClick={() => window.location.reload()}>Reload</Button>
         <Button variant='outline' onClick={() => window.location.assign('/')}>
-          Back to datasets
+          Back to projects
         </Button>
         <Button variant='outline' onClick={() => void copyDetails()}>
           {copied ? 'Copied' : 'Copy error details'}

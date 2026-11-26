@@ -101,6 +101,6 @@ describe('normalizePathsToRoot', () => {
 
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.message).toContain('Could not confidently detect dataset root')
+    expect(result.message).toContain('Could not confidently detect project root')
   })
 })

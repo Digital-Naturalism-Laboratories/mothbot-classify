@@ -8,6 +8,9 @@ import { loadMothboxNextPackageData } from '~/features/mothbox-next/load-package
 import { createNodePackageDataAccess, fixturePackageRoot } from '~/features/mothbox-next/__tests__/node-fixture-access'
 import { planPackageZip, sessionsForExport } from '../plan-package-zip'
 import { writePackageZip } from '../write-package-zip'
+import { PACKAGE_DEVICE_TYPES_RECORD, parseDeviceTypes } from '~/features/mothbox-next/device-types-records'
+import { PACKAGE_POWER_SOURCES_RECORD, parsePowerSources } from '~/features/mothbox-next/power-sources-records'
+import { newCustomDeviceType, newCustomPowerSource } from '~/models/device-types'
 
 const root = fixturePackageRoot('04_dinacon_lightweight_substrate')
 
@@ -87,6 +90,22 @@ describe('zipped export for a collaborator', () => {
     // Absent silhouettes aren't problems; absent patches are.
     expect(result.missing.some((p) => p.endsWith('_nobg.png'))).toBe(false)
     expect(result.missing.length).toBeGreaterThan(0)
+  })
+
+  it('carries the project’s own device types and power setups', async () => {
+    const loaded = (await loadFrom(root))!
+    const withDevices = {
+      ...loaded,
+      deviceTypes: [newCustomDeviceType({ name: 'Field kit', existingIds: [] })],
+      powerSources: [newCustomPowerSource({ name: 'Field battery', powerSourceType: 'battery', existingIds: [] })],
+    }
+    const plan = planPackageZip({ loaded: withDevices, manifestText: '{}' })
+    const text = (p: string) => plan.entries.find((e) => e.kind === 'text' && e.path === p)
+    expect(parseDeviceTypes((text(PACKAGE_DEVICE_TYPES_RECORD) as { text: string }).text)).toEqual(withDevices.deviceTypes)
+    expect(parsePowerSources((text(PACKAGE_POWER_SOURCES_RECORD) as { text: string }).text)).toEqual(withDevices.powerSources)
+    // None of its own: no empty files.
+    const bare = planPackageZip({ loaded: { ...loaded, deviceTypes: [], powerSources: [] }, manifestText: '{}' })
+    expect(bare.entries.some((e) => e.path === PACKAGE_DEVICE_TYPES_RECORD || e.path === PACKAGE_POWER_SOURCES_RECORD)).toBe(false)
   })
 
   it('exports every session when none are chosen', async () => {

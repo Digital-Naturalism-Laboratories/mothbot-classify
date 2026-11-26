@@ -44,7 +44,7 @@ export function validateProjectRootSelection(params: {
     const looksLikeNight = isLikelyNightFolderName(nightCandidate)
     if (looksLikeNight && idx < 4) {
       const missingCount = 3 - pre.length
-      const missingHint = missingCount >= 1 ? 'datasets/deployments' : 'projects/deployments (one level is missing)'
+      const missingHint = missingCount >= 1 ? 'projects/deployments' : 'projects/deployments (one level is missing)'
       return {
         ok: false,
         message: `Detected night and patches are valid, but ${missingHint} structure before the night is incorrect. Example: project/deployment/night/patches/<file>. Offending path: ${sample}`,

@@ -96,7 +96,7 @@ export function NewDatasetMigrationDialogContent(props: NewDatasetMigrationDialo
 
       {count > 1 ? (
         <p className='mt-12 text-13 text-neutral-700 text-pretty'>
-          {count} folders in your datasets directory are not ready to open yet. Choose which ones to set up now —
+          {count} folders in your projects directory are not ready to open yet. Choose which ones to set up now —
           you can set up the rest later.
         </p>
       ) : (

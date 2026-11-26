@@ -171,7 +171,7 @@ function ProcessHandoffDialog(props: {
       ) : null}
 
       <p className='mt-8 text-13 text-neutral-700 text-pretty'>
-        Point Classify’s datasets folder at{name ? ' the folder that ' : ' '}
+        Point Classify’s projects folder at{name ? ' the folder that ' : ' '}
         {name ? <b>contains</b> : null}
         {name ? ` “${name}”:` : 'this folder:'}
       </p>
@@ -216,7 +216,7 @@ function ProcessHandoffDialog(props: {
           ) : (
             <span className='inline-flex items-center gap-6'>
               <FolderOpenIcon size={14} />
-              Choose datasets folder…
+              Choose projects folder…
             </span>
           )}
         </Button>

@@ -59,7 +59,7 @@ export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike)
     description:
       speciesFileCount > 0
         ? `Packages live here; ${speciesFileCount} taxa list${speciesFileCount === 1 ? '' : 's'} loaded from CSVs in ${name}/.`
-        : `Legacy projects will be converted into subfolders here (e.g. ${name}/my-dataset/). Drop a CSV anywhere under ${name}/ to use it as an identify list.`,
+        : `Legacy projects will be converted into subfolders here (e.g. ${name}/my-project/). Drop a CSV anywhere under ${name}/ to use it as an identify list.`,
   })
   return true
 }

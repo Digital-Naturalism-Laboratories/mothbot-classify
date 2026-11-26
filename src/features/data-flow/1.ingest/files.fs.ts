@@ -300,7 +300,7 @@ export function normalizePathsToRoot(params: { files: IndexedPickedFile[] }): No
     return {
       ok: false,
       levelsUp: 1,
-      message: `Could not confidently detect dataset root. Parsed ${(evaluation.validRatio * 100).toFixed(
+      message: `Could not confidently detect project root. Parsed ${(evaluation.validRatio * 100).toFixed(
         0,
       )}% of sample patch paths; expected at least 80%. Sample failed paths: ${evaluation.invalidSamples.join(' | ')}`,
     }

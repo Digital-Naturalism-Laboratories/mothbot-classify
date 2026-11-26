@@ -58,9 +58,9 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
         Mothbot data will live.
       </p>
       <p className='mt-8 text-13 text-neutral-600 text-pretty'>
-        Each dataset is stored as a subfolder inside this location—for example{' '}
-        <code className='text-12 text-neutral-800'>~/Classify_Datasets/my-dataset/</code>. After you&apos;ve chosen this
-        folder, drop any dataset folder with the right name into it.
+        Each project is stored as a subfolder inside this location—for example{' '}
+        <code className='text-12 text-neutral-800'>~/Classify_Projects/my-project/</code>. After you&apos;ve chosen this
+        folder, drop any project folder with the right name into it.
       </p>
 
       {!canPick ? (

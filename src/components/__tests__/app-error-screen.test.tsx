@@ -8,7 +8,7 @@ describe('AppErrorScreen', () => {
     expect(screen.getByText('Maximum call stack size exceeded')).toBeInTheDocument()
     expect(screen.getByText(/too large for the browser to handle at once/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Back to datasets' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back to projects' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy error details' })).toBeInTheDocument()
   })
 

@@ -71,7 +71,7 @@ export function AppDocsPeek(props: AppDocsPeekProps) {
         >
           <DialogTitle className='text-balance text-18 font-semibold text-neutral-900'>Documentation</DialogTitle>
           <p className='mt-8 text-pretty text-13 font-normal text-neutral-600'>
-            How datasets work and how to collaborate. More topics will be added here over time.
+            How projects work and how to collaborate. More topics will be added here over time.
           </p>
         </DialogHeader>
 
@@ -284,7 +284,7 @@ function DatasetsSection() {
         items={[
           <>
             On the home screen, pick one folder where you'll keep all your projects. For example{' '}
-            <DocCode>~/Mothbox/datasets/</DocCode> on Mac or Linux, or{' '}
+            <DocCode>~/Mothbox/projects/</DocCode> on Mac or Linux, or{' '}
             <DocCode>{`C:\\Users\\You\\Mothbox\\projects\\`}</DocCode> on Windows.
           </>,
           <>
@@ -292,14 +292,14 @@ function DatasetsSection() {
           </>,
           <>
             After you add or move folders in Finder or File Explorer, click <strong>Refresh projects</strong> and open
-            the dataset you want to work on.
+            the project you want to work on.
           </>,
         ]}
       />
 
       <DocSubheading id='datasets-package'>What is inside a project</DocSubheading>
       <DocCodeBlock>
-        {`my-dataset/
+        {`my-project/
   dataset.json
   00_source/          original photos (optional)
   01_patches/         insect crops to label
@@ -313,7 +313,7 @@ function DatasetsSection() {
           <>A <strong>patch</strong> is one insect crop — the image you Accept or Identify in the app.</>,
           <>
             The AI model's labels live in <DocCode>03_classifications/_bot.ndjson</DocCode>. Think of the model as your
-            first collaborator on the dataset.
+            first collaborator on the project.
           </>,
           <>
             Your labels are saved separately in <DocCode>03_classifications/{`{your-initials}.ndjson`}</DocCode>. Set
@@ -330,7 +330,7 @@ function DatasetsSection() {
       <DocList
         items={[
           <>
-            Drop a dataset folder (with photos and the model's detections from the Mothbox pipeline) into your datasets
+            Drop a project folder (with photos and the model's detections from the Mothbox pipeline) into your projects
             folder.
           </>,
           <>
@@ -353,7 +353,7 @@ function CollaborationSection() {
       <DocParagraph>
         Mothbox Classify doesn't have an in-app send button yet, so collaboration happens by sharing a zip file — over
         email, Google Drive, Dropbox, USB, whatever your team already uses. Each person works in their own labels
-        file, so merging is just dropping that file back into the dataset.
+        file, so merging is just dropping that file back into the project.
       </DocParagraph>
 
       <DocSubheading id='collab-send'>1. Sender — zip and send</DocSubheading>
@@ -385,7 +385,7 @@ function CollaborationSection() {
         items={[
           <>If you haven't already, click the <strong>folder icon</strong> next to Projects on the home screen to choose your projects folder.</>,
           <>
-            Unzip the file (double-click usually works) and move the dataset folder into your datasets folder.
+            Unzip the file (double-click usually works) and move the project folder into your projects folder.
           </>,
           <>
             Click <strong>Refresh projects</strong> and open the project.
@@ -408,7 +408,7 @@ function CollaborationSection() {
         items={[
           <>
             You only need to send back your own labels file —{' '}
-            <DocCode>03_classifications/{`{your-initials}.ndjson`}</DocCode>. No need to zip the whole dataset again.
+            <DocCode>03_classifications/{`{your-initials}.ndjson`}</DocCode>. No need to zip the whole project again.
           </>,
           <>Tell the sender your initials so they know which file is yours.</>,
         ]}
@@ -418,7 +418,7 @@ function CollaborationSection() {
       <DocList
         items={[
           <>
-            Drop their file into your dataset's <DocCode>03_classifications/</DocCode> folder. If they're sending an
+            Drop their file into your project's <DocCode>03_classifications/</DocCode> folder. If they're sending an
             update, just replace the previous version.
           </>,
           <>Go back to the home screen and open the project again — their labels will load in.</>,
@@ -495,7 +495,7 @@ function DocPlatformZipHint() {
         </li>
         <li>
           <strong>Linux:</strong> right-click → <em>Compress</em>, or in a terminal run{' '}
-          <DocCode>zip -r my-dataset.zip my-dataset/</DocCode>.
+          <DocCode>zip -r my-project.zip my-project/</DocCode>.
         </li>
       </ul>
     </div>
