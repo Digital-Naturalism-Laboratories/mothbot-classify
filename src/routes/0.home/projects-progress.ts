@@ -100,7 +100,7 @@ function buildProgressByLeafGroup(params: {
     if (detectionsForNight.length > 0) {
       // Count the newest detection run only: re-running Detect keeps the older
       // run beside it, and counting both would double the night's insects.
-      const newestRun = itemsOfOneRun(detectionsForNight)
+      const newestRun = itemsOfOneRun(detectionsForNight, undefined, leafGroupId)
       const summary = buildLeafGroupSummary({ leafGroupId, detections: newestRun })
       byLeafGroup[leafGroupId] = {
         total: summary.totalDetections,

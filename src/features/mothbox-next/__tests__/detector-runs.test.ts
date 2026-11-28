@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { itemsOfOneRun, newestDetectorId, sortDetectorRunsNewestFirst } from '../detector-runs'
+import { defaultDetectorId, itemsOfOneRun, newestDetectorId, sortDetectorRunsNewestFirst } from '../detector-runs'
 
 describe('detector run ordering', () => {
   it('ranks MBD versions numerically, newest first', () => {
@@ -65,5 +65,18 @@ describe('itemsOfOneRun', () => {
   it('leaves a single-run night untouched', () => {
     const one = [{ id: 'x', detectorId: 'Mothbot_MBD-1-1.pt' }, { id: 'y' }]
     expect(itemsOfOneRun(one)).toBe(one)
+  })
+})
+
+describe('defaultDetectorId', () => {
+  it("prefers the run Mothbot Process last made for the nights over the newest model name", () => {
+    const ids = ['Mothbot_MBD-1-2.pt', 'Mothbot_Anybug-Mixed-v2-0.pt']
+    const current = { night1: 'Mothbot_Anybug-Mixed-v2-0.pt', night2: 'Mothbot_Anybug-Mixed-v2-0.pt', night3: 'Mothbot_MBD-1-2.pt' }
+    expect(defaultDetectorId(ids, ['night1', 'night2', 'night3'], current)).toBe('Mothbot_Anybug-Mixed-v2-0.pt')
+    expect(defaultDetectorId(ids, ['night3'], current)).toBe('Mothbot_MBD-1-2.pt')
+  })
+
+  it('falls back to the newest model name when the current run is unknown', () => {
+    expect(defaultDetectorId(['Mothbot_MBD-1-0.pt', 'Mothbot_MBD-1-2.pt'], ['night9'], {})).toBe('Mothbot_MBD-1-2.pt')
   })
 })

@@ -41,6 +41,8 @@ const RECORDS = {
 export type NewNightsDetection = {
   /** Every folder the merge should process: new nights plus nights with a new run. */
   folders: string[]
+  /** Each ingested night's current detector on disk (its `_botdetection.json`), by night id. */
+  currentDetectorByNight?: Record<string, string>
   /** Night folders present on disk but absent from the records. */
   newNightFolders: string[]
   /**
@@ -83,7 +85,7 @@ export async function detectNewNightFolders(io: DinalabAdapterIO): Promise<NewNi
   if (!botDetectionPaths.length) return empty
 
   const patchesText = await readTextSafe(io, RECORDS.patches)
-  const patchRows = parseNdjson<{ asset_path?: string; detector_id?: string }>(patchesText)
+  const patchRows = parseNdjson<{ asset_path?: string; detector_id?: string; camera_day_id?: string }>(patchesText)
   const existingAssetPaths = patchRows
     .map((row) => row?.asset_path)
     .filter((path): path is string => typeof path === 'string' && !!path)
@@ -92,9 +94,11 @@ export async function detectNewNightFolders(io: DinalabAdapterIO): Promise<NewNi
 
   // Which detectors the records already hold, per ingested night folder.
   const knownDetectorsByFolder = new Map<string, Set<string>>()
+  const nightByFolder = new Map<string, string>()
   for (const row of patchRows) {
     const folder = typeof row?.asset_path === 'string' ? dirnameOf(row.asset_path) : ''
     if (!folder) continue
+    if (typeof row.camera_day_id === 'string' && !nightByFolder.has(folder)) nightByFolder.set(folder, row.camera_day_id)
     let set = knownDetectorsByFolder.get(folder)
     if (!set) knownDetectorsByFolder.set(folder, (set = new Set()))
     if (typeof row.detector_id === 'string' && row.detector_id) set.add(row.detector_id)
@@ -118,8 +122,14 @@ export async function detectNewNightFolders(io: DinalabAdapterIO): Promise<NewNi
 
   const newRunFolders = findFoldersWithNewDetectorRuns({ onDiskDetectorsByFolder, knownDetectorsByFolder })
 
+  const currentDetectorByNight: Record<string, string> = {}
+  for (const [folder, detectors] of onDiskDetectorsByFolder) {
+    const night = nightByFolder.get(folder)
+    if (night && detectors.size === 1) currentDetectorByNight[night] = [...detectors][0]
+  }
+
   const folders = [...new Set([...newNightFolders, ...newRunFolders.map((entry) => entry.folder)])].sort()
-  return { folders, newNightFolders, newRunFolders }
+  return { folders, newNightFolders, newRunFolders, currentDetectorByNight }
 }
 
 /** Wraps the source IO so `findFiles` only sees files inside `folders`. */

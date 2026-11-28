@@ -3,7 +3,7 @@ import { requireDatasetsFolderHandle } from './datasets-folder-handle'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import { classifyDatasetFolder, isReservedDatasetsChildFolderName, isParquetFileName, isCsvFileName } from './classify-dataset-folder'
 import { readDatasetManifestSummary } from './dataset-manifest'
-import { detectChildProject, detectProjectAtRoot } from './project-folder'
+import { detectChildProject, detectProjectAtRoot, type ProjectToCombine } from './project-folder'
 import type { PendingDatasetMigration } from './pending-dataset-migration-types'
 
 export type { PendingDatasetMigration } from './pending-dataset-migration-types'
@@ -20,6 +20,8 @@ export type DiscoverDatasetFoldersResult = {
   pendingMigration: PendingDatasetMigration[]
   /** The picked folder is a project that Mothbot Process hasn't processed yet. */
   unprocessedProjectName?: string
+  /** Projects whose records are still one package per folder; combined when scanned. */
+  toCombine?: ProjectToCombine[]
 }
 
 export async function discoverDatasetFolders(): Promise<DiscoverDatasetFoldersResult> {
@@ -49,6 +51,8 @@ export async function discoverDatasetFoldersUnderRoot(
   if (rootProject?.kind === 'package') return { packages: [rootProject.entry], pendingMigration }
   if (rootProject?.kind === 'pending') return { packages, pendingMigration: [rootProject.pending] }
   if (rootProject?.kind === 'not-processed') return { packages, pendingMigration, unprocessedProjectName: rootProject.projectName }
+  if (rootProject?.kind === 'combine') return { packages, pendingMigration, toCombine: [rootProject.combine] }
+  const toCombine: ProjectToCombine[] = []
 
   const childCandidates: Array<{ directory: DirectoryHandleWithIter; folderName: string }> = []
   let rootHasMetadataFiles = false
@@ -129,6 +133,10 @@ export async function discoverDatasetFoldersUnderRoot(
       const ownProject = await detectChildProject(directory, folderName)
       if (ownProject?.entry) return { package: ownProject.entry, pending: null }
       if (ownProject?.pending) return { package: null, pending: ownProject.pending }
+      if (ownProject?.combine) {
+        toCombine.push(ownProject.combine)
+        return { package: null, pending: null }
+      }
 
       const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle, rootHasMetadataFiles })
       if (kind !== 'package' && kind !== 'skip') {
@@ -166,5 +174,5 @@ export async function discoverDatasetFoldersUnderRoot(
     }
   }
 
-  return { packages, pendingMigration }
+  return { packages, pendingMigration, toCombine }
 }

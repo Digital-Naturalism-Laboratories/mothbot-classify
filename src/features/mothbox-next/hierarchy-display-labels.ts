@@ -1,4 +1,4 @@
-import { parseDinalabDeploymentFolderName } from './adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
+import { DEPLOYMENT_PATH_SEPARATOR, parseDinalabDeploymentFolderName } from './adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
 import type { DeploymentRecord } from './records'
 
 const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
@@ -16,6 +16,14 @@ export function formatHierarchySegmentLabel(segment: string) {
 }
 
 export function deploymentRecordDisplayName(record: DeploymentRecord) {
+  // A deployment deeper in the project shows where it sits: "DesertHouse › Cactus".
+  if (record.deployment_id.includes(DEPLOYMENT_PATH_SEPARATOR)) {
+    return record.deployment_id
+      .split(DEPLOYMENT_PATH_SEPARATOR)
+      .filter(Boolean)
+      .map((segment) => formatHierarchySegmentLabel(segment) || segment)
+      .join(' › ')
+  }
   const device = record.device_id_from_folder ?? record.device_id
   const start = record.deployment_start_from_folder
 

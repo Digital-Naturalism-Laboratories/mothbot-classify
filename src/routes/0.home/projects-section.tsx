@@ -33,7 +33,9 @@ import {
   isSingleLeafHierarchy,
   resolveHomeTreeMode,
 } from '~/features/mothbox-next/hierarchy-routes'
-import { shouldSkipSiteLevelInProjectsTree } from '~/features/mothbox-next/hierarchy-display-labels'
+import { formatHierarchySegmentLabel, shouldSkipSiteLevelInProjectsTree } from '~/features/mothbox-next/hierarchy-display-labels'
+import { DEPLOYMENT_PATH_SEPARATOR } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/derive-dinalab-hierarchy'
+import { currentDetectorRunByNightStore } from '~/features/mothbox-next/detector-runs'
 import { activeHierarchyStore } from '~/features/mothbox-next/active-hierarchy'
 import { ManifestHierarchyTree } from './hierarchy-tree'
 import { SpeciesListControl } from '~/features/data-flow/2.identify/species-list-control'
@@ -82,13 +84,16 @@ export function ProjectsSection(props: ProjectsSectionProps) {
   const activeFolderName = useStore(activeDatasetFolderNameStore)
   const datasetProjectId = useMemo(() => Object.keys(projects ?? {})[0], [projects])
   const [collapsed, setCollapsed] = useState<CollapsedState>({ sites: {}, deployments: {} })
+  // Counts follow each night's current detection run, which is read once the project opens.
+  const currentRuns = useStore(currentDetectorRunByNightStore)
   const datasetProgress = useMemo(
     () =>
       buildProgressIndex({ nights, nightSummaries, detections }).byProject[datasetProjectId ?? ''] ?? {
         total: 0,
         identified: 0,
       },
-    [nights, nightSummaries, detections, datasetProjectId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentRuns: recount when the runs are known
+    [nights, nightSummaries, detections, datasetProjectId, currentRuns],
   )
   const [isSpeciesOpen, setIsSpeciesOpen] = useState(false)
   const [isMorphoOpen, setIsMorphoOpen] = useState(false)
@@ -235,9 +240,11 @@ function ProjectsList(props: ProjectsListProps) {
     onToggleSite,
     onToggleDeployment,
   } = props
+  const currentRuns = useStore(currentDetectorRunByNightStore)
   const progressIndex = useMemo(
     () => buildProgressIndex({ nights, nightSummaries, detections }),
-    [nights, nightSummaries, detections],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentRuns: recount when the runs are known
+    [nights, nightSummaries, detections, currentRuns],
   )
   const resolvedHierarchy = useStore(activeHierarchyStore)
   const list = Object.values(projects ?? {})
@@ -347,6 +354,24 @@ function LegacySitesDeploymentsTree(props: LegacySitesDeploymentsTreeProps) {
 
   if (!sitesForProject.length && !deploymentsForProject.length) return null
 
+  // Deployments that sit in folders inside the project (`DesertHouse~Cactus`): show the
+  // folders, as Mothbot Process does, instead of sites.
+  if (deploymentsForProject.some((dep) => dep.id.includes(DEPLOYMENT_PATH_SEPARATOR))) {
+    return (
+      <div className='shadow-border rounded-xl bg-white p-8'>
+        <DeploymentFolderTree
+          projectId={projectId}
+          deployments={deploymentsForProject}
+          nights={nights}
+          progressIndex={progressIndex}
+          collapsed={collapsed}
+          onToggleFolder={onToggleSite}
+          onToggleDeployment={onToggleDeployment}
+        />
+      </div>
+    )
+  }
+
   const skipSiteLevel = shouldSkipSiteLevelInProjectsTree(sitesForProject)
 
   if (!sitesForProject.length) {
@@ -394,6 +419,125 @@ function LegacySitesDeploymentsTree(props: LegacySitesDeploymentsTreeProps) {
         />
       )}
     </div>
+  )
+}
+
+type DeploymentFolderNode = {
+  path: string
+  name: string
+  folders: DeploymentFolderNode[]
+  deployments: DeploymentEntity[]
+}
+
+/** Folders of a project, from its deployments' paths (`DesertHouse~Cactus` sits in `DesertHouse`). */
+function buildDeploymentFolderTree(deployments: DeploymentEntity[]): DeploymentFolderNode {
+  const root: DeploymentFolderNode = { path: '', name: '', folders: [], deployments: [] }
+  for (const deployment of deployments) {
+    const segments = deployment.id.split(DEPLOYMENT_PATH_SEPARATOR).filter(Boolean)
+    let node = root
+    for (const segment of segments.slice(0, -1)) {
+      const path = node.path ? `${node.path}${DEPLOYMENT_PATH_SEPARATOR}${segment}` : segment
+      let child = node.folders.find((folder) => folder.path === path)
+      if (!child) {
+        child = { path, name: segment, folders: [], deployments: [] }
+        node.folders.push(child)
+      }
+      node = child
+    }
+    node.deployments.push(deployment)
+  }
+  const sort = (node: DeploymentFolderNode) => {
+    node.folders.sort((a, b) => a.name.localeCompare(b.name))
+    node.deployments.sort((a, b) => a.id.localeCompare(b.id))
+    node.folders.forEach(sort)
+  }
+  sort(root)
+  return root
+}
+
+function deploymentsUnder(node: DeploymentFolderNode): DeploymentEntity[] {
+  const out = [...node.deployments]
+  for (const folder of node.folders) for (const dep of deploymentsUnder(folder)) out.push(dep)
+  return out
+}
+
+type DeploymentFolderTreeProps = Pick<HierarchyStores, 'nights'> & {
+  projectId: string
+  deployments: DeploymentEntity[]
+  progressIndex: ProgressIndex
+  collapsed: CollapsedState
+  onToggleFolder: (folderKey: string) => void
+  onToggleDeployment: (deploymentId: string) => void
+}
+
+function DeploymentFolderTree(props: DeploymentFolderTreeProps) {
+  const root = useMemo(() => buildDeploymentFolderTree(props.deployments), [props.deployments])
+  return (
+    <div className='flex w-full flex-col gap-1'>
+      <DeploymentFolderChildren {...props} node={root} depth={0} />
+    </div>
+  )
+}
+
+function DeploymentFolderChildren(props: DeploymentFolderTreeProps & { node: DeploymentFolderNode; depth: number }) {
+  const { node, depth, projectId, nights, progressIndex, collapsed, onToggleFolder, onToggleDeployment } = props
+  return (
+    <>
+      {node.folders.map((folder) => {
+        // Folder rows share the sites' collapse state, under their own key.
+        const key = `folder:${folder.path}`
+        const expanded = !collapsed.sites[key]
+        const panelId = projectsTreePanelId({ segment: 'site', entityId: key })
+        const totals = deploymentsUnder(folder).reduce(
+          (sum, dep) => {
+            const prog = progressIndex.byDeployment[dep.id]
+            return { total: sum.total + (prog?.total ?? 0), identified: sum.identified + (prog?.identified ?? 0) }
+          },
+          { total: 0, identified: 0 },
+        )
+        return (
+          <div key={folder.path} className='w-full' style={{ paddingLeft: depth ? 16 : 0 }}>
+            <div className={projectsTreeRowClass}>
+              <div className={projectsTreeRowTitleClass}>
+                <div className='min-w-0'>
+                  <ProjectsTreeExpandTitle
+                    hasBranch
+                    expanded={expanded}
+                    panelId={panelId}
+                    onToggle={() => onToggleFolder(key)}
+                    expandAriaLabel={`Expand folder ${folder.name}`}
+                    collapseAriaLabel={`Collapse folder ${folder.name}`}
+                    titleClassName={projectsTreeDeepRowTitleClass}
+                  >
+                    {formatHierarchySegmentLabel(folder.name) || folder.name}
+                  </ProjectsTreeExpandTitle>
+                </div>
+              </div>
+              <InlineProgress total={totals.total} identified={totals.identified} activity={totals} />
+            </div>
+            <ExpandDisclosurePanel id={panelId} hidden={!expanded} className='w-full'>
+              <DeploymentFolderChildren {...props} node={folder} depth={depth + 1} />
+            </ExpandDisclosurePanel>
+          </div>
+        )
+      })}
+      {node.deployments.map((deployment) => (
+        <div key={deployment.id} className='w-full' style={{ paddingLeft: depth ? 16 : 0 }}>
+          <DeploymentItem
+            projectId={projectId}
+            deployment={deployment}
+            nameOverride={
+              formatHierarchySegmentLabel(deployment.id.split(DEPLOYMENT_PATH_SEPARATOR).pop() ?? '') || undefined
+            }
+            nights={nights}
+            progressIndex={progressIndex}
+            collapsed={collapsed}
+            onToggleDeployment={onToggleDeployment}
+            isTopLevel={depth === 0}
+          />
+        </div>
+      ))}
+    </>
   )
 }
 
@@ -556,6 +700,8 @@ type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
   deployment: DeploymentEntity
   /** The deployment's device type name, shown after its name. */
   deviceType?: string
+  /** Shown instead of the deployment's name (its own folder, inside a folder tree). */
+  nameOverride?: string
   progressIndex: ProgressIndex
   collapsed: CollapsedState
   onToggleDeployment: (deploymentId: string) => void
@@ -563,7 +709,7 @@ type DeploymentItemProps = Pick<HierarchyStores, 'nights'> & {
 }
 
 function DeploymentItem(props: DeploymentItemProps) {
-  const { projectId, deployment, deviceType, nights, progressIndex, collapsed, onToggleDeployment, isTopLevel = false } = props
+  const { projectId, deployment, deviceType, nameOverride, nights, progressIndex, collapsed, onToggleDeployment, isTopLevel = false } = props
   const prog = progressIndex.byDeployment[deployment.id] ?? { total: 0, identified: 0 }
   const nightsForDep = useMemo(() => getNightsForDeployment({ nights, deploymentId: deployment.id }), [nights, deployment.id])
   const hasNights = nightsForDep.length > 0
@@ -590,7 +736,7 @@ function DeploymentItem(props: DeploymentItemProps) {
                 collapseAriaLabel={`Collapse sessions for ${deployment.name}`}
                 titleClassName={projectsTreeDeepRowTitleClass}
               >
-                {deployment.name}
+                {nameOverride ?? deployment.name}
                 {deviceType ? <span className='ml-8 text-12 font-normal text-neutral-400'>{deviceType}</span> : null}
               </ProjectsTreeExpandTitle>
             </div>

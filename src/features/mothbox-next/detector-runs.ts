@@ -11,7 +11,18 @@
  *   tier 0  any other bot id (unknown scheme); tie-broken by name
  *   tier -1 HumanDetection — a human annotation pass, never a "newer model"
  */
+import { atom } from 'nanostores'
+
 export const HUMAN_DETECTOR_ID = 'HumanDetection'
+
+/**
+ * Each night's current detection run, as Mothbot Process left it: the detector named
+ * in the night's `_botdetection.json` files (older runs are renamed
+ * `_botdetection_<model>.json`). Read from disk when a project opens
+ * (add-new-nights.ts); keyed by night (camera day) id. It is the best guide to which run
+ * is newest: model names don't say when a model was used.
+ */
+export const currentDetectorRunByNightStore = atom<Record<string, string>>({})
 
 type DetectorRunRank = { tier: number; major: number; minor: number; date: string; id: string }
 
@@ -49,15 +60,34 @@ export function newestDetectorId(ids: readonly string[]): string | undefined {
 }
 
 /**
+ * The run to show by default for some nights: the run Mothbot Process last made for
+ * most of them (see `currentDetectorRunByNightStore`), else the newest model by name.
+ */
+export function defaultDetectorId(
+  ids: readonly string[],
+  nightIds: readonly string[] = [],
+  currentByNight: Record<string, string> = currentDetectorRunByNightStore.get(),
+): string | undefined {
+  const votes = new Map<string, number>()
+  for (const nightId of nightIds) {
+    const current = currentByNight[nightId]
+    if (current && ids.includes(current)) votes.set(current, (votes.get(current) ?? 0) + 1)
+  }
+  let best: string | undefined
+  for (const [id, count] of votes) if (!best || count > (votes.get(best) ?? 0)) best = id
+  return best ?? newestDetectorId(ids)
+}
+
+/**
  * One night's items from a single detection run: *preferred* when the night has
- * it, otherwise its newest run. Re-running Detect keeps the older run beside the
+ * it, otherwise its current run (or newest by name). Re-running Detect keeps the older run beside the
  * new one, so counting or drawing every run would show the night's insects twice.
  * Pass one night at a time — runs are chosen per night.
  */
-export function itemsOfOneRun<T extends { detectorId?: string }>(items: T[], preferred?: string): T[] {
+export function itemsOfOneRun<T extends { detectorId?: string }>(items: T[], preferred?: string, nightId?: string): T[] {
   const ids = new Set<string>()
   for (const item of items) if (item.detectorId) ids.add(item.detectorId)
   if (ids.size <= 1) return items
-  const run = preferred && ids.has(preferred) ? preferred : newestDetectorId([...ids])
+  const run = preferred && ids.has(preferred) ? preferred : defaultDetectorId([...ids], nightId ? [nightId] : [])
   return items.filter((item) => item.detectorId === run)
 }

@@ -63,7 +63,7 @@ export async function openDatasetByFolderName(params: {
     }
   }
 
-  const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast, originalSourceHandle })
+  const opened = await openMothboxNextPackageFromHandle(subdir, { showSuccessToast, originalSourceHandle, folderName })
 
   // Mothbot Process can add night folders to a package without updating its
   // records, so check once the package is actually open. Read-only; the user

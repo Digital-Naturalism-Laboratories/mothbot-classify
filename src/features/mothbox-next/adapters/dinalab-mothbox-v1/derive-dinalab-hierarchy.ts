@@ -15,7 +15,21 @@ export type ParsedDinalabDeploymentFolder = {
   deploymentDate?: string
 }
 
+/**
+ * Joins the folders of a deployment that sits deeper in a project than one folder,
+ * e.g. `DesertHouse/Cactus/<night>` → `DesertHouse~Cactus`. `/` is avoided because
+ * slash-shaped ids mean `project/deployment/night` in older code; `~` is allowed in
+ * file names everywhere and safe in URLs.
+ */
+export const DEPLOYMENT_PATH_SEPARATOR = '~'
+
 export function parseDinalabDeploymentFolderName(folderName: string): ParsedDinalabDeploymentFolder {
+  // A deployment deeper in the project (`DesertHouse~Cactus`): its own folder (the
+  // last one) carries the site, device and date; the whole path is its id.
+  if (folderName.includes(DEPLOYMENT_PATH_SEPARATOR)) {
+    const last = folderName.split(DEPLOYMENT_PATH_SEPARATOR).filter(Boolean).pop() ?? folderName
+    return { ...parseDinalabDeploymentFolderName(last), deploymentId: folderName.trim() }
+  }
   const trimmed = folderName.trim()
   const dateMatch = trimmed.match(/_(\d{4}-\d{2}-\d{2})$/)
   if (!dateMatch) {
@@ -157,11 +171,14 @@ export function resolveDeploymentContextFromPatchPath(params: {
     pathSegmentsBeforeNight = dirParts
   }
 
-  const deploymentFolder = resolveDeploymentFolderFromBotPath({
-    botDirSegments: pathSegmentsBeforeNight,
-    legacySourceRootName,
-    datasetId,
-  })
+  const deploymentFolder =
+    pathSegmentsBeforeNight.length >= 2
+      ? pathSegmentsBeforeNight.join(DEPLOYMENT_PATH_SEPARATOR) // deeper folders: everything above the night
+      : resolveDeploymentFolderFromBotPath({
+          botDirSegments: pathSegmentsBeforeNight,
+          legacySourceRootName,
+          datasetId,
+        })
   const parsed = parseDinalabDeploymentFolderName(deploymentFolder)
   const deploymentId = parsed.deploymentId
   const siteName = parsed.siteName ?? (isIsoDateOnly(deploymentFolder) ? DEFAULT_SITE_SEGMENT : deploymentFolder)
@@ -196,11 +213,16 @@ export function resolveDeploymentContext(params: {
   const segments = botDir.replaceAll('\\', '/').split('/').filter(Boolean)
   const legacyRoot = legacySourceRootName?.trim()
 
-  const deploymentFolder = resolveDeploymentFolderFromBotPath({
-    botDirSegments: segments,
-    legacySourceRootName: legacyRoot,
-    datasetId,
-  })
+  // Folders above the night folder name the deployment. One folder (the usual
+  // <deployment>/<night>) keeps the older rule; deeper ones join with `~`.
+  const deploymentFolder =
+    segments.length >= 3
+      ? segments.slice(0, -1).join(DEPLOYMENT_PATH_SEPARATOR)
+      : resolveDeploymentFolderFromBotPath({
+          botDirSegments: segments,
+          legacySourceRootName: legacyRoot,
+          datasetId,
+        })
   const parsed = parseDinalabDeploymentFolderName(deploymentFolder)
   const deploymentId = parsed.deploymentId
   const siteName = parsed.siteName ?? (isIsoDateOnly(deploymentFolder) ? DEFAULT_SITE_SEGMENT : deploymentFolder)

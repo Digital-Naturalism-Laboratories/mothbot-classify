@@ -1,9 +1,10 @@
 /**
- * Mothbox projects: the folder that is processed, shared and opened as one unit.
+ * Mothbox projects: the folder that holds `_processed` is the project.
  *
- * Mothbot Process keeps each project's results in a `_processed` folder inside the
- * project, and marks the project with `mothbox-project.json` (a copy sits inside
- * `_processed`, so a shared `_processed` still names its project):
+ * A project is processed, shared (its `_processed` folder) and opened as one unit;
+ * the folders inside it are just folders. Mothbot Process marks a new project with
+ * `mothbox-project.json` (a copy sits inside `_processed`, so a shared `_processed`
+ * still names its project). Older projects have `_processed` without the marker.
  *
  *   Field Data/                    ← may be picked: lists its projects
  *     Desert2026/                  ← may be picked: opens straight into it
@@ -16,6 +17,8 @@
  * `_processed`, so `_processed` on its own is the whole project.
  */
 import { readDatasetManifestSummary } from './dataset-manifest'
+import { findSubPackages } from './combine-project-packages'
+import { findFirstRelativeFileIncludingDateDirs } from './fs-find-files'
 import type { PendingDatasetMigration } from './pending-dataset-migration-types'
 import type { DatasetRegistryEntry } from '~/stores/datasets-registry'
 import { fileExistsAt, readTextFile, type FileSystemDirectoryHandleLike } from '~/utils/fs-directory-handle'
@@ -75,14 +78,34 @@ export function directoryName(directory: FileSystemDirectoryHandleLike): string 
 export type RootProjectResult =
   | { kind: 'package'; entry: DatasetRegistryEntry }
   | { kind: 'pending'; pending: PendingDatasetMigration }
+  | { kind: 'combine'; combine: ProjectToCombine }
   | { kind: 'not-processed'; projectName: string }
+
+/** A project whose `_processed` still holds one package per folder (older setups). */
+export type ProjectToCombine = {
+  folderName: string
+  /** The project's `_processed` folder. */
+  processed: FileSystemDirectoryHandleLike
+  /** Where the combined package will be, relative to the picked folder. */
+  packagePath: string
+}
+
+async function hasDetections(processed: FileSystemDirectoryHandleLike) {
+  return !!(await findFirstRelativeFileIncludingDateDirs(processed, (name) => name.endsWith('_botdetection.json')))
+}
 
 export async function detectProjectAtRoot(root: FileSystemDirectoryHandleLike): Promise<RootProjectResult | null> {
   const rootName = directoryName(root) || 'project'
   const marker = await readProjectMarker(root)
   const isProcessedFolder = rootName === PROCESSED_DIR_NAME
   // A `_processed` folder is named after its project (from its marker copy).
-  const displayName = (isProcessedFolder ? marker?.name?.trim() : '') || rootName
+  // A `_processed` picked on its own is named after its project (its marker copy, or
+  // the records' own name); never "_processed".
+  const displayName = isProcessedFolder
+    ? marker?.name?.trim() ||
+      [(await readDatasetManifestSummary(root)).datasetId?.trim()].find((id) => id && id !== PROCESSED_DIR_NAME) ||
+      'Project'
+    : rootName
 
   // The package itself was picked: a project's _processed, or an older single package.
   const rootManifest = await readDatasetManifestSummary(root)
@@ -96,6 +119,11 @@ export async function detectProjectAtRoot(root: FileSystemDirectoryHandleLike): 
   // A project folder: its package lives in its own _processed.
   const processed = isProcessedFolder ? null : await getChildDirectory(root, PROCESSED_DIR_NAME)
   if (processed) {
+    // Folders with their own records inside _processed (an older setup, or projects
+    // just merged into this one): combine first, even when the project has records.
+    if ((await findSubPackages(processed)).length) {
+      return { kind: 'combine', combine: { folderName: displayName, processed, packagePath: PROCESSED_DIR_NAME } }
+    }
     const manifest = await readDatasetManifestSummary(processed)
     if (manifest.hasManifest) {
       return {
@@ -104,8 +132,14 @@ export async function detectProjectAtRoot(root: FileSystemDirectoryHandleLike): 
       }
     }
   }
+  if (isProcessedFolder && (await findSubPackages(root)).length) {
+    return { kind: 'combine', combine: { folderName: displayName, processed: root, packagePath: '' } }
+  }
 
-  if (!marker) return null
+  // Without a marker, a _processed folder makes a project when it holds Mothbot results
+  // (an AMI _processed holds crops only, and is set up its own way).
+  const resultsHere = isProcessedFolder ? await hasDetections(root) : !!processed && (await hasDetections(processed))
+  if (!marker && !resultsHere) return null
 
   if (isProcessedFolder) {
     // A project's _processed picked on its own (e.g. shared without photos).
@@ -138,15 +172,17 @@ export async function detectProjectAtRoot(root: FileSystemDirectoryHandleLike): 
 export async function detectChildProject(
   child: FileSystemDirectoryHandleLike,
   folderName: string,
-): Promise<{ entry?: DatasetRegistryEntry; pending?: PendingDatasetMigration } | null> {
+): Promise<{ entry?: DatasetRegistryEntry; pending?: PendingDatasetMigration; combine?: ProjectToCombine } | null> {
   const processed = await getChildDirectory(child, PROCESSED_DIR_NAME)
   if (!processed) return null
   const packagePath = `${folderName}/${PROCESSED_DIR_NAME}`
+  if ((await findSubPackages(processed)).length) return { combine: { folderName, processed, packagePath } }
   const manifest = await readDatasetManifestSummary(processed)
   if (manifest.hasManifest) {
     return { entry: { folderName, datasetId: manifest.datasetId, hasManifest: true, packagePath } }
   }
   if (!(await directoryHasSubdirectory(processed))) return null
+  if (!(await readProjectMarker(child)) && !(await hasDetections(processed))) return null
   return { pending: { folderName, kind: 'mothbox-project', packagePath, processedMirrorHandle: processed } }
 }
 

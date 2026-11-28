@@ -48,13 +48,18 @@ export type OpenPackageOptions = {
    * photos that aren't included in the package's own files.
    */
   originalSourceHandle?: FileSystemDirectoryHandleLike
+  /**
+   * The project's name, when the package folder isn't named after it: a project keeps
+   * its package in `<project>/_processed`, so the folder opened is called `_processed`.
+   */
+  folderName?: string
 }
 
 export async function openMothboxNextPackageFromHandle(
   handle: FileSystemDirectoryHandleLike,
   options?: OpenPackageOptions,
 ): Promise<OpenPackageResult> {
-  const folderName = (handle as { name?: string }).name?.trim() || 'dataset'
+  const folderName = options?.folderName?.trim() || (handle as { name?: string }).name?.trim() || 'dataset'
   const showSuccessToast = options?.showSuccessToast !== false
   const originalSourceHandle = options?.originalSourceHandle
   originalSourceFolderStore.set(originalSourceHandle ?? null)

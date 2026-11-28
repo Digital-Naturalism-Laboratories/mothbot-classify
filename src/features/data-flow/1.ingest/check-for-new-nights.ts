@@ -3,6 +3,7 @@ import { userSessionStore } from '~/stores/ui'
 import { mothboxNextPackageStore } from '~/features/mothbox-next/active-package'
 import { createBrowserDinalabAdapterIO } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import { addNewNightsToPackage, detectNewNightFolders } from '~/features/mothbox-next/add-new-nights'
+import { currentDetectorRunByNightStore } from '~/features/mothbox-next/detector-runs'
 import { activeDatasetFolderNameStore } from '~/stores/datasets-registry'
 import { ensureReadPermission, ensureReadWritePermission, persistenceConstants } from '~/features/data-flow/3.persist/files.persistence'
 import { idbGet } from '~/utils/index-db'
@@ -137,6 +138,9 @@ export async function checkForNewNightsInOpenPackage(): Promise<number> {
     console.warn('🌀 checkForNewNights: detection failed', err)
     return 0
   }
+
+  // Which run each night's current detections come from: the default run to show.
+  currentDetectorRunByNightStore.set(detection.currentDetectorByNight ?? {})
 
   console.log('🌀 checkForNewNights:', {
     packageRoot: active.packageRoot,

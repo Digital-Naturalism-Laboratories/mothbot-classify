@@ -34,7 +34,11 @@ import { flattenClassificationFiles, resolveCurrentClassifications } from '~/fea
 import { NON_TARGET } from '~/models/non-target'
 import { detectionFromClassification } from '~/features/mothbox-next/classification-to-detection'
 import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
-import { newestDetectorId, sortDetectorRunsNewestFirst } from '~/features/mothbox-next/detector-runs'
+import {
+  currentDetectorRunByNightStore,
+  defaultDetectorId,
+  sortDetectorRunsNewestFirst,
+} from '~/features/mothbox-next/detector-runs'
 import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
 import { buildNightParts, formatNightPartTimeRange } from '~/features/night-parts/night-parts'
 import { toast } from 'sonner'
@@ -71,6 +75,9 @@ export function NightView(props: { leafGroupId: string }) {
   const [clusterOverrides, setClusterOverrides] = useState<Set<number>>(new Set())
   const [selectedBotAlgorithm, setSelectedBotAlgorithm] = useState<string | undefined>(undefined)
   const [selectedDetectorId, setSelectedDetectorId] = useState<string | undefined>(undefined)
+  // True once the person picks a run; until then the default follows the night's current run.
+  const detectorChosenRef = useRef(false)
+  const currentRunByNight = useStore(currentDetectorRunByNightStore)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPatchId, setDetailPatchId] = useState<string | null>(null)
   const hasAppliedDefaultFallbackRef = useRef(false)
@@ -124,8 +131,11 @@ export function NightView(props: { leafGroupId: string }) {
     for (const patch of Object.values(patches)) {
       if (patch.detectorId) ids.add(patch.detectorId)
     }
-    return sortDetectorRunsNewestFirst([...ids])
-  }, [patches])
+    // The runs Mothbot Process last made for these nights come first.
+    const current = new Set([...activeNightIds].map((id) => currentRunByNight[id]).filter(Boolean))
+    const sorted = sortDetectorRunsNewestFirst([...ids])
+    return [...sorted.filter((id) => current.has(id)), ...sorted.filter((id) => !current.has(id))]
+  }, [patches, activeNightIds, currentRunByNight])
 
   // Default to the newest bot run when nothing is selected or the current
   // choice no longer exists. Never clobber a valid selection: saves refresh the
@@ -133,10 +143,10 @@ export function NightView(props: { leafGroupId: string }) {
   // run every time they accepted a detection.
   useEffect(() => {
     setSelectedDetectorId((prev) => {
-      if (prev && availableDetectorIds.includes(prev)) return prev
-      return newestDetectorId(availableDetectorIds)
+      if (prev && detectorChosenRef.current && availableDetectorIds.includes(prev)) return prev
+      return defaultDetectorId(availableDetectorIds, [...activeNightIds], currentRunByNight)
     })
-  }, [availableDetectorIds])
+  }, [availableDetectorIds, activeNightIds, currentRunByNight])
   const routeContext = useMemo(
     () => ({
       folderName,
@@ -494,6 +504,7 @@ export function NightView(props: { leafGroupId: string }) {
 
   function onDetectorChange(detectorId: string) {
     // Pure view state — the store keeps every run; `visibleDetections` does the filtering.
+    detectorChosenRef.current = true
     setSelectedDetectorId(detectorId)
     setSelectedBotAlgorithm(undefined)
   }

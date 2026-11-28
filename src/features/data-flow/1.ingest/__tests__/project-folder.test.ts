@@ -83,15 +83,25 @@ describe('a project with its own _processed folder', () => {
     })
   })
 
-  it('keeps the older layout (one _processed for a folder of projects) as it was', async () => {
-    const root = createDirectoryHandle('MB Projects', {
-      'Panama/PlotA/2026-07-14/a.jpg': '',
-      '_processed/Panama/dataset.json': MANIFEST,
-      '_processed/Panama/PlotA/2026-07-14/a_botdetection.json': '{}',
+  it('treats a folder holding _processed with per-folder records as one project to combine', async () => {
+    // Tucson/_processed/DesertHouse/dataset.json: the folder holding _processed is the project.
+    const root = createDirectoryHandle('Tucson', {
+      'DesertHouse/Cactus/2026-08-11/a.jpg': '',
+      '_processed/DesertHouse/dataset.json': MANIFEST,
+      '_processed/DesertHouse/Cactus/2026-08-11/a_botdetection.json': '{}',
     })
     const result = await discoverDatasetFoldersUnderRoot(root)
-    expect(result.packages).toEqual([
-      { folderName: 'Panama', datasetId: 'Desert2026', hasManifest: true, packagePath: '_processed/Panama' },
+    expect(result.packages).toEqual([])
+    expect(result.toCombine?.map((c) => [c.folderName, c.packagePath])).toEqual([['Tucson', '_processed']])
+
+    const parent = createDirectoryHandle('MB Projects', {
+      'Tucson/_processed/DesertHouse/dataset.json': MANIFEST,
+      'Maine/_processed/Haystack/dataset.json': MANIFEST,
+    })
+    const listed = await discoverDatasetFoldersUnderRoot(parent)
+    expect(listed.toCombine?.map((c) => [c.folderName, c.packagePath]).sort()).toEqual([
+      ['Maine', 'Maine/_processed'],
+      ['Tucson', 'Tucson/_processed'],
     ])
   })
 
