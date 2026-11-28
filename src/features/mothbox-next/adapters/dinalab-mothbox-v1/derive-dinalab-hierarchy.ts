@@ -260,13 +260,21 @@ export function enrichPatchesFromPatchSources(params: {
   datasetId: string
   legacySourceRootName?: string
   indexedPaths?: string[]
+  /** The project names deployments by their folders (dataset.json `deploymentNaming: path`). */
+  namedByPath?: boolean
 }): PatchRecord[] {
   const { patches, patchSources, datasetId } = params
-  const legacySourceRootName = resolveLegacySourceRootForPackage({
-    explicitLegacySourceRootName: params.legacySourceRootName,
-    patchSources,
-    indexedPaths: params.indexedPaths,
-  })
+  // A project whose deployments are named by their folders (`DesertHouse~Cactus`) is
+  // never an older wrapped layout, even when every path starts with the same folder
+  // (a project with one folder at its top): keep that folder in the paths.
+  const pathNamed = params.namedByPath || patches.some((patch) => patch.deployment_id?.includes(DEPLOYMENT_PATH_SEPARATOR))
+  const legacySourceRootName = pathNamed
+    ? undefined
+    : resolveLegacySourceRootForPackage({
+        explicitLegacySourceRootName: params.legacySourceRootName,
+        patchSources,
+        indexedPaths: params.indexedPaths,
+      })
 
   if (!patchSources.length) return patches
   if (packageNeedsWrappedDeploymentHierarchyRepair(patches) && !legacySourceRootName) {

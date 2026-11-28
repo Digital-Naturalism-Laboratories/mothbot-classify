@@ -219,8 +219,34 @@ export function hydratePackageEntities(params: {
         datasetId,
         legacySourceRootName,
         indexedPaths,
+        namedByPath: manifest.deployment_naming === 'path',
       })
     : params.patches
+
+  // Check the naming against the project's own night records: when reading the paths
+  // as an older wrapped layout files patches under nights the records don't have, and
+  // naming them by their folders does match (a project combined before dataset.json
+  // said so), use the folder names.
+  // (Not for older packages whose night records are known to be wrong and are rebuilt
+  // from the paths on purpose.)
+  if (
+    patchSources.length &&
+    manifest.deployment_naming !== 'path' &&
+    params.cameraDays.length &&
+    !packageNeedsWrappedDeploymentHierarchyRepair(params.patches)
+  ) {
+    const known = new Set(params.cameraDays.map((cameraDay) => cameraDay.camera_day_id))
+    const matching = (list: PatchRecord[]) => {
+      let n = 0
+      for (const patch of list) if (patch.camera_day_id && known.has(patch.camera_day_id)) n++
+      return n
+    }
+    const matched = matching(patches)
+    if (matched < patches.length) {
+      const byFolders = enrichPatchesFromPatchSources({ patches: params.patches, patchSources, datasetId, indexedPaths, namedByPath: true })
+      if (matching(byFolders) === byFolders.length) patches = byFolders
+    }
+  }
 
   const flatPatchImages = isPatchImagesOnlyPackage({
     manifest,

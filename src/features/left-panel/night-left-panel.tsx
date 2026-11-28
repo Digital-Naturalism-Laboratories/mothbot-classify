@@ -30,6 +30,7 @@ import { WarningsBox } from './warnings-box'
 import { NightPartsSection } from './night-parts-section'
 import { TaxonomySection } from './taxonomy-section'
 import { NightSelectorSection } from './night-selector'
+import { detectorRunLabel, NEWEST_RUN_PER_NIGHT } from '~/features/mothbox-next/detector-runs'
 import { UNAPPROVED_AGGREGATE_LABEL, UNASSIGNED_AGGREGATE_LABEL } from '~/features/labeling/night-labeling-mode'
 import { VisualizationDialog } from '~/features/data-flow/4.export/visualization/visualization-dialog'
 
@@ -65,6 +66,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
     onClustersCollapsedChange,
     availableDetectorIds,
     selectedDetectorId,
+    shownCountByNight,
     onDetectorChange,
     availableBotAlgorithms,
     selectedBotAlgorithm,
@@ -95,7 +97,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
 
   return (
     <Column className={cn('bg-sidebar pl-14 pr-16 py-20 pt-12', className)}>
-      <NightSelectorSection />
+      <NightSelectorSection countByNight={shownCountByNight} />
       {availableDetectorIds && availableDetectorIds.length > 1 ? (
         <DetectorSelectorSection
           detectorIds={availableDetectorIds}
@@ -249,7 +251,7 @@ export function LeafGroupLeftPanel(props: LeafGroupLeftPanelProps) {
           open={vizDialogOpen}
           onClose={() => setVizDialogOpen(false)}
           initialLeafGroupIds={[leafGroupId]}
-          detectorId={selectedDetectorId}
+          detectorId={selectedDetectorId === NEWEST_RUN_PER_NIGHT ? undefined : selectedDetectorId}
         />
 
         {/* <Button
@@ -283,7 +285,7 @@ function DetectorSelectorSection(props: DetectorSelectorSectionProps) {
     <div className={cn('mb-16 flex items-center justify-between gap-8', className)}>
       <div className='flex min-w-0 items-baseline gap-6'>
         <PanelHeading className='shrink-0'>Detection run</PanelHeading>
-        <span className='truncate text-13 font-medium text-ink-primary'>{selectedDetectorId ?? '—'}</span>
+        <span className='truncate text-13 font-medium text-ink-primary'>{detectorRunLabel(selectedDetectorId)}</span>
       </div>
       {detectorIds.length > 1 ? (
         <DropdownMenu>
@@ -295,7 +297,7 @@ function DetectorSelectorSection(props: DetectorSelectorSectionProps) {
             <DropdownMenuRadioGroup value={selectedDetectorId ?? ''} onValueChange={(v) => onDetectorChange?.(v)}>
               {detectorIds.map((id) => (
                 <DropdownMenuRadioItem key={id} value={id}>
-                  {id}
+                  {detectorRunLabel(id)}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

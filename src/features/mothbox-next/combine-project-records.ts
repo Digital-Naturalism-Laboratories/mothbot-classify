@@ -268,6 +268,9 @@ export function combineProjectRecords(params: {
   const base = subPackages.find((sub) => sub.folder === '') ?? subPackages[0]
   const manifest = manifestFromFile(JSON.parse(base.manifestText)) as Row
   manifest.dataset_id = projectName
+  // Deployments here are named by their folders, as derived above; loading must not
+  // reread the paths as an older wrapped layout.
+  manifest.deployment_naming = 'path'
   if (style === 'camel' && (typeof manifest.version !== 'number' || manifest.version < CAMEL_CASE_PACKAGE_VERSION)) {
     manifest.version = CAMEL_CASE_PACKAGE_VERSION
   }

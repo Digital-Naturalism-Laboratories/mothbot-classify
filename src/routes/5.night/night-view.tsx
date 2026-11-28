@@ -36,7 +36,8 @@ import { detectionFromClassification } from '~/features/mothbox-next/classificat
 import { rebuildLeafGroupSummariesFromDetections } from '~/features/mothbox-next/rebuild-night-summaries'
 import {
   currentDetectorRunByNightStore,
-  defaultDetectorId,
+  NEWEST_RUN_PER_NIGHT,
+  runByNight,
   sortDetectorRunsNewestFirst,
 } from '~/features/mothbox-next/detector-runs'
 import { leafGroupSummariesStore } from '~/stores/entities/night-summaries'
@@ -141,12 +142,34 @@ export function NightView(props: { leafGroupId: string }) {
   // choice no longer exists. Never clobber a valid selection: saves refresh the
   // package object, and resetting here would snap the user back to a different
   // run every time they accepted a detection.
+  // By default each night shows its own newest run (nights can have been detected
+  // with different models); choosing a model in the menu shows only that one.
   useEffect(() => {
     setSelectedDetectorId((prev) => {
-      if (prev && detectorChosenRef.current && availableDetectorIds.includes(prev)) return prev
-      return defaultDetectorId(availableDetectorIds, [...activeNightIds], currentRunByNight)
+      if (prev && detectorChosenRef.current && (prev === NEWEST_RUN_PER_NIGHT || availableDetectorIds.includes(prev))) return prev
+      return NEWEST_RUN_PER_NIGHT
     })
-  }, [availableDetectorIds, activeNightIds, currentRunByNight])
+  }, [availableDetectorIds])
+
+  // Each night's run when showing the newest of each (every night, for the session counts).
+  const shownRunByNight = useMemo(() => runByNight(Object.values(patches), currentRunByNight), [patches, currentRunByNight])
+  const isShownRun = useCallback(
+    (patch: { leafGroupId: string; detectorId?: string }) =>
+      selectedDetectorId === NEWEST_RUN_PER_NIGHT
+        ? !shownRunByNight[patch.leafGroupId] || patch.detectorId === shownRunByNight[patch.leafGroupId]
+        : patch.detectorId === selectedDetectorId,
+    [selectedDetectorId, shownRunByNight],
+  )
+  // Patches each night shows with the current run choice, for the Sessions list.
+  const shownCountByNight = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const patch of Object.values(patches)) {
+      if (!patch.leafGroupId) continue
+      if (selectedDetectorId && !isShownRun(patch)) continue
+      counts[patch.leafGroupId] = (counts[patch.leafGroupId] ?? 0) + 1
+    }
+    return counts
+  }, [patches, selectedDetectorId, isShownRun])
   const routeContext = useMemo(
     () => ({
       folderName,
@@ -246,10 +269,10 @@ export function NightView(props: { leafGroupId: string }) {
       if (!activeNightIds.has(patch.leafGroupId)) return false
       // When multiple detectors are loaded, only show patches for the active
       // detector so the other detector's patches don't bleed through as Unassigned.
-      if (multiDetector && selectedDetectorId) return patch.detectorId === selectedDetectorId
+      if (multiDetector && selectedDetectorId) return isShownRun(patch)
       return true
     })
-  }, [patches, activeNightIds, multiDetector, selectedDetectorId])
+  }, [patches, activeNightIds, multiDetector, selectedDetectorId, isShownRun])
 
   // Detections scoped to the active detector. `detectionsStore` always holds
   // every run's detections — switching runs is a view filter, never a store
@@ -260,10 +283,11 @@ export function NightView(props: { leafGroupId: string }) {
     if (!multiDetector || !selectedDetectorId) return detections
     const out: typeof detections = {}
     for (const [id, detection] of Object.entries(detections)) {
-      if (patches[id]?.detectorId === selectedDetectorId) out[id] = detection
+      const patch = patches[id]
+      if (patch && isShownRun(patch)) out[id] = detection
     }
     return out
-  }, [detections, patches, multiDetector, selectedDetectorId])
+  }, [detections, patches, multiDetector, selectedDetectorId, isShownRun])
 
   // Night counts / progress are derived from the visible run, like the grid.
   useEffect(() => {
@@ -614,8 +638,9 @@ export function NightView(props: { leafGroupId: string }) {
         onBlurLimitChange={setBlurLimit}
         onReversedChange={setReversed}
         onClustersCollapsedChange={(v) => { setClustersCollapsed(v); setClusterOverrides(new Set()) }}
-        availableDetectorIds={availableDetectorIds.length > 1 ? availableDetectorIds : undefined}
+        availableDetectorIds={availableDetectorIds.length > 1 ? [NEWEST_RUN_PER_NIGHT, ...availableDetectorIds] : undefined}
         selectedDetectorId={selectedDetectorId}
+        shownCountByNight={shownCountByNight}
         onDetectorChange={onDetectorChange}
         errorCount={visibleErrorCount}
         nightParts={nightPartOptions.length > 1 ? nightPartOptions : undefined}

@@ -41,6 +41,13 @@ export type MothboxNextDatasetManifest = {
     sessions?: string
   }
   classification_sources?: string[]
+  /**
+   * `path`: deployments are named by their folders inside the project (one folder:
+   * `Cactus`; deeper: `DesertHouse~Cactus`), exactly as written in the records. Set
+   * for projects whose records were combined or moved (combine-project-records.ts);
+   * Classify then never reads the paths as an older wrapped layout.
+   */
+  deployment_naming?: 'path'
   cloud_upload_default?: {
     include_source?: boolean
     include_patches?: boolean

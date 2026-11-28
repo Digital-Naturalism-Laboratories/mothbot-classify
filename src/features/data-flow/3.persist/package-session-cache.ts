@@ -38,7 +38,9 @@ export type IndexedFileMeta = {
 // then cached that truncated store — dropping the other run's IDs/clusters on
 // every later load. Bump so those caches are discarded and rebuilt from records.
 // 8: determinations use mothbox-default/1 (human always beats machine); detections carry occurrence ids.
-export const PACKAGE_SESSION_CACHE_VERSION = 8
+// 9: projects with one folder at their top were read as an older wrapped layout, so their
+// patches were filed under the wrong nights; rebuild those caches from the records.
+export const PACKAGE_SESSION_CACHE_VERSION = 9
 
 export type PackageSessionCacheEntry = {
   cacheVersion: number

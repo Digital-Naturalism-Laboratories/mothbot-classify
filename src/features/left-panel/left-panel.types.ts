@@ -44,6 +44,8 @@ export type LeafGroupLeftPanelProps = {
   onReversedChange: (enabled: boolean) => void
   onClustersCollapsedChange: (enabled: boolean) => void
   availableDetectorIds?: string[]
+  /** Patches each night shows with the current run choice (Sessions list counts). */
+  shownCountByNight?: Record<string, number>
   selectedDetectorId?: string
   onDetectorChange?: (detectorId: string) => void
   /** User-flagged errors for the night, scoped to the visible detector run. */

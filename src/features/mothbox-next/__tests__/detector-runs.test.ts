@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultDetectorId, itemsOfOneRun, newestDetectorId, sortDetectorRunsNewestFirst } from '../detector-runs'
+import { defaultDetectorId, itemsOfOneRun, newestDetectorId, runByNight, sortDetectorRunsNewestFirst } from '../detector-runs'
 
 describe('detector run ordering', () => {
   it('ranks MBD versions numerically, newest first', () => {
@@ -78,5 +78,29 @@ describe('defaultDetectorId', () => {
 
   it('falls back to the newest model name when the current run is unknown', () => {
     expect(defaultDetectorId(['Mothbot_MBD-1-0.pt', 'Mothbot_MBD-1-2.pt'], ['night9'], {})).toBe('Mothbot_MBD-1-2.pt')
+  })
+})
+
+describe('Anybug models and the newest run of each night', () => {
+  it('ranks Anybug models above MBD ones', () => {
+    expect(
+      sortDetectorRunsNewestFirst(['Mothbot_MBD-1-2.pt', 'Mothbot_Anybug-Mixed-v2-0.pt', 'Mothbot_MBD-1-0.pt', 'Mothbot_Anybug-MixedNano-v2-0.pt']).slice(0, 2),
+    ).toEqual(['Mothbot_Anybug-MixedNano-v2-0.pt', 'Mothbot_Anybug-Mixed-v2-0.pt'])
+  })
+
+  it("picks each night's run: Process's current one, else the newest it has", () => {
+    const items = [
+      { leafGroupId: 'ditch-13', detectorId: 'Mothbot_MBD-1-0.pt' },
+      { leafGroupId: 'ditch-13', detectorId: 'Mothbot_Anybug-Mixed-v2-0.pt' },
+      { leafGroupId: 'ditch-14', detectorId: 'Mothbot_MBD-1-0.pt' },
+      { leafGroupId: 'ditch-14', detectorId: 'Mothbot_MBD-1-1.pt' },
+      { leafGroupId: 'cactus-11', detectorId: 'Mothbot_Anybug-Mixed-v2-0.pt' },
+      { leafGroupId: 'cactus-11', detectorId: 'Mothbot_MBD-1-2.pt' },
+    ]
+    expect(runByNight(items, { 'cactus-11': 'Mothbot_MBD-1-2.pt' })).toEqual({
+      'ditch-13': 'Mothbot_Anybug-Mixed-v2-0.pt',
+      'ditch-14': 'Mothbot_MBD-1-1.pt',
+      'cactus-11': 'Mothbot_MBD-1-2.pt',
+    })
   })
 })

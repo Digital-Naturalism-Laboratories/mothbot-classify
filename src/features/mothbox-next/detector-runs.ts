@@ -6,7 +6,8 @@
  * `HumanDetection`). They do NOT sort chronologically as strings — "MBD" sorts
  * before "yolo" — so "newest" needs a version-aware rank:
  *
- *   tier 2  MBD-<major>-<minor>  current generation; ranked numerically
+ *   tier 3  Anybug-…-v<major>-<minor>  newest generation; ranked by version
+ *   tier 2  MBD-<major>-<minor>  ranked numerically
  *   tier 1  legacy models carrying a YYYY-MM-DD date; ranked by that date
  *   tier 0  any other bot id (unknown scheme); tie-broken by name
  *   tier -1 HumanDetection — a human annotation pass, never a "newer model"
@@ -28,6 +29,8 @@ type DetectorRunRank = { tier: number; major: number; minor: number; date: strin
 
 export function rankDetectorRun(id: string): DetectorRunRank {
   if (id === HUMAN_DETECTOR_ID) return { tier: -1, major: 0, minor: 0, date: '', id }
+  const anybug = /Anybug.*?-v(\d+)-(\d+)/i.exec(id)
+  if (anybug) return { tier: 3, major: Number(anybug[1]), minor: Number(anybug[2]), date: '', id }
   const mbd = /MBD-(\d+)-(\d+)/i.exec(id)
   if (mbd) return { tier: 2, major: Number(mbd[1]), minor: Number(mbd[2]), date: '', id }
   const dated = /(\d{4}-\d{2}-\d{2})/.exec(id)
@@ -57,6 +60,38 @@ export function sortDetectorRunsNewestFirst(ids: readonly string[]): string[] {
 export function newestDetectorId(ids: readonly string[]): string | undefined {
   const sorted = sortDetectorRunsNewestFirst(ids)
   return sorted.find((id) => id !== HUMAN_DETECTOR_ID) ?? sorted[0]
+}
+
+/** The run choice that shows each night's own newest run (nights can differ). */
+export const NEWEST_RUN_PER_NIGHT = 'newest-run-per-night'
+
+export function detectorRunLabel(id: string | undefined): string {
+  if (!id) return '—'
+  return id === NEWEST_RUN_PER_NIGHT ? 'Newest run of each night' : id
+}
+
+/**
+ * Each night's run to show: the run Mothbot Process last made for it when known,
+ * else its newest model by name.
+ */
+export function runByNight(
+  items: Iterable<{ leafGroupId?: string; detectorId?: string }>,
+  currentByNight: Record<string, string> = currentDetectorRunByNightStore.get(),
+): Record<string, string> {
+  const idsByNight = new Map<string, Set<string>>()
+  for (const item of items) {
+    if (!item.leafGroupId || !item.detectorId) continue
+    let ids = idsByNight.get(item.leafGroupId)
+    if (!ids) idsByNight.set(item.leafGroupId, (ids = new Set()))
+    ids.add(item.detectorId)
+  }
+  const out: Record<string, string> = {}
+  for (const [night, ids] of idsByNight) {
+    const current = currentByNight[night]
+    const run = current && ids.has(current) ? current : newestDetectorId([...ids])
+    if (run) out[night] = run
+  }
+  return out
 }
 
 /**
