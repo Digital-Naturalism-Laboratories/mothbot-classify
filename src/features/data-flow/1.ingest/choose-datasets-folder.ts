@@ -8,6 +8,8 @@ import { isDirectoryPickerAvailable, pickDirectoryHandle } from './directory-pic
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import { directoryHasDatasetManifest } from './dataset-manifest'
 import { finishDatasetsWorkspaceSetup } from './datasets-workspace-setup'
+import { describeFolderWithoutProject } from './project-folder'
+import { getLastScanSummary } from './scan-datasets-folder'
 
 export { requireDatasetsFolderHandle } from './datasets-folder-handle'
 
@@ -53,6 +55,21 @@ export async function setupDatasetsFolder(handle: FileSystemDirectoryHandleLike)
     console.warn('🚨 setupDatasetsFolder: workspace setup failed', err)
     toast.error('Projects folder saved, but scanning packages failed. Try reopening the folder.')
     return false
+  }
+
+  // Nothing to open: say what to pick instead (the browser can't look above this folder).
+  const found = getLastScanSummary()
+  if (found.projectCount === 0 && found.pendingCount === 0) {
+    if (found.unprocessedProjectName) {
+      toast.warning(`“${found.unprocessedProjectName}” hasn't been processed yet`, {
+        duration: 12000,
+        description: 'Run it through Mothbot Process first. Its results go into the project\'s _processed folder, which Classify opens.',
+      })
+    } else {
+      const help = await describeFolderWithoutProject(handle)
+      toast.warning(help.title, { duration: 12000, description: help.description })
+    }
+    return true
   }
 
   toast.success('Projects folder set', {

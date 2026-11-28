@@ -12,6 +12,8 @@ export type DatasetFolderKind =
   | 'source-only'
   | 'mothbox-processed'
   | 'mothbox-processed-sibling'
+  /** A project that keeps its own `_processed` folder; the package goes inside it (see project-folder.ts). */
+  | 'mothbox-project'
   | 'ami'
   | 'skip'
 

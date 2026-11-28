@@ -54,13 +54,14 @@ export function ChooseDatasetsFolderDialogContent(props: ChooseDatasetsFolderDia
       </DialogHeader>
 
       <p className='mt-12 text-13 text-neutral-700 text-pretty'>
-        Pick a parent folder on your computer where <span className='font-medium text-neutral-900'>all</span> of your
-        Mothbot data will live.
+        Pick a <span className='font-medium text-neutral-900'>project folder</span> to open it, or a folder holding
+        several projects to choose between them.
       </p>
       <p className='mt-8 text-13 text-neutral-600 text-pretty'>
-        Each project is stored as a subfolder inside this location—for example{' '}
-        <code className='text-12 text-neutral-800'>~/Classify_Projects/my-project/</code>. After you&apos;ve chosen this
-        folder, drop any project folder with the right name into it.
+        A project folder is one Mothbot Process worked on: it holds a{' '}
+        <code className='text-12 text-neutral-800'>_processed</code> folder. A project&apos;s{' '}
+        <code className='text-12 text-neutral-800'>_processed</code> folder on its own (for example, one shared with you)
+        opens too.
       </p>
 
       {!canPick ? (

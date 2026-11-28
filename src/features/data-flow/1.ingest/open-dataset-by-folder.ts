@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { requireDatasetsFolderHandle } from './datasets-folder-handle'
 import { openMothboxNextPackageFromHandle } from './open-mothbox-next-package'
 import { datasetsRegistryStore } from '~/stores/datasets-registry'
+import { originalSourcePathForPackage } from './project-folder'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 
 type DirectoryHandleWithIter = FileSystemDirectoryHandleLike & {
@@ -46,12 +47,17 @@ export async function openDatasetByFolderName(params: {
   // (e.g. _processed/night5_6), the display folder itself (night5_6) is the
   // original source location, which may still hold full-size source photos
   // not included in the package's _processed mirror.
+  // For a project with its own _processed (packagePath `<project>/_processed`), the
+  // photos are in the project folder around it.
   let originalSourceHandle: FileSystemDirectoryHandleLike | undefined
-  if (registryEntry?.packagePath && registryEntry.packagePath !== folderName) {
+  const originalSourcePath = originalSourcePathForPackage({ folderName, packagePath: registryEntry?.packagePath })
+  if (originalSourcePath !== undefined) {
     try {
-      originalSourceHandle = await (root as DirectoryHandleWithIter)?.getDirectoryHandle?.(folderName, {
-        create: false,
-      })
+      let current: FileSystemDirectoryHandleLike | undefined = root
+      for (const segment of originalSourcePath.split('/').filter(Boolean)) {
+        current = await (current as DirectoryHandleWithIter)?.getDirectoryHandle?.(segment, { create: false })
+      }
+      originalSourceHandle = current
     } catch {
       originalSourceHandle = undefined
     }

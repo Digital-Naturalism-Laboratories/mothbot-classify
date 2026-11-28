@@ -3,6 +3,13 @@ import { discoverDatasetFolders } from './discover-dataset-folders'
 import { migratePendingDatasetFolders } from './migrate-pending-dataset-folders'
 import { promptUntrackedPendingDatasetSetup } from './check-for-new-dataset-folders'
 
+/** What the last scan of the picked folder found, so the picker can explain an empty result. */
+export type LastScanSummary = { projectCount: number; pendingCount: number; unprocessedProjectName?: string }
+let lastScanSummary: LastScanSummary = { projectCount: 0, pendingCount: 0 }
+export function getLastScanSummary(): LastScanSummary {
+  return lastScanSummary
+}
+
 export type ScanDatasetsFolderOptions = {
   /** When true (default), migrates legacy folders immediately. */
   autoMigrate?: boolean
@@ -10,7 +17,8 @@ export type ScanDatasetsFolderOptions = {
 
 export async function scanDatasetsFolder(options?: ScanDatasetsFolderOptions): Promise<DatasetRegistryEntry[]> {
   const autoMigrate = options?.autoMigrate ?? true
-  const { packages, pendingMigration } = await discoverDatasetFolders()
+  const { packages, pendingMigration, unprocessedProjectName } = await discoverDatasetFolders()
+  lastScanSummary = { projectCount: packages.length, pendingCount: pendingMigration.length, unprocessedProjectName }
 
   let entries = [...packages]
 

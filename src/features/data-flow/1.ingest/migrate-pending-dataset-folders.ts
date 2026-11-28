@@ -56,9 +56,10 @@ export async function migratePendingDatasetFolders(
         description: `Preparing ${item.folderName} (${index + 1}/${pending.length})…`,
       })
 
+      // The project folder: usually <root>/<folderName>; the picked folder itself when relativePath is ''.
       let packageHandle: FileSystemDirectoryHandleLike | undefined
       try {
-        packageHandle = await root.getDirectoryHandle?.(item.folderName, { create: false })
+        packageHandle = await getDirectoryByRelativePath(root, item.relativePath ?? item.folderName)
       } catch {
         packageHandle = undefined
       }
@@ -86,7 +87,11 @@ export async function migratePendingDatasetFolders(
           folderName: item.folderName,
           datasetId: built.datasetId,
           hasManifest: true,
-          ...(item.kind === 'mothbox-processed-sibling' ? { packagePath: `_processed/${item.folderName}` } : {}),
+          ...(item.packagePath !== undefined
+            ? { packagePath: item.packagePath }
+            : item.kind === 'mothbox-processed-sibling'
+              ? { packagePath: `_processed/${item.folderName}` }
+              : {}),
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
@@ -112,4 +117,18 @@ export async function migratePendingDatasetFolders(
   } finally {
     setContentIntegrationInProgress(false)
   }
+}
+
+async function getDirectoryByRelativePath(
+  root: FileSystemDirectoryHandleLike,
+  relativePath: string,
+): Promise<FileSystemDirectoryHandleLike | undefined> {
+  let current: FileSystemDirectoryHandleLike | undefined = root
+  for (const segment of relativePath.split('/').filter(Boolean)) {
+    current = await (
+      current as { getDirectoryHandle?: (name: string, opts?: { create?: boolean }) => Promise<FileSystemDirectoryHandleLike> }
+    ).getDirectoryHandle?.(segment, { create: false })
+    if (!current) return undefined
+  }
+  return current
 }

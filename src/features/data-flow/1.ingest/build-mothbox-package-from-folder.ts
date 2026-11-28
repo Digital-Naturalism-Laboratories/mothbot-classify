@@ -46,8 +46,10 @@ export async function buildMothboxPackageFromFolder(params: {
   // should be written into the _processed mirror folder, not into the
   // original source folder — source images are often too large to share,
   // so the team's workflow is to share only the _processed side.
-  const effectivePackageHandle =
-    kind === 'mothbox-processed-sibling' && processedMirrorHandle ? processedMirrorHandle : packageHandle
+  // A project with its own _processed ('mothbox-project') works the same way:
+  // the package goes inside <project>/_processed, beside the results.
+  const writesIntoMirror = kind === 'mothbox-processed-sibling' || kind === 'mothbox-project'
+  const effectivePackageHandle = writesIntoMirror && processedMirrorHandle ? processedMirrorHandle : packageHandle
 
   reportProgress({
     phase: 'scan',
@@ -68,8 +70,7 @@ export async function buildMothboxPackageFromFolder(params: {
     // original folder (packageHandle, before swapping to the mirror), not
     // in the mirror used as io.source. Let the adapter fall back to
     // checking there when resolving each photo's real path.
-    originalSourceExists:
-      kind === 'mothbox-processed-sibling' ? (relativePath) => fileExistsAt(packageHandle, relativePath) : undefined,
+    originalSourceExists: writesIntoMirror ? (relativePath) => fileExistsAt(packageHandle, relativePath) : undefined,
     onProgress: reportProgress,
   })
 

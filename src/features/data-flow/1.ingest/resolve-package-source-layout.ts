@@ -40,7 +40,7 @@ export async function resolvePackageSourceLayout(params: {
     }
   }
 
-  if (kind === 'mothbox-processed-sibling') {
+  if (kind === 'mothbox-processed-sibling' || kind === 'mothbox-project') {
     if (!processedMirrorHandle) {
       throw new Error(
         'Expected a sibling _processed mirror folder for this project, but none was found. The folder may have moved.',

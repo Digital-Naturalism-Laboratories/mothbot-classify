@@ -204,6 +204,7 @@ function describeSetupKind(kind: PendingDatasetMigration['kind']): string {
   switch (kind) {
     case 'mothbox-processed':
     case 'mothbox-processed-sibling':
+    case 'mothbox-project':
       return 'Mothbox processed detections'
     case 'legacy-root':
     case 'source-only':

@@ -3,6 +3,7 @@ import { requireDatasetsFolderHandle } from './datasets-folder-handle'
 import type { FileSystemDirectoryHandleLike } from '~/features/mothbox-next/adapters/dinalab-mothbox-v1/browser-adapter-io'
 import { classifyDatasetFolder, isReservedDatasetsChildFolderName, isParquetFileName, isCsvFileName } from './classify-dataset-folder'
 import { readDatasetManifestSummary } from './dataset-manifest'
+import { detectChildProject, detectProjectAtRoot } from './project-folder'
 import type { PendingDatasetMigration } from './pending-dataset-migration-types'
 
 export type { PendingDatasetMigration } from './pending-dataset-migration-types'
@@ -17,6 +18,8 @@ type DirectoryHandleWithIter = FileSystemDirectoryHandleLike & {
 export type DiscoverDatasetFoldersResult = {
   packages: DatasetRegistryEntry[]
   pendingMigration: PendingDatasetMigration[]
+  /** The picked folder is a project that Mothbot Process hasn't processed yet. */
+  unprocessedProjectName?: string
 }
 
 export async function discoverDatasetFolders(): Promise<DiscoverDatasetFoldersResult> {
@@ -39,6 +42,13 @@ export async function discoverDatasetFoldersUnderRoot(
   if (typeof datasetsRoot.values !== 'function') {
     return { packages, pendingMigration }
   }
+
+  // The picked folder may itself be one project (or a project's _processed):
+  // open straight into it rather than listing its deployment folders.
+  const rootProject = await detectProjectAtRoot(datasetsRoot)
+  if (rootProject?.kind === 'package') return { packages: [rootProject.entry], pendingMigration }
+  if (rootProject?.kind === 'pending') return { packages, pendingMigration: [rootProject.pending] }
+  if (rootProject?.kind === 'not-processed') return { packages, pendingMigration, unprocessedProjectName: rootProject.projectName }
 
   const childCandidates: Array<{ directory: DirectoryHandleWithIter; folderName: string }> = []
   let rootHasMetadataFiles = false
@@ -114,6 +124,11 @@ export async function discoverDatasetFoldersUnderRoot(
           }
         }
       }
+
+      // A project that keeps its own _processed folder (current Mothbot Process).
+      const ownProject = await detectChildProject(directory, folderName)
+      if (ownProject?.entry) return { package: ownProject.entry, pending: null }
+      if (ownProject?.pending) return { package: null, pending: ownProject.pending }
 
       const kind = await classifyDatasetFolder({ directory, folderName, processedMirrorHandle, rootHasMetadataFiles })
       if (kind !== 'package' && kind !== 'skip') {

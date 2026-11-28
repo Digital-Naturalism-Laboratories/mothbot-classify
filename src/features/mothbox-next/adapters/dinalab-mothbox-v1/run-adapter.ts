@@ -51,7 +51,8 @@ export async function runDinalabMothboxV1Adapter(params: {
           ...buildParams,
           humanClassifierId,
           processedMirrorRoot: folderKind === 'mothbox-processed' ? '_processed' : undefined,
-          originalSourceExists: folderKind === 'mothbox-processed-sibling' ? originalSourceExists : undefined,
+          originalSourceExists:
+            folderKind === 'mothbox-processed-sibling' || folderKind === 'mothbox-project' ? originalSourceExists : undefined,
         })
 
   if (archiveSourceTree && !retainPatchesInSource) {
